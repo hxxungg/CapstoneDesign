@@ -1,19 +1,52 @@
-// 실기기에서 테스트할 경우 localhost를 PC의 실제 IP 주소로 변경하세요
-// 예: 'http://192.168.1.100:3000/api'
-// 웹 브라우저: localhost, 실기기(Expo Go): Mac의 실제 IP (예: 172.30.1.16)
-const isWeb = typeof document !== 'undefined';
-export const API_BASE_URL = isWeb
-  ? 'http://localhost:3000/api'
-  : 'http://172.30.1.16:3000/api';
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
-export const AI_TOOLS = [
-  { name: 'ChatGPT', url: 'https://chat.openai.com', icon: '🤖' },
-  { name: 'Google Gemini', url: 'https://gemini.google.com', icon: '✨' },
-  { name: 'Claude AI', url: 'https://claude.ai', icon: '🧠' },
-  { name: 'Perplexity AI', url: 'https://www.perplexity.ai', icon: '🔍' },
-  { name: 'Microsoft Copilot', url: 'https://copilot.microsoft.com', icon: '💡' },
-  { name: 'WRTN (뤼튼)', url: 'https://wrtn.ai', icon: '🇰🇷' },
-];
+// 웹: localhost. 네이티브(Expo Go): Metro가 붙은 PC IP를 manifest에서 읽음.
+// 터널 모드(npx expo start --tunnel)에서는 로컬 API에 못 붙을 수 있음 → .env에 EXPO_PUBLIC_API_HOST=192.168.x.x
+const isWeb = typeof document !== 'undefined';
+
+function getDevBackendHost() {
+  const fromEnv = process.env.EXPO_PUBLIC_API_HOST?.trim();
+  if (fromEnv) {
+    return fromEnv.replace(/^https?:\/\//i, '').split('/')[0].split(':')[0];
+  }
+
+  const dbg =
+    Constants.expoGoConfig?.debuggerHost ??
+    Constants.manifest2?.extra?.expoGo?.debuggerHost;
+  if (typeof dbg === 'string' && dbg.length > 0) {
+    return dbg.split(':')[0];
+  }
+
+  const hostUri = Constants.expoConfig?.hostUri;
+  if (typeof hostUri === 'string' && hostUri.length > 0) {
+    return hostUri.split(':')[0];
+  }
+
+  return null;
+}
+
+function resolveApiBaseUrl() {
+  if (isWeb) {
+    return 'http://localhost:3000/api';
+  }
+
+  const host = getDevBackendHost();
+  if (host) {
+    return `http://${host}:3000/api`;
+  }
+
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:3000/api';
+  }
+
+  return 'http://localhost:3000/api';
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
+
+/** 인앱 브라우저 기본 시작 페이지 (일반 웹 탐색) */
+export const INAPP_BROWSER_HOME = 'https://www.google.com';
 
 export const THEME = {
   primary: '#3B82F6',

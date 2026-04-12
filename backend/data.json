@@ -21,311 +21,99 @@
   ],
   "assignments": [
     {
-      "id": 1,
-      "title": "2학기 역사 신문 만들기",
-      "description": "역사 신문 만드세요",
-      "subject": "역사",
+      "id": 15,
+      "title": "Dd",
+      "description": "Dd",
+      "subject": "국어",
       "teacher_id": 1,
       "is_active": true,
-      "assignment_code": "ASNF2281B1C",
-      "created_at": "2026-04-10T08:08:13.047Z"
-    },
-    {
-      "id": 2,
-      "title": "2학기 역사 신문 만들기",
-      "description": "역사 신문 만드세요",
-      "subject": "역사",
-      "teacher_id": 1,
-      "is_active": true,
-      "assignment_code": "ASN237BCFC2",
-      "created_at": "2026-04-10T08:08:15.108Z"
-    },
-    {
-      "id": 3,
-      "title": "2학기 역사 신문 만들기",
-      "description": "역사 신문 만드세요",
-      "subject": "역사",
-      "teacher_id": 1,
-      "is_active": true,
-      "assignment_code": "ASNE8642E6C",
-      "created_at": "2026-04-10T08:08:19.691Z"
-    },
-    {
-      "id": 4,
-      "title": "2학기 역사 신문 만들기",
-      "description": "역사 신문 만드세요",
-      "subject": "역사",
-      "teacher_id": 1,
-      "is_active": true,
-      "assignment_code": "ASNBB7B86A1",
-      "created_at": "2026-04-10T08:08:20.391Z"
-    },
-    {
-      "id": 5,
-      "title": "2학기 역사 신문 만들기",
-      "description": "역사 신문 만드세요",
-      "subject": "역사",
-      "teacher_id": 1,
-      "is_active": true,
-      "assignment_code": "ASN796ADF19",
-      "created_at": "2026-04-10T08:08:25.642Z"
-    },
-    {
-      "id": 6,
-      "title": "2학기 역사 신문 만들기",
-      "description": "역사 신문 만드세요",
-      "subject": "역사",
-      "teacher_id": 1,
-      "is_active": true,
-      "assignment_code": "ASN5CB0EA40",
-      "created_at": "2026-04-10T08:08:27.536Z"
-    },
-    {
-      "id": 7,
-      "title": "2학기 역사 신문 만들기",
-      "description": "역사 신문 만드세요",
-      "subject": "역사",
-      "teacher_id": 1,
-      "is_active": true,
-      "assignment_code": "ASN980D1B9F",
-      "created_at": "2026-04-10T08:08:42.274Z"
-    },
-    {
-      "id": 8,
-      "title": "2학기 역사 신문 만들기",
-      "description": "역사 신문 만드세요",
-      "subject": "역사",
-      "teacher_id": 1,
-      "is_active": true,
-      "assignment_code": "ASNCE2CD541",
-      "created_at": "2026-04-10T08:09:13.176Z"
-    },
-    {
-      "id": 9,
-      "title": "2학기 역사 신문 만들기",
-      "description": "역사 신문 만드세요",
-      "subject": "역사",
-      "teacher_id": 1,
-      "is_active": true,
-      "assignment_code": "ASN15564396",
-      "created_at": "2026-04-10T08:09:13.363Z"
-    },
-    {
-      "id": 10,
-      "title": "2학기 역사 신문 만들기",
-      "description": "역사 신문 만드세요",
-      "subject": "역사",
-      "teacher_id": 1,
-      "is_active": true,
-      "assignment_code": "ASN2D314A01",
-      "created_at": "2026-04-10T08:09:13.541Z"
-    },
-    {
-      "id": 11,
-      "title": "2학기 역사 신문 만들기",
-      "description": "역사 신문 만드세요",
-      "subject": "역사",
-      "teacher_id": 1,
-      "is_active": true,
-      "assignment_code": "ASN43839EE2",
-      "created_at": "2026-04-10T08:09:13.689Z"
-    },
-    {
-      "id": 12,
-      "title": "2학기 역사 신문 만들기",
-      "description": "역사 신문 만드세요",
-      "subject": "역사",
-      "teacher_id": 1,
-      "is_active": true,
-      "assignment_code": "ASN110ACC31",
-      "created_at": "2026-04-10T08:09:13.860Z"
-    },
-    {
-      "id": 13,
-      "title": "2학기 역사 신문 만들기",
-      "description": "역사 신문 만드세요",
-      "subject": "역사",
-      "teacher_id": 1,
-      "is_active": true,
-      "assignment_code": "ASND0F30871",
-      "created_at": "2026-04-10T08:09:14.022Z"
-    },
-    {
-      "id": 14,
-      "title": "2학기 역사 신문 만들기",
-      "description": "역사 신문 만드세요",
-      "subject": "역사",
-      "teacher_id": 1,
-      "is_active": true,
-      "assignment_code": "ASN696C8999",
-      "created_at": "2026-04-10T08:09:20.926Z"
+      "assignment_code": "ASN2EDF0023",
+      "created_at": "2026-04-12T15:11:44.447Z"
     }
   ],
   "stages": [
     {
-      "id": 1,
-      "assignment_id": 1,
+      "id": 15,
+      "assignment_id": 15,
       "order_num": 1,
-      "title": "자료 조사 및 분석",
-      "description": "자료 조사 및 분석",
-      "ai_allowed": true,
+      "title": "문제 인식",
+      "description": "다루게 될 문제의 본질을 파악하고, 왜 이 주제가 중요한지 정리합니다.",
+      "ai_mode": "disallowed",
+      "ai_allowed": false,
       "ai_tools": [],
-      "ai_guidance": "복붙 금지",
-      "created_at": "2026-04-10T08:08:13.054Z"
+      "ai_guidance": null,
+      "created_at": "2026-04-12T15:11:44.493Z"
     },
     {
-      "id": 2,
-      "assignment_id": 2,
-      "order_num": 1,
-      "title": "자료 조사 및 분석",
-      "description": "자료 조사 및 분석",
+      "id": 16,
+      "assignment_id": 15,
+      "order_num": 2,
+      "title": "탐구 계획",
+      "description": "무엇을 어떻게 조사·분석할지 단계와 방법을 설계합니다.",
+      "ai_mode": "conditional",
       "ai_allowed": true,
       "ai_tools": [],
-      "ai_guidance": "복붙 금지",
-      "created_at": "2026-04-10T08:08:15.114Z"
+      "ai_guidance": "교사 지침에 따라 AI를 보조 수단으로만 활용하세요. 생성 문장을 그대로 제출하지 말고 반드시 검토·수정하며, 인용 시 출처를 표기하세요.",
+      "created_at": "2026-04-12T15:11:44.559Z"
     },
     {
-      "id": 3,
-      "assignment_id": 3,
-      "order_num": 1,
-      "title": "자료 조사 및 분석",
-      "description": "자료 조사 및 분석",
+      "id": 17,
+      "assignment_id": 15,
+      "order_num": 3,
+      "title": "자료 수집",
+      "description": "계획에 따라 신뢰할 수 있는 자료를 수집하고 근거를 정리합니다.",
+      "ai_mode": "allowed",
       "ai_allowed": true,
       "ai_tools": [],
-      "ai_guidance": "복붙 금지",
-      "created_at": "2026-04-10T08:08:19.697Z"
+      "ai_guidance": null,
+      "created_at": "2026-04-12T15:11:44.642Z"
     },
     {
-      "id": 4,
-      "assignment_id": 4,
-      "order_num": 1,
-      "title": "자료 조사 및 분석",
-      "description": "자료 조사 및 분석",
+      "id": 18,
+      "assignment_id": 15,
+      "order_num": 4,
+      "title": "결과 통합",
+      "description": "수집한 정보를 바탕으로 결론·해석·산출물 초안을 통합합니다.",
+      "ai_mode": "conditional",
       "ai_allowed": true,
       "ai_tools": [],
-      "ai_guidance": "복붙 금지",
-      "created_at": "2026-04-10T08:08:20.397Z"
+      "ai_guidance": "교사 지침에 따라 AI를 보조 수단으로만 활용하세요. 생성 문장을 그대로 제출하지 말고 반드시 검토·수정하며, 인용 시 출처를 표기하세요.",
+      "created_at": "2026-04-12T15:11:44.682Z"
     },
     {
-      "id": 5,
-      "assignment_id": 5,
-      "order_num": 1,
-      "title": "자료 조사 및 분석",
-      "description": "자료 조사 및 분석",
-      "ai_allowed": true,
+      "id": 19,
+      "assignment_id": 15,
+      "order_num": 5,
+      "title": "발표/제출",
+      "description": "최종 산출물을 완성하고 발표하거나 제출 형식에 맞게 마무리합니다.",
+      "ai_mode": "disallowed",
+      "ai_allowed": false,
       "ai_tools": [],
-      "ai_guidance": "복붙 금지",
-      "created_at": "2026-04-10T08:08:25.646Z"
+      "ai_guidance": null,
+      "created_at": "2026-04-12T15:11:44.738Z"
     },
     {
-      "id": 6,
-      "assignment_id": 6,
-      "order_num": 1,
-      "title": "자료 조사 및 분석",
-      "description": "자료 조사 및 분석",
+      "id": 20,
+      "assignment_id": 15,
+      "order_num": 6,
+      "title": "성찰",
+      "description": "과정과 결과를 돌아보며 배운 점과 개선점을 기록합니다.",
+      "ai_mode": "conditional",
       "ai_allowed": true,
       "ai_tools": [],
-      "ai_guidance": "복붙 금지",
-      "created_at": "2026-04-10T08:08:27.540Z"
-    },
-    {
-      "id": 7,
-      "assignment_id": 7,
-      "order_num": 1,
-      "title": "자료 조사 및 분석",
-      "description": "자료 조사 및 분석",
-      "ai_allowed": true,
-      "ai_tools": [],
-      "ai_guidance": "복붙 금지",
-      "created_at": "2026-04-10T08:08:42.279Z"
-    },
-    {
-      "id": 8,
-      "assignment_id": 8,
-      "order_num": 1,
-      "title": "자료 조사 및 분석",
-      "description": "자료 조사 및 분석",
-      "ai_allowed": true,
-      "ai_tools": [],
-      "ai_guidance": "복붙 금지",
-      "created_at": "2026-04-10T08:09:13.182Z"
-    },
-    {
-      "id": 9,
-      "assignment_id": 9,
-      "order_num": 1,
-      "title": "자료 조사 및 분석",
-      "description": "자료 조사 및 분석",
-      "ai_allowed": true,
-      "ai_tools": [],
-      "ai_guidance": "복붙 금지",
-      "created_at": "2026-04-10T08:09:13.368Z"
-    },
-    {
-      "id": 10,
-      "assignment_id": 10,
-      "order_num": 1,
-      "title": "자료 조사 및 분석",
-      "description": "자료 조사 및 분석",
-      "ai_allowed": true,
-      "ai_tools": [],
-      "ai_guidance": "복붙 금지",
-      "created_at": "2026-04-10T08:09:13.544Z"
-    },
-    {
-      "id": 11,
-      "assignment_id": 11,
-      "order_num": 1,
-      "title": "자료 조사 및 분석",
-      "description": "자료 조사 및 분석",
-      "ai_allowed": true,
-      "ai_tools": [],
-      "ai_guidance": "복붙 금지",
-      "created_at": "2026-04-10T08:09:13.693Z"
-    },
-    {
-      "id": 12,
-      "assignment_id": 12,
-      "order_num": 1,
-      "title": "자료 조사 및 분석",
-      "description": "자료 조사 및 분석",
-      "ai_allowed": true,
-      "ai_tools": [],
-      "ai_guidance": "복붙 금지",
-      "created_at": "2026-04-10T08:09:13.864Z"
-    },
-    {
-      "id": 13,
-      "assignment_id": 13,
-      "order_num": 1,
-      "title": "자료 조사 및 분석",
-      "description": "자료 조사 및 분석",
-      "ai_allowed": true,
-      "ai_tools": [],
-      "ai_guidance": "복붙 금지",
-      "created_at": "2026-04-10T08:09:14.025Z"
-    },
-    {
-      "id": 14,
-      "assignment_id": 14,
-      "order_num": 1,
-      "title": "자료 조사 및 분석",
-      "description": "자료 조사 및 분석",
-      "ai_allowed": true,
-      "ai_tools": [],
-      "ai_guidance": "복붙 금지",
-      "created_at": "2026-04-10T08:09:20.932Z"
+      "ai_guidance": "교사 지침에 따라 AI를 보조 수단으로만 활용하세요. 생성 문장을 그대로 제출하지 말고 반드시 검토·수정하며, 인용 시 출처를 표기하세요.",
+      "created_at": "2026-04-12T15:11:44.795Z"
     }
   ],
   "student_assignments": [
     {
-      "id": 1,
+      "id": 2,
       "student_id": 2,
-      "assignment_id": 14,
-      "current_stage_order": 1,
-      "status": "in_progress",
-      "started_at": "2026-04-10T08:11:30.835Z",
-      "completed_at": null
+      "assignment_id": 15,
+      "current_stage_order": 6,
+      "status": "completed",
+      "started_at": "2026-04-12T15:12:37.580Z",
+      "completed_at": "2026-04-12T15:24:00.119Z"
     }
   ],
   "ai_logs": [
@@ -784,6 +572,306 @@
       "page_title": "Google Gemini",
       "duration_seconds": 17,
       "created_at": "2026-04-10T08:27:10.852Z"
+    },
+    {
+      "id": 39,
+      "student_id": 2,
+      "assignment_id": 14,
+      "stage_id": 14,
+      "stage_order": 1,
+      "action_type": "page_visit",
+      "url": "https://gemini.google.com/app",
+      "page_title": "‎Google Gemini",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T14:31:32.437Z"
+    },
+    {
+      "id": 40,
+      "student_id": 2,
+      "assignment_id": 14,
+      "stage_id": 14,
+      "stage_order": 1,
+      "action_type": "page_visit",
+      "url": "https://claude.ai/login",
+      "page_title": "Claude",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T14:31:35.644Z"
+    },
+    {
+      "id": 41,
+      "student_id": 2,
+      "assignment_id": 14,
+      "stage_id": 14,
+      "stage_order": 1,
+      "action_type": "page_visit",
+      "url": "https://copilot.microsoft.com/",
+      "page_title": "Microsoft Copilot: AI 컴패니언",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T14:32:18.873Z"
+    },
+    {
+      "id": 42,
+      "student_id": 2,
+      "assignment_id": 14,
+      "stage_id": 14,
+      "stage_order": 1,
+      "action_type": "page_visit",
+      "url": "https://www.perplexity.ai/",
+      "page_title": "Perplexity",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T14:33:52.155Z"
+    },
+    {
+      "id": 43,
+      "student_id": 2,
+      "assignment_id": 14,
+      "stage_id": 14,
+      "stage_order": 1,
+      "action_type": "page_visit",
+      "url": "https://claude.ai/login",
+      "page_title": "Claude",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T14:33:53.541Z"
+    },
+    {
+      "id": 44,
+      "student_id": 2,
+      "assignment_id": 14,
+      "stage_id": 14,
+      "stage_order": 1,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T14:34:30.590Z"
+    },
+    {
+      "id": 45,
+      "student_id": 2,
+      "assignment_id": 14,
+      "stage_id": 14,
+      "stage_order": 1,
+      "action_type": "page_visit",
+      "url": "https://gemini.google.com/app",
+      "page_title": "Google Gemini",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T14:34:36.217Z"
+    },
+    {
+      "id": 46,
+      "student_id": 2,
+      "assignment_id": 14,
+      "stage_id": 14,
+      "stage_order": 1,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T14:34:44.816Z"
+    },
+    {
+      "id": 47,
+      "student_id": 2,
+      "assignment_id": 14,
+      "stage_id": 14,
+      "stage_order": 1,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T14:36:26.591Z"
+    },
+    {
+      "id": 48,
+      "student_id": 2,
+      "assignment_id": 14,
+      "stage_id": 14,
+      "stage_order": 1,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/#sbfbu=1&pi=",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T14:36:32.203Z"
+    },
+    {
+      "id": 49,
+      "student_id": 2,
+      "assignment_id": 14,
+      "stage_id": 14,
+      "stage_order": 1,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T14:36:36.934Z"
+    },
+    {
+      "id": 50,
+      "student_id": 2,
+      "assignment_id": 14,
+      "stage_id": 14,
+      "stage_order": 1,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/search?q=chat+gpt&sca_esv=9c139eb396eb3ff7&source=hp&ei=ZK7baeaUK4iM2roP1Z-M2Q0&biw=402&bih=389&oq=cha&gs_lp=EhFtb2JpbGUtZ3dzLXdpei1ocCIDY2hhKgIIADILEAAYgAQYsQMYgwEyCxAuGIAEGNEDGMcBMggQABiABBixAzILEAAYgAQYsQMYgwEyBRAAGIAEMgUQABiABDIIEAAYgAQYsQMyBRAAGIAESNclUMcIWKQKcAF4AJABAJgBoAGgAZwDqgEDMC4zuAEByAEA-AEBmAIDoAKwA6gCAMICCxAuGIAEGMcBGK8BwgIOEC4YgAQYsQMY0QMYxwHCAg0QABiABBixAxiDARgKmAMB8QWlVWCfxNOlwJIHAzAuM6AHzxSyBwMwLjO4B7ADwgcFMi0yLjHIBxKACAA&sclient=mobile-gws-wiz-hp",
+      "page_title": "Google Search",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T14:36:37.068Z"
+    },
+    {
+      "id": 51,
+      "student_id": 2,
+      "assignment_id": 14,
+      "stage_id": 14,
+      "stage_order": 1,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/sorry/index?continue=https://www.google.com/search%3Fq%3Dchat%2Bgpt%26sca_esv%3D9c139eb396eb3ff7%26source%3Dhp%26ei%3DZK7baeaUK4iM2roP1Z-M2Q0%26biw%3D402%26bih%3D389%26oq%3Dcha%26gs_lp%3DEhFtb2JpbGUtZ3dzLXdpei1ocCIDY2hhKgIIADILEAAYgAQYsQMYgwEyCxAuGIAEGNEDGMcBMggQABiABBixAzILEAAYgAQYsQMYgwEyBRAAGIAEMgUQABiABDIIEAAYgAQYsQMyBRAAGIAESNclUMcIWKQKcAF4AJABAJgBoAGgAZwDqgEDMC4zuAEByAEA-AEBmAIDoAKwA6gCAMICCxAuGIAEGMcBGK8BwgIOEC4YgAQYsQMY0QMYxwHCAg0QABiABBixAxiDARgKmAMB8QWlVWCfxNOlwJIHAzAuM6AHzxSyBwMwLjO4B7ADwgcFMi0yLjHIBxKACAA%26sclient%3Dmobile-gws-wiz-hp%26sei%3Db67bac_FENLT2roPxZTa2AE&q=EgS3TsfSGO_c7s4GIjDlcp6ac-AiGqky6EfCICTrpM9OSYLQxKbQ7nAsW83BcAcOO16Y8cvCPBh466IzalAyAVJaAUM",
+      "page_title": "https://www.google.com/search?q=chat+gpt&sca_esv=9c139eb396eb3ff7&source=hp&ei=ZK7baeaUK4iM2roP1Z-M2Q0&biw=402&bih=389&oq=cha&gs_lp=EhFtb2JpbGUtZ3dzLXdpei1ocCIDY2hhKgIIADILEAAYgAQYsQMYgwEyCxAuGIAEGNEDGMcBMggQABiABBixAzILEAAYgAQYsQMYgwEyBRAAGIAEMgUQABiABDIIEAAYgAQYsQMyBRAAGIAESNclUMcIWKQKcAF4AJABAJgBoAGgAZwDqgEDMC4zuAEByAEA-AEBmAIDoAKwA6gCAMICCxAuGIAEGMcBGK8BwgIOEC4YgAQYsQMY0QMYxwHCAg0QABiABBixAxiDARgKmAMB8QWlVWCfxNOlwJIHAzAuM6AHzxSyBwMwLjO4B7ADwgcFMi0yLjHIBxKACAA&sclient=mobile-gws-wiz-hp&sei=b67bac_FENLT2roPxZTa2AE",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T14:36:38.589Z"
+    },
+    {
+      "id": 52,
+      "student_id": 2,
+      "assignment_id": 14,
+      "stage_id": 14,
+      "stage_order": 1,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/search?q=chat+gpt&sca_esv=9c139eb396eb3ff7&source=hp&ei=ZK7baeaUK4iM2roP1Z-M2Q0&biw=402&bih=389&oq=cha&gs_lp=EhFtb2JpbGUtZ3dzLXdpei1ocCIDY2hhKgIIADILEAAYgAQYsQMYgwEyCxAuGIAEGNEDGMcBMggQABiABBixAzILEAAYgAQYsQMYgwEyBRAAGIAEMgUQABiABDIIEAAYgAQYsQMyBRAAGIAESNclUMcIWKQKcAF4AJABAJgBoAGgAZwDqgEDMC4zuAEByAEA-AEBmAIDoAKwA6gCAMICCxAuGIAEGMcBGK8BwgIOEC4YgAQYsQMY0QMYxwHCAg0QABiABBixAxiDARgKmAMB8QWlVWCfxNOlwJIHAzAuM6AHzxSyBwMwLjO4B7ADwgcFMi0yLjHIBxKACAA&sclient=mobile-gws-wiz-hp&sei=b67bac_FENLT2roPxZTa2AE",
+      "page_title": "chat gpt - Google 검색",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T14:36:45.500Z"
+    },
+    {
+      "id": 53,
+      "student_id": 2,
+      "assignment_id": 14,
+      "stage_id": 14,
+      "stage_order": 1,
+      "action_type": "page_visit",
+      "url": "https://chatgpt.com/?utm_source=google&utm_medium=paid_search&utm_campaign=GOOG_C_SEM_GBR_Core_CHT_BAU_ACQ_PER_MIX_ALL_APAC_KR_KO_120624&c_id=21990694068&c_agid=183521100387&c_crid=793872436073&c_kwid=kwd-1927051708782&c_ims=&c_pms=1009868&c_nw=g&c_dvc=m&gad_source=1&gad_campaignid=21990694068&gbraid=0AAAAA-I0E5dpPXn3VAIoEuURCdltVzej8&gclid=EAIaIQobChMIqM6sl8XokwMV0NcWBR2_JShbEAAYASAAEgIYPPD_BwE",
+      "page_title": "ChatGPT",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T14:36:49.138Z"
+    },
+    {
+      "id": 54,
+      "student_id": 2,
+      "assignment_id": 15,
+      "stage_id": 16,
+      "stage_order": 2,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T15:19:14.003Z"
+    },
+    {
+      "id": 55,
+      "student_id": 2,
+      "assignment_id": 15,
+      "stage_id": 16,
+      "stage_order": 2,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/#sbfbu=1&pi=",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T15:19:25.844Z"
+    },
+    {
+      "id": 56,
+      "student_id": 2,
+      "assignment_id": 15,
+      "stage_id": 16,
+      "stage_order": 2,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T15:19:26.616Z"
+    },
+    {
+      "id": 57,
+      "student_id": 2,
+      "assignment_id": 15,
+      "stage_id": 16,
+      "stage_order": 2,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/search?q=chat+gpt&sca_esv=1a21c3da2ea2dcfe&source=hp&ei=bLjbaZrsCI3j2roP5eqK2A4&biw=402&bih=544&oq=&gs_lp=EhFtb2JpbGUtZ3dzLXdpei1ocCIAKgIIADILECkYgAQYsQMYgwFImQZQAFgAcAF4AJABAJgBAKABAKoBALgBAcgBAJgCAaACBagCAZgDBfEF929NuX-Tm8GSBwExoAcAsgcAuAcAwgcDMi0xyAcEgAgA&sclient=mobile-gws-wiz-hp",
+      "page_title": "chat gpt - Google 검색",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T15:19:47.074Z"
+    },
+    {
+      "id": 58,
+      "student_id": 2,
+      "assignment_id": 15,
+      "stage_id": 16,
+      "stage_order": 2,
+      "action_type": "page_visit",
+      "url": "https://chatgpt.com/",
+      "page_title": "ChatGPT",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T15:21:02.582Z"
+    },
+    {
+      "id": 59,
+      "student_id": 2,
+      "assignment_id": 15,
+      "stage_id": 17,
+      "stage_order": 3,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T15:21:29.752Z"
+    },
+    {
+      "id": 60,
+      "student_id": 2,
+      "assignment_id": 15,
+      "stage_id": 17,
+      "stage_order": 3,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/#sbfbu=1&pi=",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T15:21:36.983Z"
+    },
+    {
+      "id": 61,
+      "student_id": 2,
+      "assignment_id": 15,
+      "stage_id": 17,
+      "stage_order": 3,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T15:21:42.499Z"
+    },
+    {
+      "id": 62,
+      "student_id": 2,
+      "assignment_id": 15,
+      "stage_id": 17,
+      "stage_order": 3,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/search?q=%E3%85%87%E3%85%87&sca_esv=1a21c3da2ea2dcfe&source=hp&ei=87jbaZ3xObbg2roPn56SkA8&biw=402&bih=233&oq=%E3%85%87%E3%85%87&gs_lp=EhFtb2JpbGUtZ3dzLXdpei1ocCIG44WH44WHMgUQABiABDIIEAAYgAQYsQMyCBAAGIAEGLEDMggQABiABBixAzIEEAAYAzIIEAAYgAQYsQMyCBAAGIAEGLEDMggQABiABBixA0iRK1DeJ1jkKHACeACQAQCYAXmgAesBqgEDMC4yuAEDyAEA-AEBmAIEoAKCAqgCAcICCxApGIAEGLEDGIMBwgILEC4YgAQYsQMYgwHCAgUQLhiABMICCxAuGIAEGNEDGMcBwgILEAAYgAQYsQMYgwGYAwfxBdCrssV2LJPGkgcDMi4yoAeTD7IHAzAuMrgH-QHCBwcwLjEuMi4xyAcSgAgA&sclient=mobile-gws-wiz-hp",
+      "page_title": "ㅇㅇ - Google 검색",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T15:23:09.173Z"
+    },
+    {
+      "id": 63,
+      "student_id": 2,
+      "assignment_id": 15,
+      "stage_id": 18,
+      "stage_order": 4,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-12T15:23:21.256Z"
     }
   ],
   "exit_attempts": [
@@ -821,12 +909,111 @@
       "assignment_id": 14,
       "attempt_type": "background",
       "created_at": "2026-04-10T08:23:46.134Z"
+    },
+    {
+      "id": 6,
+      "student_id": 2,
+      "assignment_id": 14,
+      "attempt_type": "background",
+      "created_at": "2026-04-12T14:22:52.632Z"
+    },
+    {
+      "id": 7,
+      "student_id": 2,
+      "assignment_id": 14,
+      "attempt_type": "background",
+      "created_at": "2026-04-12T14:22:52.641Z"
+    },
+    {
+      "id": 8,
+      "student_id": 2,
+      "assignment_id": 14,
+      "attempt_type": "background",
+      "created_at": "2026-04-12T14:26:32.220Z"
+    },
+    {
+      "id": 9,
+      "student_id": 2,
+      "assignment_id": 14,
+      "attempt_type": "background",
+      "created_at": "2026-04-12T14:26:32.229Z"
+    },
+    {
+      "id": 10,
+      "student_id": 2,
+      "assignment_id": 14,
+      "attempt_type": "background",
+      "created_at": "2026-04-12T14:28:44.491Z"
+    },
+    {
+      "id": 11,
+      "student_id": 2,
+      "assignment_id": 14,
+      "attempt_type": "background",
+      "created_at": "2026-04-12T14:28:44.506Z"
     }
   ],
   "_counters_users": 2,
-  "_counters_assignments": 14,
-  "_counters_stages": 14,
-  "_counters_student_assignments": 1,
-  "_counters_ai_logs": 38,
-  "_counters_exit_attempts": 5
+  "_counters_assignments": 15,
+  "_counters_stages": 20,
+  "_counters_student_assignments": 2,
+  "_counters_ai_logs": 63,
+  "_counters_exit_attempts": 11,
+  "student_stage_writings": [
+    {
+      "id": 1,
+      "student_id": 2,
+      "assignment_id": 15,
+      "stage_id": 15,
+      "content": "안녕",
+      "created_at": "2026-04-12T15:19:09.167Z",
+      "updated_at": "2026-04-12T15:19:13.291Z"
+    },
+    {
+      "id": 2,
+      "student_id": 2,
+      "assignment_id": 15,
+      "stage_id": 16,
+      "content": "이랗게 저엏게",
+      "created_at": "2026-04-12T15:19:20.902Z",
+      "updated_at": "2026-04-12T15:21:29.406Z"
+    },
+    {
+      "id": 3,
+      "student_id": 2,
+      "assignment_id": 15,
+      "stage_id": 17,
+      "content": "저렇게",
+      "created_at": "2026-04-12T15:21:35.702Z",
+      "updated_at": "2026-04-12T15:23:19.249Z"
+    },
+    {
+      "id": 4,
+      "student_id": 2,
+      "assignment_id": 15,
+      "stage_id": 18,
+      "content": "이러저렇게",
+      "created_at": "2026-04-12T15:23:37.307Z",
+      "updated_at": "2026-04-12T15:23:43.182Z"
+    },
+    {
+      "id": 5,
+      "student_id": 2,
+      "assignment_id": 15,
+      "stage_id": 19,
+      "content": "최종 결과",
+      "created_at": "2026-04-12T15:23:49.080Z",
+      "updated_at": "2026-04-12T15:23:50.610Z"
+    },
+    {
+      "id": 6,
+      "student_id": 2,
+      "assignment_id": 15,
+      "stage_id": 20,
+      "content": "담엔 이렇게 하자",
+      "created_at": "2026-04-12T15:23:58.467Z",
+      "updated_at": "2026-04-12T15:24:00.058Z"
+    }
+  ],
+  "_counters_student_stage_writings": 6
 }

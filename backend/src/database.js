@@ -24,6 +24,7 @@ function initDatabase() {
     assignments: [],
     stages: [],
     student_assignments: [],
+    student_stage_writings: [],
     ai_logs: [],
     exit_attempts: [],
   }).write();
@@ -35,6 +36,7 @@ function initDatabase() {
       .set('_counters_assignments', 0)
       .set('_counters_stages', 0)
       .set('_counters_student_assignments', 0)
+      .set('_counters_student_stage_writings', 0)
       .set('_counters_ai_logs', 0)
       .set('_counters_exit_attempts', 0)
       .write();

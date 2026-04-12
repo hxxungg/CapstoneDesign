@@ -6,7 +6,8 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { assignmentAPI, logAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { THEME, AI_TOOLS } from '../../config/api';
+import { THEME } from '../../config/api';
+import { stageAllowsAiBrowser, getTeacherAiModeStyle } from '../../config/defaultPerformanceStages';
 import ExitWarningModal from '../../components/ExitWarningModal';
 
 export default function StageListScreen({ navigation, route }) {
@@ -146,6 +147,7 @@ export default function StageListScreen({ navigation, route }) {
 
         {stages.map((stage) => {
           const status = getStageStatus(stage);
+          const aiStyle = getTeacherAiModeStyle(THEME, stage);
           return (
             <View key={stage.id} style={[styles.stageCard, status === 'locked' && styles.stageCardLocked]}>
               <View style={styles.stageHeader}>
@@ -156,12 +158,9 @@ export default function StageListScreen({ navigation, route }) {
                 </View>
                 <View style={styles.stageTitleSection}>
                   <Text style={styles.stageTitleText}>{stage.title}</Text>
-                  <View style={[
-                    styles.aiStatusBadge,
-                    { backgroundColor: stage.ai_allowed ? THEME.successLight : THEME.dangerLight }
-                  ]}>
-                    <Text style={[styles.aiStatusText, { color: stage.ai_allowed ? THEME.success : THEME.danger }]}>
-                      {stage.ai_allowed ? '✅ AI 허용' : '🚫 AI 제한'}
+                  <View style={[styles.aiStatusBadge, { backgroundColor: aiStyle.bg }]}>
+                    <Text style={[styles.aiStatusText, { color: aiStyle.color }]}>
+                      {aiStyle.label}
                     </Text>
                   </View>
                 </View>
@@ -169,19 +168,6 @@ export default function StageListScreen({ navigation, route }) {
 
               {stage.description && (
                 <Text style={styles.stageDescription}>{stage.description}</Text>
-              )}
-
-              {stage.ai_allowed && stage.ai_tools?.length > 0 && (
-                <View style={styles.allowedTools}>
-                  <Text style={styles.allowedToolsLabel}>사용 가능한 AI:</Text>
-                  <View style={styles.toolsRow}>
-                    {stage.ai_tools.map((tool, idx) => (
-                      <View key={idx} style={styles.toolChip}>
-                        <Text style={styles.toolChipText}>{tool}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
               )}
 
               {stage.ai_guidance && (
@@ -198,7 +184,7 @@ export default function StageListScreen({ navigation, route }) {
                     onPress={handleStartStage}
                   >
                     <Text style={styles.browserButtonText}>
-                      {stage.ai_allowed ? '🤖 단계 시작 (AI 허용)' : '📝 단계 시작'}
+                      {stageAllowsAiBrowser(stage) ? '🌐 단계 시작 (AI·웹)' : '📝 단계 시작'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -255,11 +241,6 @@ const styles = StyleSheet.create({
   aiStatusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, marginLeft: 8 },
   aiStatusText: { fontSize: 11, fontWeight: '700' },
   stageDescription: { fontSize: 13, color: THEME.textSecondary, lineHeight: 18, marginBottom: 10, marginLeft: 46 },
-  allowedTools: { marginLeft: 46, marginBottom: 8 },
-  allowedToolsLabel: { fontSize: 12, color: THEME.textSecondary, marginBottom: 4 },
-  toolsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  toolChip: { backgroundColor: THEME.successLight, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
-  toolChipText: { fontSize: 11, color: THEME.success, fontWeight: '600' },
   guidanceBox: {
     backgroundColor: THEME.primaryLight, borderRadius: 10, padding: 12,
     marginLeft: 46, marginBottom: 8,

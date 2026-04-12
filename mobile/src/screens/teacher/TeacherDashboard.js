@@ -1,12 +1,13 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { assignmentAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { THEME } from '../../config/api';
+import { appAlert } from '../../utils/appAlert';
 
 export default function TeacherDashboard({ navigation }) {
   const { user, logout } = useAuth();
@@ -19,7 +20,7 @@ export default function TeacherDashboard({ navigation }) {
       const data = await assignmentAPI.getList();
       setAssignments(data);
     } catch (err) {
-      Alert.alert('오류', err.message);
+      appAlert('오류', err.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -31,20 +32,26 @@ export default function TeacherDashboard({ navigation }) {
   );
 
   const handleDelete = (item) => {
-    Alert.alert(
+    appAlert(
       '수행평가 삭제',
       `"${item.title}"을 삭제하시겠습니까?\n이 작업은 취소할 수 없습니다.`,
       [
         { text: '취소', style: 'cancel' },
         {
           text: '삭제', style: 'destructive',
-          onPress: async () => {
-            try {
-              await assignmentAPI.delete(item.id);
-              loadAssignments();
-            } catch (err) {
-              Alert.alert('오류', err.message);
-            }
+          onPress: () => {
+            const id = Number(item.id);
+            // Android 등에서 Alert 닫힌 뒤 비동기 실행이 안정적으로 동작하도록 한 틱 미룸
+            setTimeout(() => {
+              (async () => {
+                try {
+                  await assignmentAPI.remove(id);
+                  await loadAssignments();
+                } catch (err) {
+                  appAlert('오류', err.message);
+                }
+              })();
+            }, 0);
           },
         },
       ]

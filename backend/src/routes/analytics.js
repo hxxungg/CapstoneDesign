@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../database');
 const { authenticateToken, requireTeacher } = require('../middleware/auth');
+const { normalizeStage } = require('../stageNormalize');
 
 function detectAITool(url) {
   if (!url) return null;
@@ -83,7 +84,8 @@ router.get('/assignment/:id', authenticateToken, requireTeacher, (req, res) => {
   if (!assignment) return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
 
   const stages = db.get('stages').filter({ assignment_id: assignmentId }).value()
-    .sort((a, b) => a.order_num - b.order_num);
+    .sort((a, b) => a.order_num - b.order_num)
+    .map(normalizeStage);
 
   const studentAssignments = db.get('student_assignments').filter({ assignment_id: assignmentId }).value();
 
@@ -146,7 +148,8 @@ router.get('/assignment/:assignmentId/student/:studentId', authenticateToken, re
   if (!student) return res.status(404).json({ error: '학생을 찾을 수 없습니다.' });
 
   const stages = db.get('stages').filter({ assignment_id: assignmentId }).value()
-    .sort((a, b) => a.order_num - b.order_num);
+    .sort((a, b) => a.order_num - b.order_num)
+    .map(normalizeStage);
 
   const progress = db.get('student_assignments')
     .find({ student_id: studentId, assignment_id: assignmentId })

@@ -1,11 +1,13 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { assignmentAPI, stageAPI } from '../../services/api';
 import { THEME } from '../../config/api';
+import { getTeacherAiModeStyle } from '../../config/defaultPerformanceStages';
+import { appAlert } from '../../utils/appAlert';
 
 export default function AssignmentDetailScreen({ navigation, route }) {
   const { assignment: initialAssignment } = route.params;
@@ -23,7 +25,7 @@ export default function AssignmentDetailScreen({ navigation, route }) {
       setAssignment(detail);
       setStudents(studentList);
     } catch (err) {
-      Alert.alert('오류', err.message);
+      appAlert('오류', err.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -33,17 +35,22 @@ export default function AssignmentDetailScreen({ navigation, route }) {
   useFocusEffect(useCallback(() => { loadData(); }, []));
 
   const handleDeleteStage = (stage) => {
-    Alert.alert('단계 삭제', `"${stage.title}" 단계를 삭제하시겠습니까?`, [
+    appAlert('단계 삭제', `"${stage.title}" 단계를 삭제하시겠습니까?`, [
       { text: '취소', style: 'cancel' },
       {
         text: '삭제', style: 'destructive',
-        onPress: async () => {
-          try {
-            await stageAPI.delete(stage.id);
-            loadData();
-          } catch (err) {
-            Alert.alert('오류', err.message);
-          }
+        onPress: () => {
+          const id = Number(stage.id);
+          setTimeout(() => {
+            (async () => {
+              try {
+                await stageAPI.remove(id);
+                await loadData();
+              } catch (err) {
+                appAlert('오류', err.message);
+              }
+            })();
+          }, 0);
         },
       },
     ]);
@@ -96,7 +103,9 @@ export default function AssignmentDetailScreen({ navigation, route }) {
         {stages.length === 0 ? (
           <Text style={styles.emptyText}>단계를 추가해주세요.</Text>
         ) : (
-          stages.map((stage) => (
+          stages.map((stage) => {
+            const aiStyle = getTeacherAiModeStyle(THEME, stage);
+            return (
             <View key={stage.id} style={styles.stageRow}>
               <View style={styles.stageOrderBadge}>
                 <Text style={styles.stageOrderText}>{stage.order_num}</Text>
@@ -104,16 +113,13 @@ export default function AssignmentDetailScreen({ navigation, route }) {
               <View style={styles.stageInfo}>
                 <View style={styles.stageTitleRow}>
                   <Text style={styles.stageTitle}>{stage.title}</Text>
-                  <View style={[styles.aiBadge, { backgroundColor: stage.ai_allowed ? THEME.successLight : THEME.dangerLight }]}>
-                    <Text style={[styles.aiBadgeText, { color: stage.ai_allowed ? THEME.success : THEME.danger }]}>
-                      {stage.ai_allowed ? 'AI 허용' : 'AI 제한'}
+                  <View style={[styles.aiBadge, { backgroundColor: aiStyle.bg }]}>
+                    <Text style={[styles.aiBadgeText, { color: aiStyle.color }]}>
+                      {aiStyle.label}
                     </Text>
                   </View>
                 </View>
                 {stage.description && <Text style={styles.stageDesc} numberOfLines={1}>{stage.description}</Text>}
-                {stage.ai_allowed && stage.ai_tools?.length > 0 && (
-                  <Text style={styles.toolsText}>{stage.ai_tools.join(', ')}</Text>
-                )}
               </View>
               <TouchableOpacity
                 style={styles.stageDeleteButton}
@@ -122,7 +128,8 @@ export default function AssignmentDetailScreen({ navigation, route }) {
                 <Text style={styles.stageDeleteText}>✕</Text>
               </TouchableOpacity>
             </View>
-          ))
+            );
+          })
         )}
       </View>
 
@@ -209,7 +216,6 @@ const styles = StyleSheet.create({
   aiBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10 },
   aiBadgeText: { fontSize: 10, fontWeight: '700' },
   stageDesc: { fontSize: 12, color: THEME.textSecondary, marginTop: 2 },
-  toolsText: { fontSize: 11, color: THEME.success, marginTop: 2 },
   stageDeleteButton: { padding: 8 },
   stageDeleteText: { color: THEME.danger, fontSize: 16, fontWeight: 'bold' },
   studentRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: THEME.border },

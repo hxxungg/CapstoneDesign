@@ -1,30 +1,55 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Switch,
+  ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { assignmentAPI, stageAPI } from '../../services/api';
-import { THEME, AI_TOOLS } from '../../config/api';
+import { THEME } from '../../config/api';
+import {
+  AI_MODE,
+  AI_MODE_LABELS,
+  DEFAULT_CONDITIONAL_GUIDANCE,
+  getDefaultStagesForNewAssignment,
+} from '../../config/defaultPerformanceStages';
+import { appAlert } from '../../utils/appAlert';
 
 const SUBJECTS = ['국어', '영어', '수학', '과학', '사회', '역사', '도덕', '기술·가정', '미술', '음악', '체육', '기타'];
+
+const AI_MODE_OPTIONS = [
+  { key: AI_MODE.DISALLOWED, label: '비허용', sub: 'AI·웹 패널 없음' },
+  { key: AI_MODE.CONDITIONAL, label: '조건부', sub: '지침에 따라 활용' },
+  { key: AI_MODE.ALLOWED, label: '허용', sub: '탐색·도구 사용' },
+];
 
 export default function CreateAssignmentScreen({ navigation }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [subject, setSubject] = useState('');
-  const [stages, setStages] = useState([
-    { title: '', description: '', ai_allowed: false, ai_tools: [], ai_guidance: '' }
-  ]);
+  const [stages, setStages] = useState(() => getDefaultStagesForNewAssignment());
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState(1);
 
   const addStage = () => {
-    setStages([...stages, { title: '', description: '', ai_allowed: false, ai_tools: [], ai_guidance: '' }]);
+    setStages([
+      ...stages,
+      { title: '', description: '', ai_mode: AI_MODE.DISALLOWED, ai_guidance: '' },
+    ]);
+  };
+
+  const setStageAiMode = (idx, mode) => {
+    const updated = [...stages];
+    const cur = { ...updated[idx], ai_mode: mode };
+    if (mode === AI_MODE.DISALLOWED) {
+      cur.ai_guidance = '';
+    } else if (mode === AI_MODE.CONDITIONAL && !(cur.ai_guidance || '').trim()) {
+      cur.ai_guidance = DEFAULT_CONDITIONAL_GUIDANCE;
+    }
+    updated[idx] = cur;
+    setStages(updated);
   };
 
   const removeStage = (idx) => {
     if (stages.length <= 1) {
-      Alert.alert('알림', '최소 1개 이상의 단계가 필요합니다.');
+      appAlert('알림', '최소 1개 이상의 단계가 필요합니다.');
       return;
     }
     setStages(stages.filter((_, i) => i !== idx));
@@ -36,23 +61,15 @@ export default function CreateAssignmentScreen({ navigation }) {
     setStages(updated);
   };
 
-  const toggleTool = (idx, toolName) => {
-    const stage = stages[idx];
-    const tools = stage.ai_tools.includes(toolName)
-      ? stage.ai_tools.filter(t => t !== toolName)
-      : [...stage.ai_tools, toolName];
-    updateStage(idx, 'ai_tools', tools);
-  };
-
   const handleCreate = async () => {
     if (!title.trim()) {
-      Alert.alert('입력 오류', '수행평가 제목을 입력해주세요.');
+      appAlert('입력 오류', '수행평가 제목을 입력해주세요.');
       return;
     }
 
     const emptyStage = stages.findIndex(s => !s.title.trim());
     if (emptyStage !== -1) {
-      Alert.alert('입력 오류', `${emptyStage + 1}번째 단계의 제목을 입력해주세요.`);
+      appAlert('입력 오류', `${emptyStage + 1}번째 단계의 제목을 입력해주세요.`);
       return;
     }
 
@@ -65,19 +82,18 @@ export default function CreateAssignmentScreen({ navigation }) {
           assignment_id: assignment.id,
           title: stage.title.trim(),
           description: stage.description.trim(),
-          ai_allowed: stage.ai_allowed,
-          ai_tools: stage.ai_tools,
-          ai_guidance: stage.ai_guidance.trim(),
+          ai_mode: stage.ai_mode,
+          ai_guidance: stage.ai_mode === AI_MODE.DISALLOWED ? '' : stage.ai_guidance.trim(),
         });
       }
 
       navigation.goBack();
-      Alert.alert(
+      appAlert(
         '✅ 생성 완료',
         `수행평가가 생성되었습니다.\n\n참여 코드: ${assignment.assignment_code}\n\n학생들에게 이 코드를 알려주세요.`
       );
     } catch (err) {
-      Alert.alert('생성 실패', err.message);
+      appAlert('생성 실패', err.message);
     } finally {
       setLoading(false);
     }
@@ -121,7 +137,9 @@ export default function CreateAssignmentScreen({ navigation }) {
         {/* 단계 설정 */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>🗂 단계 설정</Text>
-          <Text style={styles.sectionDesc}>각 단계에서 AI 사용 허용 여부를 설정하세요.</Text>
+          <Text style={styles.sectionDesc}>
+            표준 6단계가 기본으로 채워져 있습니다. 단계별로 비허용 · 조건부 허용 · 허용 중에서 고를 수 있습니다.
+          </Text>
 
           {stages.map((stage, idx) => (
             <View key={idx} style={styles.stageCard}>
@@ -155,39 +173,29 @@ export default function CreateAssignmentScreen({ navigation }) {
                 numberOfLines={2}
               />
 
-              <View style={styles.aiToggleRow}>
-                <View>
-                  <Text style={styles.aiToggleLabel}>AI 사용 허용</Text>
-                  <Text style={styles.aiToggleDesc}>
-                    {stage.ai_allowed ? '✅ 이 단계에서 AI 사용 가능' : '🚫 이 단계에서 AI 사용 불가'}
-                  </Text>
-                </View>
-                <Switch
-                  value={stage.ai_allowed}
-                  onValueChange={(v) => updateStage(idx, 'ai_allowed', v)}
-                  trackColor={{ false: THEME.border, true: THEME.success + '80' }}
-                  thumbColor={stage.ai_allowed ? THEME.success : '#f4f3f4'}
-                />
+              <Text style={styles.label}>AI 허용 기준</Text>
+              <View style={styles.aiModeRow}>
+                {AI_MODE_OPTIONS.map((opt) => (
+                  <TouchableOpacity
+                    key={opt.key}
+                    style={[styles.aiModeChip, stage.ai_mode === opt.key && styles.aiModeChipActive]}
+                    onPress={() => setStageAiMode(idx, opt.key)}
+                  >
+                    <Text style={[styles.aiModeChipTitle, stage.ai_mode === opt.key && styles.aiModeChipTitleActive]}>
+                      {opt.label}
+                    </Text>
+                    <Text style={[styles.aiModeChipSub, stage.ai_mode === opt.key && styles.aiModeChipSubActive]}>
+                      {opt.sub}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
+              <Text style={styles.aiModeHint}>
+                현재: {AI_MODE_LABELS[stage.ai_mode] || AI_MODE_LABELS[AI_MODE.DISALLOWED]}
+              </Text>
 
-              {stage.ai_allowed && (
+              {stage.ai_mode !== AI_MODE.DISALLOWED && (
                 <>
-                  <Text style={styles.label}>허용할 AI 도구 (선택 안 하면 전체 허용)</Text>
-                  <View style={styles.toolGrid}>
-                    {AI_TOOLS.map(tool => (
-                      <TouchableOpacity
-                        key={tool.name}
-                        style={[styles.toolChip, stage.ai_tools.includes(tool.name) && styles.toolChipActive]}
-                        onPress={() => toggleTool(idx, tool.name)}
-                      >
-                        <Text style={styles.toolChipIcon}>{tool.icon}</Text>
-                        <Text style={[styles.toolChipText, stage.ai_tools.includes(tool.name) && styles.toolChipTextActive]}>
-                          {tool.name}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-
                   <Text style={styles.label}>AI 활용 지침</Text>
                   <TextInput
                     style={[styles.input, styles.textArea]}
@@ -258,22 +266,18 @@ const styles = StyleSheet.create({
   stageCardTitle: { flex: 1, fontSize: 15, fontWeight: '600', color: THEME.text },
   removeButton: { paddingHorizontal: 8, paddingVertical: 4, backgroundColor: THEME.dangerLight, borderRadius: 8 },
   removeButtonText: { fontSize: 12, color: THEME.danger },
-  aiToggleRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: THEME.card, borderRadius: 10, padding: 12, marginTop: 12,
-    borderWidth: 1, borderColor: THEME.border,
+  aiModeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  aiModeChip: {
+    flex: 1, paddingVertical: 10, paddingHorizontal: 6,
+    borderRadius: 10, backgroundColor: THEME.background, borderWidth: 1, borderColor: THEME.border,
+    alignItems: 'center',
   },
-  aiToggleLabel: { fontSize: 14, fontWeight: '600', color: THEME.text },
-  aiToggleDesc: { fontSize: 12, color: THEME.textSecondary, marginTop: 2 },
-  toolGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-  toolChip: {
-    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6,
-    borderRadius: 20, backgroundColor: THEME.card, borderWidth: 1, borderColor: THEME.border, gap: 4,
-  },
-  toolChipActive: { backgroundColor: THEME.successLight, borderColor: THEME.success },
-  toolChipIcon: { fontSize: 13 },
-  toolChipText: { fontSize: 12, color: THEME.textSecondary },
-  toolChipTextActive: { color: THEME.success, fontWeight: '600' },
+  aiModeChipActive: { backgroundColor: THEME.primaryLight, borderColor: THEME.primary, borderWidth: 2 },
+  aiModeChipTitle: { fontSize: 13, fontWeight: '700', color: THEME.textSecondary },
+  aiModeChipTitleActive: { color: THEME.primary },
+  aiModeChipSub: { fontSize: 10, color: THEME.textSecondary, marginTop: 2, textAlign: 'center' },
+  aiModeChipSubActive: { color: THEME.primary },
+  aiModeHint: { fontSize: 12, color: THEME.textSecondary, marginTop: 8 },
   addStageButton: {
     borderWidth: 2, borderColor: THEME.primary, borderStyle: 'dashed',
     borderRadius: 12, padding: 14, alignItems: 'center',

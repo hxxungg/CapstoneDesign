@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, ActivityIndicator, Alert,
+  View, Text, ScrollView, StyleSheet, ActivityIndicator,
   TouchableOpacity,
 } from 'react-native';
 import { analyticsAPI } from '../../services/api';
 import { THEME } from '../../config/api';
+import { getTeacherAiModeStyle } from '../../config/defaultPerformanceStages';
+import { appAlert } from '../../utils/appAlert';
 
 export default function AnalyticsScreen({ navigation, route }) {
   const { assignmentId, title } = route.params;
@@ -21,7 +23,7 @@ export default function AnalyticsScreen({ navigation, route }) {
       const result = await analyticsAPI.getAssignmentAnalytics(assignmentId);
       setData(result);
     } catch (err) {
-      Alert.alert('오류', err.message);
+      appAlert('오류', err.message);
     } finally {
       setLoading(false);
     }
@@ -87,24 +89,24 @@ export default function AnalyticsScreen({ navigation, route }) {
       {/* 단계별 AI 허용 현황 */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>📋 단계별 AI 설정</Text>
-        {stages.map((stage) => (
+        {stages.map((stage) => {
+          const aiStyle = getTeacherAiModeStyle(THEME, stage);
+          return (
           <View key={stage.id} style={styles.stageAnalyticsRow}>
             <View style={styles.stageOrderBadge}>
               <Text style={styles.stageOrderText}>{stage.order_num}</Text>
             </View>
             <View style={styles.stageAnalyticsInfo}>
               <Text style={styles.stageAnalyticsTitle}>{stage.title}</Text>
-              {stage.ai_tools?.length > 0 && (
-                <Text style={styles.stageTools}>{stage.ai_tools.join(', ')}</Text>
-              )}
             </View>
-            <View style={[styles.stageAiBadge, { backgroundColor: stage.ai_allowed ? THEME.successLight : THEME.dangerLight }]}>
-              <Text style={[styles.stageAiBadgeText, { color: stage.ai_allowed ? THEME.success : THEME.danger }]}>
-                {stage.ai_allowed ? 'AI 허용' : 'AI 제한'}
+            <View style={[styles.stageAiBadge, { backgroundColor: aiStyle.bg }]}>
+              <Text style={[styles.stageAiBadgeText, { color: aiStyle.color }]}>
+                {aiStyle.label}
               </Text>
             </View>
           </View>
-        ))}
+        );
+        })}
       </View>
 
       {/* 학생별 현황 */}
@@ -191,7 +193,6 @@ const styles = StyleSheet.create({
   stageOrderText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
   stageAnalyticsInfo: { flex: 1 },
   stageAnalyticsTitle: { fontSize: 14, fontWeight: '600', color: THEME.text },
-  stageTools: { fontSize: 11, color: THEME.success, marginTop: 2 },
   stageAiBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
   stageAiBadgeText: { fontSize: 11, fontWeight: '700' },
   studentRow: {

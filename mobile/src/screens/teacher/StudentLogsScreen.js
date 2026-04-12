@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, ActivityIndicator, Alert,
+  View, Text, ScrollView, StyleSheet, ActivityIndicator,
 } from 'react-native';
 import { logAPI } from '../../services/api';
 import { THEME } from '../../config/api';
+import { appAlert } from '../../utils/appAlert';
 
 export default function StudentLogsScreen({ route }) {
   const { studentId, studentName, assignmentId, assignmentTitle } = route.params;
@@ -19,7 +20,7 @@ export default function StudentLogsScreen({ route }) {
       const result = await logAPI.getStudentLogs(studentId, assignmentId);
       setData(result);
     } catch (err) {
-      Alert.alert('오류', err.message);
+      appAlert('오류', err.message);
     } finally {
       setLoading(false);
     }

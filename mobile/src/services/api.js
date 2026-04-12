@@ -37,9 +37,13 @@ export const assignmentAPI = {
   getDetail: (id) => apiClient.get(`/assignments/${id}`),
   create: (data) => apiClient.post('/assignments', data),
   update: (id, data) => apiClient.put(`/assignments/${id}`, data),
-  delete: (id) => apiClient.delete(`/assignments/${id}`),
+  /** HTTP DELETE — 메서드명은 예약어 `delete` 회피 */
+  remove: (id) => apiClient.delete(`/assignments/${id}`),
   enroll: (assignment_code) => apiClient.post('/assignments/enroll', { assignment_code }),
   updateProgress: (id, data) => apiClient.put(`/assignments/${id}/progress`, data),
+  /** 학생: 단계별 작성 내용 저장 */
+  saveStageWriting: (assignmentId, stageId, content) =>
+    apiClient.put(`/assignments/${assignmentId}/stage-writing`, { stage_id: stageId, content }),
   getStudents: (id) => apiClient.get(`/assignments/${id}/students`),
 };
 
@@ -47,7 +51,7 @@ export const assignmentAPI = {
 export const stageAPI = {
   create: (data) => apiClient.post('/stages', data),
   update: (id, data) => apiClient.put(`/stages/${id}`, data),
-  delete: (id) => apiClient.delete(`/stages/${id}`),
+  remove: (id) => apiClient.delete(`/stages/${id}`),
   reorder: (id, new_order) => apiClient.put(`/stages/${id}/reorder`, { new_order }),
 };
 

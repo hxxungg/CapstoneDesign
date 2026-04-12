@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Alert,
+  View, Text, TouchableOpacity, StyleSheet,
   BackHandler, AppState, ActivityIndicator, Platform, Linking,
+  TextInput, Keyboard,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -11,32 +12,24 @@ if (Platform.OS !== 'web') {
 }
 import { logAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { THEME, AI_TOOLS } from '../../config/api';
+import { THEME, INAPP_BROWSER_HOME } from '../../config/api';
 import ExitWarningModal from '../../components/ExitWarningModal';
 
 export default function BrowserScreen({ navigation, route }) {
   const { stage, assignment } = route.params;
   const { user } = useAuth();
 
-  const [currentUrl, setCurrentUrl] = useState(stage.ai_tools?.[0]
-    ? AI_TOOLS.find(t => stage.ai_tools.includes(t.name))?.url || AI_TOOLS[0].url
-    : AI_TOOLS[0].url
-  );
+  const [currentUrl, setCurrentUrl] = useState(INAPP_BROWSER_HOME);
+  const [addressDraft, setAddressDraft] = useState(INAPP_BROWSER_HOME);
   const [pageTitle, setPageTitle] = useState('');
   const [loading, setLoading] = useState(true);
   const [canGoBack, setCanGoBack] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
   const [exitAttemptCount, setExitAttemptCount] = useState(0);
-  const [showToolSelector, setShowToolSelector] = useState(false);
-
   const webViewRef = useRef(null);
   const pageStartTimeRef = useRef(Date.now());
   const appStateRef = useRef(AppState.currentState);
   const lastLoggedUrlRef = useRef(null);
-
-  const allowedTools = AI_TOOLS.filter(t =>
-    !stage.ai_tools || stage.ai_tools.length === 0 || stage.ai_tools.includes(t.name)
-  );
 
   const logPageVisit = async (url, title, duration = 0) => {
     if (!url || url === lastLoggedUrlRef.current) return;
@@ -106,6 +99,7 @@ export default function BrowserScreen({ navigation, route }) {
       await logPageVisit(currentUrl, pageTitle, duration);
 
       setCurrentUrl(navState.url);
+      setAddressDraft(navState.url);
       setPageTitle(navState.title || '');
       pageStartTimeRef.current = Date.now();
       lastLoggedUrlRef.current = null;
@@ -122,35 +116,30 @@ export default function BrowserScreen({ navigation, route }) {
   };
 
   const handleShouldStartLoad = (request) => {
-    // AI 도구 허용 목록 확인
-    if (allowedTools.length > 0) {
-      const isAllowed = allowedTools.some(tool =>
-        request.url.toLowerCase().includes(new URL(tool.url).hostname.toLowerCase())
-      );
-      if (!isAllowed && !request.url.startsWith('about:') && !request.url.startsWith('data:')) {
-        const hostname = new URL(request.url).hostname;
-        Alert.alert(
-          '🚫 접근 제한',
-          `이 단계에서는 허용된 AI 도구만 사용할 수 있습니다.\n\n"${hostname}"은 허용되지 않은 사이트입니다.`,
-          [{ text: '확인', style: 'default' }]
-        );
-        return false;
-      }
+    const url = request.url;
+    if (/^https?:\/\//i.test(url) || url.startsWith('about:') || url.startsWith('data:') || url.startsWith('blob:')) {
+      return true;
+    }
+    if (/^(mailto|tel|sms):/i.test(url)) {
+      Linking.openURL(url).catch(() => {});
+      return false;
     }
     return true;
   };
 
-  const switchTool = (tool) => {
-    const duration = Date.now() - pageStartTimeRef.current;
-    logPageVisit(currentUrl, pageTitle, duration);
-    setCurrentUrl(tool.url);
+  const normalizeAndNavigate = (raw) => {
+    const q = raw.trim();
+    if (!q) return;
+    const u = /^https?:\/\//i.test(q)
+      ? q
+      : `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+    Keyboard.dismiss();
+    setCurrentUrl(u);
+    setAddressDraft(u);
+    setLoading(true);
     lastLoggedUrlRef.current = null;
     pageStartTimeRef.current = Date.now();
-    setShowToolSelector(false);
-    setLoading(true);
   };
-
-  const currentTool = AI_TOOLS.find(t => currentUrl.toLowerCase().includes(new URL(t.url).hostname.toLowerCase()));
 
   return (
     <View style={styles.container}>
@@ -168,67 +157,45 @@ export default function BrowserScreen({ navigation, route }) {
         </View>
         <View style={styles.headerRight}>
           <View style={styles.aiAllowedBadge}>
-            <Text style={styles.aiAllowedText}>✅ AI 허용</Text>
+            <Text style={styles.aiAllowedText}>🌐 인앱 브라우저</Text>
           </View>
         </View>
       </View>
 
-      {/* URL 표시바 */}
+      {/* 주소창 */}
       <View style={styles.urlBar}>
-        <Text style={styles.urlText} numberOfLines={1}>{currentUrl}</Text>
-        {loading && <ActivityIndicator size="small" color={THEME.primary} style={{ marginLeft: 8 }} />}
+        <TextInput
+          style={styles.urlInput}
+          value={addressDraft}
+          onChangeText={setAddressDraft}
+          onSubmitEditing={() => normalizeAndNavigate(addressDraft)}
+          placeholder="검색어 (https://… 직접 입력 가능)"
+          placeholderTextColor="#666"
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+          returnKeyType="go"
+        />
+        <TouchableOpacity style={styles.urlGoBtn} onPress={() => normalizeAndNavigate(addressDraft)}>
+          <Text style={styles.urlGoBtnText}>검색</Text>
+        </TouchableOpacity>
+        {loading && <ActivityIndicator size="small" color={THEME.primary} style={{ marginLeft: 6 }} />}
       </View>
-
-      {/* AI 도구 선택 탭 */}
-      {allowedTools.length > 1 && (
-        <View style={styles.toolTabs}>
-          {allowedTools.map((tool) => {
-            const isActive = currentUrl.toLowerCase().includes(new URL(tool.url).hostname.toLowerCase());
-            return (
-              <TouchableOpacity
-                key={tool.name}
-                style={[styles.toolTab, isActive && styles.toolTabActive]}
-                onPress={() => switchTool(tool)}
-              >
-                <Text style={styles.toolTabIcon}>{tool.icon}</Text>
-                <Text style={[styles.toolTabText, isActive && styles.toolTabTextActive]}>{tool.name}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
 
       {/* WebView (모바일) / 웹 폴백 */}
       {Platform.OS === 'web' ? (
         <View style={styles.webFallback}>
-          <Text style={styles.webFallbackTitle}>🤖 AI 브라우저</Text>
+          <Text style={styles.webFallbackTitle}>🌐 브라우저</Text>
           <Text style={styles.webFallbackDesc}>
-            인앱 브라우저는 모바일 앱(Expo Go)에서만 지원됩니다.{'\n'}
-            아래 버튼을 눌러 AI 도구를 새 탭에서 열거나,{'\n'}
-            핸드폰의 Expo Go 앱으로 테스트하세요.
+            인앱 WebView는 모바일 앱(Expo Go)에서만 지원됩니다.{'\n'}
+            웹에서는 Google 검색만 새 탭으로 열 수 있습니다.
           </Text>
-          <View style={styles.webFallbackTools}>
-            {allowedTools.map((tool) => (
-              <TouchableOpacity
-                key={tool.name}
-                style={[styles.webFallbackToolBtn, currentUrl.includes(new URL(tool.url).hostname) && styles.webFallbackToolBtnActive]}
-                onPress={() => {
-                  logPageVisit(currentUrl, pageTitle, Date.now() - pageStartTimeRef.current);
-                  setCurrentUrl(tool.url);
-                  Linking.openURL(tool.url);
-                }}
-              >
-                <Text style={styles.webFallbackToolIcon}>{tool.icon}</Text>
-                <Text style={styles.webFallbackToolName}>{tool.name}</Text>
-                <Text style={styles.webFallbackToolOpen}>새 탭으로 열기 ↗</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <View style={styles.webFallbackNotice}>
-            <Text style={styles.webFallbackNoticeText}>
-              ⚠️ 허용된 AI: {allowedTools.map(t => t.name).join(', ')}
-            </Text>
-          </View>
+          <TouchableOpacity
+            style={styles.webFallbackBtn}
+            onPress={() => Linking.openURL('https://www.google.com')}
+          >
+            <Text style={styles.webFallbackBtnText}>Google 검색 열기 ↗</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <WebView
@@ -245,7 +212,7 @@ export default function BrowserScreen({ navigation, route }) {
           renderLoading={() => (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={THEME.primary} />
-              <Text style={styles.loadingText}>AI 도구를 불러오는 중...</Text>
+              <Text style={styles.loadingText}>페이지를 불러오는 중...</Text>
             </View>
           )}
           userAgent="Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
@@ -277,18 +244,18 @@ const styles = StyleSheet.create({
   aiAllowedText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   urlBar: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#1a1a2e', paddingHorizontal: 14, paddingVertical: 8,
+    backgroundColor: '#1a1a2e', paddingHorizontal: 10, paddingVertical: 8,
+    gap: 8,
   },
-  urlText: { flex: 1, color: '#aaa', fontSize: 12 },
-  toolTabs: {
-    flexDirection: 'row', backgroundColor: '#0f0f23',
-    borderBottomWidth: 1, borderBottomColor: '#333',
+  urlInput: {
+    flex: 1, color: '#eee', fontSize: 14,
+    backgroundColor: '#0f0f23', borderRadius: 8, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+    borderWidth: 1, borderColor: '#333',
   },
-  toolTab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 4 },
-  toolTabActive: { borderBottomWidth: 2, borderBottomColor: THEME.primary },
-  toolTabIcon: { fontSize: 14, marginRight: 4 },
-  toolTabText: { fontSize: 11, color: '#888' },
-  toolTabTextActive: { color: THEME.primary, fontWeight: '600' },
+  urlGoBtn: {
+    backgroundColor: THEME.primary, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8,
+  },
+  urlGoBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   webView: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: THEME.background },
   loadingText: { marginTop: 12, color: THEME.textSecondary, fontSize: 14 },
@@ -302,21 +269,11 @@ const styles = StyleSheet.create({
   },
   webFallbackTitle: { fontSize: 28, fontWeight: 'bold', color: THEME.text, marginBottom: 12 },
   webFallbackDesc: {
-    fontSize: 14, color: THEME.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 28,
+    fontSize: 14, color: THEME.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 20,
   },
-  webFallbackTools: { width: '100%', gap: 12 },
-  webFallbackToolBtn: {
-    backgroundColor: THEME.card, borderRadius: 14, padding: 16,
-    borderWidth: 2, borderColor: THEME.border,
-    flexDirection: 'row', alignItems: 'center',
+  webFallbackBtn: {
+    width: '100%', backgroundColor: THEME.card, borderRadius: 14, padding: 16,
+    borderWidth: 2, borderColor: THEME.border, alignItems: 'center',
   },
-  webFallbackToolBtnActive: { borderColor: THEME.primary, backgroundColor: THEME.primaryLight },
-  webFallbackToolIcon: { fontSize: 24, marginRight: 12 },
-  webFallbackToolName: { flex: 1, fontSize: 16, fontWeight: '600', color: THEME.text },
-  webFallbackToolOpen: { fontSize: 12, color: THEME.primary, fontWeight: '600' },
-  webFallbackNotice: {
-    marginTop: 20, backgroundColor: THEME.warningLight, borderRadius: 10,
-    padding: 12, width: '100%',
-  },
-  webFallbackNoticeText: { fontSize: 12, color: THEME.warning, textAlign: 'center', fontWeight: '600' },
+  webFallbackBtnText: { fontSize: 16, fontWeight: '600', color: THEME.primary },
 });

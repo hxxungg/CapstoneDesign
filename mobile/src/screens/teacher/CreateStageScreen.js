@@ -1,29 +1,42 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Switch,
+  ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { stageAPI } from '../../services/api';
-import { THEME, AI_TOOLS } from '../../config/api';
+import { THEME } from '../../config/api';
+import {
+  AI_MODE,
+  DEFAULT_CONDITIONAL_GUIDANCE,
+} from '../../config/defaultPerformanceStages';
+import { appAlert } from '../../utils/appAlert';
+
+const AI_MODE_OPTIONS = [
+  { key: AI_MODE.DISALLOWED, label: '비허용', sub: 'AI·웹 없음' },
+  { key: AI_MODE.CONDITIONAL, label: '조건부', sub: '지침에 따라' },
+  { key: AI_MODE.ALLOWED, label: '허용', sub: '탐색 가능' },
+];
 
 export default function CreateStageScreen({ navigation, route }) {
   const { assignmentId } = route.params;
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [aiAllowed, setAiAllowed] = useState(false);
-  const [selectedTools, setSelectedTools] = useState([]);
+  const [aiMode, setAiMode] = useState(AI_MODE.DISALLOWED);
   const [guidance, setGuidance] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const toggleTool = (toolName) => {
-    setSelectedTools(prev =>
-      prev.includes(toolName) ? prev.filter(t => t !== toolName) : [...prev, toolName]
-    );
+  const changeAiMode = (mode) => {
+    setAiMode(mode);
+    if (mode === AI_MODE.DISALLOWED) {
+      setGuidance('');
+    } else if (mode === AI_MODE.CONDITIONAL) {
+      setGuidance((g) => ((g || '').trim() ? g : DEFAULT_CONDITIONAL_GUIDANCE));
+    }
   };
 
   const handleCreate = async () => {
     if (!title.trim()) {
-      Alert.alert('입력 오류', '단계 제목을 입력해주세요.');
+      appAlert('입력 오류', '단계 제목을 입력해주세요.');
       return;
     }
 
@@ -33,14 +46,13 @@ export default function CreateStageScreen({ navigation, route }) {
         assignment_id: assignmentId,
         title: title.trim(),
         description: description.trim(),
-        ai_allowed: aiAllowed,
-        ai_tools: selectedTools,
-        ai_guidance: guidance.trim(),
+        ai_mode: aiMode,
+        ai_guidance: aiMode === AI_MODE.DISALLOWED ? '' : guidance.trim(),
       });
       navigation.goBack();
-      Alert.alert('완료', '단계가 추가되었습니다.');
+      appAlert('완료', '단계가 추가되었습니다.');
     } catch (err) {
-      Alert.alert('오류', err.message);
+      appAlert('오류', err.message);
     } finally {
       setLoading(false);
     }
@@ -70,39 +82,24 @@ export default function CreateStageScreen({ navigation, route }) {
             numberOfLines={3}
           />
 
-          <View style={styles.aiToggleRow}>
-            <View>
-              <Text style={styles.aiToggleLabel}>AI 사용 허용</Text>
-              <Text style={styles.aiToggleDesc}>
-                {aiAllowed ? '✅ 이 단계에서 AI 사용 가능' : '🚫 이 단계에서 AI 사용 불가'}
-              </Text>
-            </View>
-            <Switch
-              value={aiAllowed}
-              onValueChange={setAiAllowed}
-              trackColor={{ false: THEME.border, true: THEME.success + '80' }}
-              thumbColor={aiAllowed ? THEME.success : '#f4f3f4'}
-            />
+          <Text style={styles.label}>AI 허용 기준</Text>
+          <View style={styles.aiModeRow}>
+            {AI_MODE_OPTIONS.map((opt) => (
+              <TouchableOpacity
+                key={opt.key}
+                style={[styles.aiModeChip, aiMode === opt.key && styles.aiModeChipActive]}
+                onPress={() => changeAiMode(opt.key)}
+              >
+                <Text style={[styles.aiModeChipTitle, aiMode === opt.key && styles.aiModeChipTitleActive]}>
+                  {opt.label}
+                </Text>
+                <Text style={[styles.aiModeChipSub, aiMode === opt.key && styles.aiModeChipSubActive]}>{opt.sub}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
-          {aiAllowed && (
+          {aiMode !== AI_MODE.DISALLOWED && (
             <>
-              <Text style={styles.label}>허용할 AI 도구 (선택 안 하면 전체 허용)</Text>
-              <View style={styles.toolGrid}>
-                {AI_TOOLS.map(tool => (
-                  <TouchableOpacity
-                    key={tool.name}
-                    style={[styles.toolChip, selectedTools.includes(tool.name) && styles.toolChipActive]}
-                    onPress={() => toggleTool(tool.name)}
-                  >
-                    <Text style={styles.toolChipIcon}>{tool.icon}</Text>
-                    <Text style={[styles.toolChipText, selectedTools.includes(tool.name) && styles.toolChipTextActive]}>
-                      {tool.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
               <Text style={styles.label}>AI 활용 지침</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
@@ -144,22 +141,17 @@ const styles = StyleSheet.create({
     fontSize: 15, color: THEME.text, borderWidth: 1, borderColor: THEME.border,
   },
   textArea: { minHeight: 70, textAlignVertical: 'top' },
-  aiToggleRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: THEME.background, borderRadius: 10, padding: 14, marginTop: 16,
-    borderWidth: 1, borderColor: THEME.border,
+  aiModeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  aiModeChip: {
+    flex: 1, minWidth: 88, paddingVertical: 10, paddingHorizontal: 6,
+    borderRadius: 10, backgroundColor: THEME.background, borderWidth: 1, borderColor: THEME.border,
+    alignItems: 'center',
   },
-  aiToggleLabel: { fontSize: 15, fontWeight: '600', color: THEME.text },
-  aiToggleDesc: { fontSize: 12, color: THEME.textSecondary, marginTop: 2 },
-  toolGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-  toolChip: {
-    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 7,
-    borderRadius: 20, backgroundColor: THEME.background, borderWidth: 1, borderColor: THEME.border, gap: 5,
-  },
-  toolChipActive: { backgroundColor: THEME.successLight, borderColor: THEME.success },
-  toolChipIcon: { fontSize: 14 },
-  toolChipText: { fontSize: 12, color: THEME.textSecondary },
-  toolChipTextActive: { color: THEME.success, fontWeight: '600' },
+  aiModeChipActive: { backgroundColor: THEME.primaryLight, borderColor: THEME.primary, borderWidth: 2 },
+  aiModeChipTitle: { fontSize: 13, fontWeight: '700', color: THEME.textSecondary },
+  aiModeChipTitleActive: { color: THEME.primary },
+  aiModeChipSub: { fontSize: 10, color: THEME.textSecondary, marginTop: 2, textAlign: 'center' },
+  aiModeChipSubActive: { color: THEME.primary },
   createButton: { backgroundColor: THEME.primary, borderRadius: 14, padding: 16, alignItems: 'center' },
   createButtonDisabled: { opacity: 0.7 },
   createButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },

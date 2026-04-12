@@ -3,17 +3,22 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { getDb, nextId } = require('../database');
 const { authenticateToken, requireTeacher } = require('../middleware/auth');
+const { normalizeStage } = require('../stageNormalize');
 
 // 수행평가 목록 조회
 router.get('/', authenticateToken, (req, res) => {
   const db = getDb();
 
   if (req.user.role === 'teacher') {
-    const assignments = db.get('assignments').filter({ teacher_id: req.user.id }).value().map(a => {
+    const teacherId = Number(req.user.id);
+    const assignments = db.get('assignments').value()
+      .filter((a) => Number(a.teacher_id) === teacherId)
+      .map((a) => {
       const stageCount = db.get('stages').filter({ assignment_id: a.id }).size().value();
       const studentCount = db.get('student_assignments').filter({ assignment_id: a.id }).size().value();
-      return { ...a, stage_count: stageCount, student_count: studentCount };
-    }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        return { ...a, stage_count: stageCount, student_count: studentCount };
+      })
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
     return res.json(assignments);
   }
@@ -52,13 +57,21 @@ router.get('/:id', authenticateToken, (req, res) => {
   const stages = db.get('stages')
     .filter({ assignment_id: assignmentId })
     .value()
-    .sort((a, b) => a.order_num - b.order_num);
+    .sort((a, b) => a.order_num - b.order_num)
+    .map(normalizeStage);
 
   let studentProgress = null;
+  let stageWritings = {};
   if (req.user.role === 'student') {
     studentProgress = db.get('student_assignments')
       .find({ student_id: req.user.id, assignment_id: assignmentId })
       .value() || null;
+    const rows = db.get('student_stage_writings')
+      .filter({ student_id: req.user.id, assignment_id: assignmentId })
+      .value();
+    rows.forEach((w) => {
+      stageWritings[w.stage_id] = { content: w.content || '', updated_at: w.updated_at };
+    });
   }
 
   res.json({
@@ -67,6 +80,7 @@ router.get('/:id', authenticateToken, (req, res) => {
     teacher_email: teacher?.email || '',
     stages,
     studentProgress,
+    ...(req.user.role === 'student' ? { stageWritings } : {}),
   });
 });
 
@@ -87,7 +101,7 @@ router.post('/', authenticateToken, requireTeacher, (req, res) => {
     title,
     description: description || null,
     subject: subject || null,
-    teacher_id: req.user.id,
+    teacher_id: Number(req.user.id),
     is_active: true,
     assignment_code: assignmentCode,
     created_at: new Date().toISOString(),
@@ -103,8 +117,10 @@ router.put('/:id', authenticateToken, requireTeacher, (req, res) => {
   const db = getDb();
   const assignmentId = parseInt(req.params.id);
 
-  const assignment = db.get('assignments').find({ id: assignmentId, teacher_id: req.user.id }).value();
-  if (!assignment) return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
+  const assignment = db.get('assignments').find({ id: assignmentId }).value();
+  if (!assignment || Number(assignment.teacher_id) !== Number(req.user.id)) {
+    return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
+  }
 
   const updates = {};
   if (title !== undefined) updates.title = title;
@@ -121,14 +137,24 @@ router.put('/:id', authenticateToken, requireTeacher, (req, res) => {
 // 수행평가 삭제 (교사)
 router.delete('/:id', authenticateToken, requireTeacher, (req, res) => {
   const db = getDb();
-  const assignmentId = parseInt(req.params.id);
+  const assignmentId = parseInt(req.params.id, 10);
+  const teacherId = Number(req.user.id);
 
-  const assignment = db.get('assignments').find({ id: assignmentId, teacher_id: req.user.id }).value();
-  if (!assignment) return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
+  if (Number.isNaN(assignmentId)) {
+    return res.status(400).json({ error: '잘못된 수행평가 ID입니다.' });
+  }
+
+  const assignment = db.get('assignments').find({ id: assignmentId }).value();
+  if (!assignment || Number(assignment.teacher_id) !== teacherId) {
+    return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
+  }
 
   db.get('assignments').remove({ id: assignmentId }).write();
   db.get('stages').remove({ assignment_id: assignmentId }).write();
   db.get('student_assignments').remove({ assignment_id: assignmentId }).write();
+  db.get('student_stage_writings').remove({ assignment_id: assignmentId }).write();
+  db.get('ai_logs').remove({ assignment_id: assignmentId }).write();
+  db.get('exit_attempts').remove({ assignment_id: assignmentId }).write();
 
   res.json({ message: '수행평가가 삭제되었습니다.' });
 });
@@ -171,6 +197,63 @@ router.post('/enroll', authenticateToken, (req, res) => {
   res.status(201).json({ message: '수행평가에 참여했습니다.', assignment });
 });
 
+// 학생 단계별 작성 내용 저장 (자동 저장용)
+const MAX_STAGE_WRITING_LEN = 50000;
+router.put('/:id/stage-writing', authenticateToken, (req, res) => {
+  if (req.user.role !== 'student') {
+    return res.status(403).json({ error: '학생만 작성 내용을 저장할 수 있습니다.' });
+  }
+
+  const assignmentId = parseInt(req.params.id, 10);
+  const { stage_id, content } = req.body;
+  const stageId = parseInt(stage_id, 10);
+  const text = typeof content === 'string' ? content : content == null ? '' : String(content);
+
+  if (Number.isNaN(assignmentId) || Number.isNaN(stageId)) {
+    return res.status(400).json({ error: '잘못된 요청입니다.' });
+  }
+  if (text.length > MAX_STAGE_WRITING_LEN) {
+    return res.status(400).json({ error: `작성 내용은 ${MAX_STAGE_WRITING_LEN}자 이하로 입력해주세요.` });
+  }
+
+  const db = getDb();
+  const enrolled = db.get('student_assignments')
+    .find({ student_id: req.user.id, assignment_id: assignmentId })
+    .value();
+  if (!enrolled) {
+    return res.status(404).json({ error: '참여 정보를 찾을 수 없습니다.' });
+  }
+
+  const stage = db.get('stages').find({ id: stageId, assignment_id: assignmentId }).value();
+  if (!stage) {
+    return res.status(404).json({ error: '단계를 찾을 수 없습니다.' });
+  }
+
+  const now = new Date().toISOString();
+  const existing = db.get('student_stage_writings')
+    .find({ student_id: req.user.id, assignment_id: assignmentId, stage_id: stageId })
+    .value();
+
+  if (existing) {
+    db.get('student_stage_writings')
+      .find({ id: existing.id })
+      .assign({ content: text, updated_at: now })
+      .write();
+  } else {
+    db.get('student_stage_writings').push({
+      id: nextId('student_stage_writings'),
+      student_id: req.user.id,
+      assignment_id: assignmentId,
+      stage_id: stageId,
+      content: text,
+      created_at: now,
+      updated_at: now,
+    }).write();
+  }
+
+  res.json({ message: '저장되었습니다.', stage_id: stageId, updated_at: now });
+});
+
 // 학생 단계 진행 업데이트
 router.put('/:id/progress', authenticateToken, (req, res) => {
   const { next_stage_order, student_id } = req.body;
@@ -207,8 +290,10 @@ router.get('/:id/students', authenticateToken, requireTeacher, (req, res) => {
   const db = getDb();
   const assignmentId = parseInt(req.params.id);
 
-  const assignment = db.get('assignments').find({ id: assignmentId, teacher_id: req.user.id }).value();
-  if (!assignment) return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
+  const assignment = db.get('assignments').find({ id: assignmentId }).value();
+  if (!assignment || Number(assignment.teacher_id) !== Number(req.user.id)) {
+    return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
+  }
 
   const studentAssignments = db.get('student_assignments').filter({ assignment_id: assignmentId }).value();
   const stages = db.get('stages').filter({ assignment_id: assignmentId }).value();
