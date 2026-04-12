@@ -3,8 +3,8 @@
     {
       "id": 1,
       "name": "김교사",
-      "email": "teacher@test.com",
-      "password": "$2a$10$M55o884KtUw/78ZDyb1njepFfsSoXbijwwe7kR/bmd022VwcKLNk6",
+      "email": "test1@test.com",
+      "password": "$2a$10$mWs/7wWFlqBPpMPn9/05HOkSZuRhN4LBrVn6X0opQplm9OLBpYhyq",
       "role": "teacher",
       "teacher_code": "TCH001",
       "created_at": "2026-04-10T07:49:01.460Z"
@@ -12,8 +12,8 @@
     {
       "id": 2,
       "name": "홍길동",
-      "email": "student@test.com",
-      "password": "$2a$10$ny6xxW32EHHAn1zR.zOhvOLGfL3kyoboiBV38puYNOwa/HRTiX3.W",
+      "email": "test@test.com",
+      "password": "$2a$10$mWs/7wWFlqBPpMPn9/05HOkSZuRhN4LBrVn6X0opQplm9OLBpYhyq",
       "role": "student",
       "teacher_code": "TCH001",
       "created_at": "2026-04-10T07:49:01.512Z"
@@ -954,11 +954,11 @@
     }
   ],
   "_counters_users": 2,
-  "_counters_assignments": 15,
-  "_counters_stages": 20,
-  "_counters_student_assignments": 2,
-  "_counters_ai_logs": 63,
-  "_counters_exit_attempts": 11,
+  "_counters_assignments": 0,
+  "_counters_stages": 0,
+  "_counters_student_assignments": 0,
+  "_counters_ai_logs": 0,
+  "_counters_exit_attempts": 0,
   "student_stage_writings": [
     {
       "id": 1,
@@ -1015,5 +1015,5 @@
       "updated_at": "2026-04-12T15:24:00.058Z"
     }
   ],
-  "_counters_student_stage_writings": 6
+  "_counters_student_stage_writings": 0
 }

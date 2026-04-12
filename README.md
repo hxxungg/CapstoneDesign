@@ -85,8 +85,8 @@ npm start
 서버가 `http://localhost:3000`에서 실행됩니다.
 
 **기본 테스트 계정 (자동 생성)**
-- 교사: `teacher@test.com` / `teacher123`
-- 학생: `student@test.com` / `student123`
+- 교사: `test1@test.com` / `1234`
+- 학생: `test@test.com` / `1234`
 - 교사 코드: `TCH001`
 
 ---

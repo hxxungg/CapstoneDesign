@@ -29,7 +29,7 @@ function initDatabase() {
     exit_attempts: [],
   }).write();
 
-  const teacherExists = db.get('users').find({ email: 'teacher@test.com' }).value();
+  const teacherExists = db.get('users').find({ email: 'test1@test.com' }).value();
 
   if (!teacherExists) {
     db.set('_counters_users', 0)
@@ -41,29 +41,29 @@ function initDatabase() {
       .set('_counters_exit_attempts', 0)
       .write();
 
-    const teacherPw = bcrypt.hashSync('teacher123', 10);
+    const teacherPw = bcrypt.hashSync('1234', 10);
     db.get('users').push({
       id: nextId('users'),
       name: '김교사',
-      email: 'teacher@test.com',
+      email: 'test1@test.com',
       password: teacherPw,
       role: 'teacher',
       teacher_code: 'TCH001',
       created_at: new Date().toISOString(),
     }).write();
 
-    const studentPw = bcrypt.hashSync('student123', 10);
+    const studentPw = bcrypt.hashSync('1234', 10);
     db.get('users').push({
       id: nextId('users'),
       name: '홍길동',
-      email: 'student@test.com',
+      email: 'test@test.com',
       password: studentPw,
       role: 'student',
       teacher_code: 'TCH001',
       created_at: new Date().toISOString(),
     }).write();
 
-    console.log('기본 계정 생성 완료 (teacher@test.com / teacher123, student@test.com / student123)');
+    console.log('기본 계정 생성 완료 (교사 test1@test.com / 1234, 학생 test@test.com / 1234)');
   }
 
   console.log('데이터베이스 초기화 완료 (data.json)');
