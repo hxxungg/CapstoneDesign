@@ -1,0 +1,136 @@
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { View, ActivityIndicator } from 'react-native';
+import { useAuth } from '../context/AuthContext';
+import { THEME } from '../config/api';
+
+import LoginScreen from '../screens/LoginScreen';
+import RegisterScreen from '../screens/RegisterScreen';
+
+import AssignmentListScreen from '../screens/student/AssignmentListScreen';
+import StageListScreen from '../screens/student/StageListScreen';
+import BrowserScreen from '../screens/student/BrowserScreen';
+import WorkScreen from '../screens/student/WorkScreen';
+import EnrollScreen from '../screens/student/EnrollScreen';
+
+import TeacherDashboard from '../screens/teacher/TeacherDashboard';
+import CreateAssignmentScreen from '../screens/teacher/CreateAssignmentScreen';
+import AssignmentDetailScreen from '../screens/teacher/AssignmentDetailScreen';
+import CreateStageScreen from '../screens/teacher/CreateStageScreen';
+import StudentLogsScreen from '../screens/teacher/StudentLogsScreen';
+import AnalyticsScreen from '../screens/teacher/AnalyticsScreen';
+
+const Stack = createNativeStackNavigator();
+
+function LoadingScreen() {
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: THEME.background }}>
+      <ActivityIndicator size="large" color={THEME.primary} />
+    </View>
+  );
+}
+
+function StudentStack() {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: THEME.primary },
+        headerTintColor: '#fff',
+        headerTitleStyle: { fontWeight: 'bold' },
+      }}
+    >
+      <Stack.Screen
+        name="AssignmentList"
+        component={AssignmentListScreen}
+        options={{ title: '내 수행평가' }}
+      />
+      <Stack.Screen
+        name="Enroll"
+        component={EnrollScreen}
+        options={{ title: '수행평가 참여' }}
+      />
+      <Stack.Screen
+        name="StageList"
+        component={StageListScreen}
+        options={{ title: '단계 목록' }}
+      />
+      <Stack.Screen
+        name="Browser"
+        component={BrowserScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="Work"
+        component={WorkScreen}
+        options={{ headerShown: false }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+function TeacherStack() {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: THEME.primary },
+        headerTintColor: '#fff',
+        headerTitleStyle: { fontWeight: 'bold' },
+      }}
+    >
+      <Stack.Screen
+        name="TeacherDashboard"
+        component={TeacherDashboard}
+        options={{ title: '교사 대시보드' }}
+      />
+      <Stack.Screen
+        name="CreateAssignment"
+        component={CreateAssignmentScreen}
+        options={{ title: '수행평가 생성' }}
+      />
+      <Stack.Screen
+        name="AssignmentDetail"
+        component={AssignmentDetailScreen}
+        options={{ title: '수행평가 상세' }}
+      />
+      <Stack.Screen
+        name="CreateStage"
+        component={CreateStageScreen}
+        options={{ title: '단계 설정' }}
+      />
+      <Stack.Screen
+        name="StudentLogs"
+        component={StudentLogsScreen}
+        options={{ title: '학생 AI 사용 로그' }}
+      />
+      <Stack.Screen
+        name="Analytics"
+        component={AnalyticsScreen}
+        options={{ title: '종합 분석' }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+export default function AppNavigator() {
+  const { user, loading } = useAuth();
+
+  if (loading) return <LoadingScreen />;
+
+  return (
+    <NavigationContainer>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {!user ? (
+          <>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Register" component={RegisterScreen} />
+          </>
+        ) : user.role === 'student' ? (
+          <Stack.Screen name="StudentRoot" component={StudentStack} />
+        ) : (
+          <Stack.Screen name="TeacherRoot" component={TeacherStack} />
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
