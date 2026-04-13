@@ -29,6 +29,26 @@
       "is_active": true,
       "assignment_code": "ASN2EDF0023",
       "created_at": "2026-04-12T15:11:44.447Z"
+    },
+    {
+      "id": 1,
+      "title": "ㄴㄴ",
+      "description": "ㄴㄴ",
+      "subject": "영어",
+      "teacher_id": 1,
+      "is_active": true,
+      "assignment_code": "ASNB5F6D7AB",
+      "created_at": "2026-04-13T14:06:00.685Z"
+    },
+    {
+      "id": 2,
+      "title": "qq",
+      "description": "A",
+      "subject": "국어",
+      "teacher_id": 1,
+      "is_active": true,
+      "assignment_code": "ASN6B3B2766",
+      "created_at": "2026-04-13T14:20:32.061Z"
     }
   ],
   "stages": [
@@ -103,6 +123,150 @@
       "ai_tools": [],
       "ai_guidance": "교사 지침에 따라 AI를 보조 수단으로만 활용하세요. 생성 문장을 그대로 제출하지 말고 반드시 검토·수정하며, 인용 시 출처를 표기하세요.",
       "created_at": "2026-04-12T15:11:44.795Z"
+    },
+    {
+      "id": 1,
+      "assignment_id": 1,
+      "order_num": 1,
+      "title": "문제 인식",
+      "description": "다루게 될 문제의 본질을 파악하고, 왜 이 주제가 중요한지 정리합니다.",
+      "ai_mode": "disallowed",
+      "ai_allowed": false,
+      "ai_tools": [],
+      "ai_guidance": null,
+      "created_at": "2026-04-13T14:06:00.699Z"
+    },
+    {
+      "id": 2,
+      "assignment_id": 1,
+      "order_num": 2,
+      "title": "탐구 계획",
+      "description": "무엇을 어떻게 조사·분석할지 단계와 방법을 설계합니다.",
+      "ai_mode": "conditional",
+      "ai_allowed": true,
+      "ai_tools": [],
+      "ai_guidance": "교사 지침에 따라 AI를 보조 수단으로만 활용하세요. 생성 문장을 그대로 제출하지 말고 반드시 검토·수정하며, 인용 시 출처를 표기하세요.",
+      "created_at": "2026-04-13T14:06:00.724Z"
+    },
+    {
+      "id": 3,
+      "assignment_id": 1,
+      "order_num": 3,
+      "title": "자료 수집",
+      "description": "계획에 따라 신뢰할 수 있는 자료를 수집하고 근거를 정리합니다.",
+      "ai_mode": "allowed",
+      "ai_allowed": true,
+      "ai_tools": [],
+      "ai_guidance": null,
+      "created_at": "2026-04-13T14:06:00.768Z"
+    },
+    {
+      "id": 4,
+      "assignment_id": 1,
+      "order_num": 4,
+      "title": "결과 통합",
+      "description": "수집한 정보를 바탕으로 결론·해석·산출물 초안을 통합합니다.",
+      "ai_mode": "conditional",
+      "ai_allowed": true,
+      "ai_tools": [],
+      "ai_guidance": "교사 지침에 따라 AI를 보조 수단으로만 활용하세요. 생성 문장을 그대로 제출하지 말고 반드시 검토·수정하며, 인용 시 출처를 표기하세요.",
+      "created_at": "2026-04-13T14:06:00.785Z"
+    },
+    {
+      "id": 5,
+      "assignment_id": 1,
+      "order_num": 5,
+      "title": "발표/제출",
+      "description": "최종 산출물을 완성하고 발표하거나 제출 형식에 맞게 마무리합니다.",
+      "ai_mode": "disallowed",
+      "ai_allowed": false,
+      "ai_tools": [],
+      "ai_guidance": null,
+      "created_at": "2026-04-13T14:06:00.802Z"
+    },
+    {
+      "id": 6,
+      "assignment_id": 1,
+      "order_num": 6,
+      "title": "성찰",
+      "description": "과정과 결과를 돌아보며 배운 점과 개선점을 기록합니다.",
+      "ai_mode": "conditional",
+      "ai_allowed": true,
+      "ai_tools": [],
+      "ai_guidance": "교사 지침에 따라 AI를 보조 수단으로만 활용하세요. 생성 문장을 그대로 제출하지 말고 반드시 검토·수정하며, 인용 시 출처를 표기하세요.",
+      "created_at": "2026-04-13T14:06:00.845Z"
+    },
+    {
+      "id": 7,
+      "assignment_id": 2,
+      "order_num": 1,
+      "title": "문제 인식",
+      "description": "다루게 될 문제의 본질을 파악하고, 왜 이 주제가 중요한지 정리합니다.",
+      "ai_mode": "disallowed",
+      "ai_allowed": false,
+      "ai_tools": [],
+      "ai_guidance": null,
+      "created_at": "2026-04-13T14:20:32.076Z"
+    },
+    {
+      "id": 8,
+      "assignment_id": 2,
+      "order_num": 2,
+      "title": "탐구 계획",
+      "description": "무엇을 어떻게 조사·분석할지 단계와 방법을 설계합니다.",
+      "ai_mode": "conditional",
+      "ai_allowed": true,
+      "ai_tools": [],
+      "ai_guidance": "교사 지침에 따라 AI를 보조 수단으로만 활용하세요. 생성 문장을 그대로 제출하지 말고 반드시 검토·수정하며, 인용 시 출처를 표기하세요.",
+      "created_at": "2026-04-13T14:20:32.101Z"
+    },
+    {
+      "id": 9,
+      "assignment_id": 2,
+      "order_num": 3,
+      "title": "자료 수집",
+      "description": "계획에 따라 신뢰할 수 있는 자료를 수집하고 근거를 정리합니다.",
+      "ai_mode": "allowed",
+      "ai_allowed": true,
+      "ai_tools": [],
+      "ai_guidance": null,
+      "created_at": "2026-04-13T14:20:32.172Z"
+    },
+    {
+      "id": 10,
+      "assignment_id": 2,
+      "order_num": 4,
+      "title": "결과 통합",
+      "description": "수집한 정보를 바탕으로 결론·해석·산출물 초안을 통합합니다.",
+      "ai_mode": "conditional",
+      "ai_allowed": true,
+      "ai_tools": [],
+      "ai_guidance": "교사 지침에 따라 AI를 보조 수단으로만 활용하세요. 생성 문장을 그대로 제출하지 말고 반드시 검토·수정하며, 인용 시 출처를 표기하세요.",
+      "created_at": "2026-04-13T14:20:32.188Z"
+    },
+    {
+      "id": 11,
+      "assignment_id": 2,
+      "order_num": 5,
+      "title": "발표/제출",
+      "description": "최종 산출물을 완성하고 발표하거나 제출 형식에 맞게 마무리합니다.",
+      "ai_mode": "disallowed",
+      "ai_allowed": false,
+      "ai_tools": [],
+      "ai_guidance": null,
+      "created_at": "2026-04-13T14:20:32.203Z"
+    },
+    {
+      "id": 12,
+      "assignment_id": 2,
+      "order_num": 6,
+      "title": "성찰",
+      "description": "과정과 결과를 돌아보며 배운 점과 개선점을 기록합니다.",
+      "ai_mode": "conditional",
+      "ai_allowed": true,
+      "ai_tools": [],
+      "ai_guidance": "교사 지침에 따라 AI를 보조 수단으로만 활용하세요. 생성 문장을 그대로 제출하지 말고 반드시 검토·수정하며, 인용 시 출처를 표기하세요.",
+      "created_at": "2026-04-13T14:20:32.240Z"
     }
   ],
   "student_assignments": [
@@ -114,6 +278,24 @@
       "status": "completed",
       "started_at": "2026-04-12T15:12:37.580Z",
       "completed_at": "2026-04-12T15:24:00.119Z"
+    },
+    {
+      "id": 1,
+      "student_id": 2,
+      "assignment_id": 1,
+      "current_stage_order": 6,
+      "status": "completed",
+      "started_at": "2026-04-13T14:06:23.916Z",
+      "completed_at": "2026-04-13T14:09:27.351Z"
+    },
+    {
+      "id": 2,
+      "student_id": 2,
+      "assignment_id": 2,
+      "current_stage_order": 6,
+      "status": "completed",
+      "started_at": "2026-04-13T14:21:51.751Z",
+      "completed_at": "2026-04-13T14:51:25.395Z"
     }
   ],
   "ai_logs": [
@@ -872,6 +1054,222 @@
       "page_title": "Google",
       "duration_seconds": 0,
       "created_at": "2026-04-12T15:23:21.256Z"
+    },
+    {
+      "id": 1,
+      "student_id": 2,
+      "assignment_id": 1,
+      "stage_id": 2,
+      "stage_order": 2,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-13T14:06:36.734Z"
+    },
+    {
+      "id": 2,
+      "student_id": 2,
+      "assignment_id": 1,
+      "stage_id": 2,
+      "stage_order": 2,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/#sbfbu=1&pi=",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-13T14:08:24.426Z"
+    },
+    {
+      "id": 3,
+      "student_id": 2,
+      "assignment_id": 1,
+      "stage_id": 2,
+      "stage_order": 2,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-13T14:08:27.231Z"
+    },
+    {
+      "id": 4,
+      "student_id": 2,
+      "assignment_id": 1,
+      "stage_id": 2,
+      "stage_order": 2,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/search?q=dd&sca_esv=089c91361eed6c29&source=hp&ei=5_jcaeTiH4qZvr0Pwv2GyAo&biw=557&bih=683&oq=dd&gs_lp=EhFtb2JpbGUtZ3dzLXdpei1ocCICZGQyBRAAGIAEMgsQABiABBixAxiDATIIEAAYgAQYsQMyCBAAGIAEGLEDMggQABiABBixAzIIEAAYgAQYsQMyCBAAGIAEGLEDMggQABiABBixA0iaF1DJCVjMCnABeACQAQCYAZEBoAGEAqoBAzAuMrgBA8gBAPgBAZgCAqACngKoAgDCAhEQLhiABBixAxjRAxiDARjHAZgDB_EFyzIAEjN8drWSBwMwLjKgB-8KsgcDMC4yuAeeAsIHBzItMS4wLjHIBxmACAA&sclient=mobile-gws-wiz-hp",
+      "page_title": null,
+      "duration_seconds": 0,
+      "created_at": "2026-04-13T14:08:27.532Z"
+    },
+    {
+      "id": 5,
+      "student_id": 2,
+      "assignment_id": 1,
+      "stage_id": 2,
+      "stage_order": 2,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/sorry/index?continue=https://www.google.com/search%3Fq%3Ddd%26sca_esv%3D089c91361eed6c29%26source%3Dhp%26ei%3D5_jcaeTiH4qZvr0Pwv2GyAo%26biw%3D557%26bih%3D683%26oq%3Ddd%26gs_lp%3DEhFtb2JpbGUtZ3dzLXdpei1ocCICZGQyBRAAGIAEMgsQABiABBixAxiDATIIEAAYgAQYsQMyCBAAGIAEGLEDMggQABiABBixAzIIEAAYgAQYsQMyCBAAGIAEGLEDMggQABiABBixA0iaF1DJCVjMCnABeACQAQCYAZEBoAGEAqoBAzAuMrgBA8gBAPgBAZgCAqACngKoAgDCAhEQLhiABBixAxjRAxiDARjHAZgDB_EFyzIAEjN8drWSBwMwLjKgB-8KsgcDMC4yuAeeAsIHBzItMS4wLjHIBxmACAA%26sclient%3Dmobile-gws-wiz-hp%26sei%3DV_ncabmWB5mC1e8Pu87puQo&q=EgS3TsfSGNfy884GIjDWLasMRxaEP64Cmp-cnLeQyV4tcaRJgklC1yUWvjgEwcQKiQmO2A-88AuFfgkWWHcyAVJaAUM",
+      "page_title": "https://www.google.com/search?q=dd&sca_esv=089c91361eed6c29&source=hp&ei=5_jcaeTiH4qZvr0Pwv2GyAo&biw=557&bih=683&oq=dd&gs_lp=EhFtb2JpbGUtZ3dzLXdpei1ocCICZGQyBRAAGIAEMgsQABiABBixAxiDATIIEAAYgAQYsQMyCBAAGIAEGLEDMggQABiABBixAzIIEAAYgAQYsQMyCBAAGIAEGLEDMggQABiABBixA0iaF1DJCVjMCnABeACQAQCYAZEBoAGEAqoBAzAuMrgBA8gBAPgBAZgCAqACngKoAgDCAhEQLhiABBixAxjRAxiDARjHAZgDB_EFyzIAEjN8drWSBwMwLjKgB-8KsgcDMC4yuAeeAsIHBzItMS4wLjHIBxmACAA&sclient=mobile-gws-wiz-hp&sei=V_ncabmWB5mC1e8Pu87puQo",
+      "duration_seconds": 0,
+      "created_at": "2026-04-13T14:08:29.221Z"
+    },
+    {
+      "id": 6,
+      "student_id": 2,
+      "assignment_id": 1,
+      "stage_id": 2,
+      "stage_order": 2,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/search?q=dd&sca_esv=089c91361eed6c29&source=hp&ei=5_jcaeTiH4qZvr0Pwv2GyAo&biw=557&bih=683&oq=dd&gs_lp=EhFtb2JpbGUtZ3dzLXdpei1ocCICZGQyBRAAGIAEMgsQABiABBixAxiDATIIEAAYgAQYsQMyCBAAGIAEGLEDMggQABiABBixAzIIEAAYgAQYsQMyCBAAGIAEGLEDMggQABiABBixA0iaF1DJCVjMCnABeACQAQCYAZEBoAGEAqoBAzAuMrgBA8gBAPgBAZgCAqACngKoAgDCAhEQLhiABBixAxjRAxiDARjHAZgDB_EFyzIAEjN8drWSBwMwLjKgB-8KsgcDMC4yuAeeAsIHBzItMS4wLjHIBxmACAA&sclient=mobile-gws-wiz-hp&sei=V_ncabmWB5mC1e8Pu87puQo",
+      "page_title": "dd - Google 검색",
+      "duration_seconds": 0,
+      "created_at": "2026-04-13T14:08:35.209Z"
+    },
+    {
+      "id": 7,
+      "student_id": 2,
+      "assignment_id": 1,
+      "stage_id": 3,
+      "stage_order": 3,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-13T14:08:43.712Z"
+    },
+    {
+      "id": 8,
+      "student_id": 2,
+      "assignment_id": 1,
+      "stage_id": 3,
+      "stage_order": 3,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/#sbfbu=1&pi=",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-13T14:08:46.185Z"
+    },
+    {
+      "id": 9,
+      "student_id": 2,
+      "assignment_id": 1,
+      "stage_id": 4,
+      "stage_order": 4,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-13T14:08:52.811Z"
+    },
+    {
+      "id": 10,
+      "student_id": 2,
+      "assignment_id": 2,
+      "stage_id": 8,
+      "stage_order": 2,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-13T14:22:00.300Z"
+    },
+    {
+      "id": 11,
+      "student_id": 2,
+      "assignment_id": 2,
+      "stage_id": 9,
+      "stage_order": 3,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-13T14:34:39.786Z"
+    },
+    {
+      "id": 12,
+      "student_id": 2,
+      "assignment_id": 2,
+      "stage_id": 9,
+      "stage_order": 3,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-13T14:36:32.264Z"
+    },
+    {
+      "id": 13,
+      "student_id": 2,
+      "assignment_id": 2,
+      "stage_id": 9,
+      "stage_order": 3,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-13T14:38:07.939Z"
+    },
+    {
+      "id": 14,
+      "student_id": 2,
+      "assignment_id": 2,
+      "stage_id": 9,
+      "stage_order": 3,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/#sbfbu=1&pi=",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-13T14:39:00.133Z"
+    },
+    {
+      "id": 15,
+      "student_id": 2,
+      "assignment_id": 2,
+      "stage_id": 9,
+      "stage_order": 3,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-13T14:41:33.184Z"
+    },
+    {
+      "id": 16,
+      "student_id": 2,
+      "assignment_id": 2,
+      "stage_id": 9,
+      "stage_order": 3,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-13T14:42:35.819Z"
+    },
+    {
+      "id": 17,
+      "student_id": 2,
+      "assignment_id": 2,
+      "stage_id": 9,
+      "stage_order": 3,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-13T14:43:34.171Z"
+    },
+    {
+      "id": 18,
+      "student_id": 2,
+      "assignment_id": 2,
+      "stage_id": 10,
+      "stage_order": 4,
+      "action_type": "page_visit",
+      "url": "https://www.google.com/",
+      "page_title": "Google",
+      "duration_seconds": 0,
+      "created_at": "2026-04-13T14:46:21.806Z"
     }
   ],
   "exit_attempts": [
@@ -954,10 +1352,10 @@
     }
   ],
   "_counters_users": 2,
-  "_counters_assignments": 0,
-  "_counters_stages": 0,
-  "_counters_student_assignments": 0,
-  "_counters_ai_logs": 0,
+  "_counters_assignments": 2,
+  "_counters_stages": 12,
+  "_counters_student_assignments": 2,
+  "_counters_ai_logs": 18,
   "_counters_exit_attempts": 0,
   "student_stage_writings": [
     {
@@ -965,55 +1363,163 @@
       "student_id": 2,
       "assignment_id": 15,
       "stage_id": 15,
-      "content": "안녕",
+      "content": "Did",
       "created_at": "2026-04-12T15:19:09.167Z",
-      "updated_at": "2026-04-12T15:19:13.291Z"
+      "updated_at": "2026-04-13T14:06:35.084Z"
     },
     {
       "id": 2,
       "student_id": 2,
       "assignment_id": 15,
       "stage_id": 16,
-      "content": "이랗게 저엏게",
+      "content": "Did",
       "created_at": "2026-04-12T15:19:20.902Z",
-      "updated_at": "2026-04-12T15:21:29.406Z"
+      "updated_at": "2026-04-13T14:08:43.257Z"
     },
     {
       "id": 3,
       "student_id": 2,
       "assignment_id": 15,
       "stage_id": 17,
-      "content": "저렇게",
+      "content": "Did",
       "created_at": "2026-04-12T15:21:35.702Z",
-      "updated_at": "2026-04-12T15:23:19.249Z"
+      "updated_at": "2026-04-13T14:08:52.361Z"
     },
     {
       "id": 4,
       "student_id": 2,
       "assignment_id": 15,
       "stage_id": 18,
-      "content": "이러저렇게",
+      "content": "Did",
       "created_at": "2026-04-12T15:23:37.307Z",
-      "updated_at": "2026-04-12T15:23:43.182Z"
+      "updated_at": "2026-04-13T14:08:56.885Z"
     },
     {
       "id": 5,
       "student_id": 2,
       "assignment_id": 15,
       "stage_id": 19,
-      "content": "최종 결과",
+      "content": "Did",
       "created_at": "2026-04-12T15:23:49.080Z",
-      "updated_at": "2026-04-12T15:23:50.610Z"
+      "updated_at": "2026-04-13T14:09:22.479Z"
     },
     {
       "id": 6,
       "student_id": 2,
       "assignment_id": 15,
       "stage_id": 20,
-      "content": "담엔 이렇게 하자",
+      "content": "Did",
       "created_at": "2026-04-12T15:23:58.467Z",
-      "updated_at": "2026-04-12T15:24:00.058Z"
+      "updated_at": "2026-04-13T14:09:27.287Z"
+    },
+    {
+      "id": 1,
+      "student_id": 2,
+      "assignment_id": 1,
+      "stage_id": 1,
+      "content": "Did",
+      "created_at": "2026-04-13T14:06:34.929Z",
+      "updated_at": "2026-04-13T14:06:34.929Z"
+    },
+    {
+      "id": 2,
+      "student_id": 2,
+      "assignment_id": 1,
+      "stage_id": 2,
+      "content": "",
+      "created_at": "2026-04-13T14:06:40.174Z",
+      "updated_at": "2026-04-13T14:06:40.174Z"
+    },
+    {
+      "id": 3,
+      "student_id": 2,
+      "assignment_id": 1,
+      "stage_id": 3,
+      "content": "",
+      "created_at": "2026-04-13T14:08:46.123Z",
+      "updated_at": "2026-04-13T14:08:46.123Z"
+    },
+    {
+      "id": 4,
+      "student_id": 2,
+      "assignment_id": 1,
+      "stage_id": 4,
+      "content": "Did",
+      "created_at": "2026-04-13T14:08:54.949Z",
+      "updated_at": "2026-04-13T14:08:54.949Z"
+    },
+    {
+      "id": 5,
+      "student_id": 2,
+      "assignment_id": 1,
+      "stage_id": 5,
+      "content": "Did",
+      "created_at": "2026-04-13T14:08:59.205Z",
+      "updated_at": "2026-04-13T14:08:59.205Z"
+    },
+    {
+      "id": 6,
+      "student_id": 2,
+      "assignment_id": 1,
+      "stage_id": 6,
+      "content": "Did",
+      "created_at": "2026-04-13T14:09:25.298Z",
+      "updated_at": "2026-04-13T14:09:25.298Z"
+    },
+    {
+      "id": 7,
+      "student_id": 2,
+      "assignment_id": 2,
+      "stage_id": 7,
+      "content": "Dddd",
+      "created_at": "2026-04-13T14:21:57.070Z",
+      "updated_at": "2026-04-13T14:21:59.200Z"
+    },
+    {
+      "id": 8,
+      "student_id": 2,
+      "assignment_id": 2,
+      "stage_id": 8,
+      "content": "안녕",
+      "created_at": "2026-04-13T14:23:13.640Z",
+      "updated_at": "2026-04-13T14:23:16.178Z"
+    },
+    {
+      "id": 9,
+      "student_id": 2,
+      "assignment_id": 2,
+      "stage_id": 9,
+      "content": "ㅠ여ㅗ여여오오오오오오오오오오오오오초초초추터느태추쟈누초뉴토챠너머우챠무터츄졑저챠쟈투 ㅊㅈ챠",
+      "created_at": "2026-04-13T14:34:04.458Z",
+      "updated_at": "2026-04-13T14:45:12.504Z"
+    },
+    {
+      "id": 10,
+      "student_id": 2,
+      "assignment_id": 2,
+      "stage_id": 10,
+      "content": "ㅇㅇㅇ",
+      "created_at": "2026-04-13T14:50:30.650Z",
+      "updated_at": "2026-04-13T14:51:05.245Z"
+    },
+    {
+      "id": 11,
+      "student_id": 2,
+      "assignment_id": 2,
+      "stage_id": 11,
+      "content": "ㅇㅇㅇㅇㅇㅇㅇ",
+      "created_at": "2026-04-13T14:51:10.515Z",
+      "updated_at": "2026-04-13T14:51:19.157Z"
+    },
+    {
+      "id": 12,
+      "student_id": 2,
+      "assignment_id": 2,
+      "stage_id": 12,
+      "content": "ㅇㅇㅇㅇㅇㅇㅇㅇㅇㅇㅇㅇㅇ",
+      "created_at": "2026-04-13T14:51:23.423Z",
+      "updated_at": "2026-04-13T14:51:25.320Z"
     }
   ],
-  "_counters_student_stage_writings": 0
+  "_counters_student_stage_writings": 12
 }

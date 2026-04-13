@@ -143,75 +143,86 @@ export default function StudentLogsScreen({ route }) {
         </View>
       ) : null}
 
-      {/* (3)(4) 단계별 형광펜 + 타임라인 */}
-      {(rep?.stages_content || []).map((sc) => (
-        <View key={sc.stage_id} style={styles.section}>
-          <Text style={styles.stageHeading}>{sc.order_num}. {sc.stage_title}</Text>
-          {sc.segments.length === 0 ? (
-            <Text style={styles.emptyInline}>이 단계에 저장된 작성 내용이 없습니다.</Text>
-          ) : (
-            <Text style={styles.tapHint}>구간을 탭하면 연결된 AI·웹 활동이 아래 타임라인에 표시됩니다.</Text>
-          )}
-          <View style={styles.hlWrap}>
-            {sc.segments.map((seg, idx) => {
-              const isSel = selected?.stageId === sc.stage_id && selected?.segmentIdx === idx;
-              return (
-                <TouchableOpacity
-                  key={seg.id}
-                  activeOpacity={0.7}
-                  onPress={() => setSelected({
-                    stageId: sc.stage_id,
-                    segmentIdx: idx,
-                    linkedIds: seg.linked_log_ids || [],
-                  })}
-                  style={[
-                    styles.hlChunk,
-                    {
-                      backgroundColor: CAT_BG[seg.category] || THEME.border,
-                      borderColor: isSel ? THEME.primary : (CAT_BORDER[seg.category] || THEME.border),
-                      borderWidth: isSel ? 2 : 1,
-                    },
-                  ]}
-                >
-                  <Text style={styles.hlText}>{seg.text}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-      ))}
+      {/* (3)(4) 단계별 형광펜 + 우측 타임라인 패널 */}
+      <View style={[styles.section, styles.highlightTimelineSection]}>
+        <Text style={styles.sectionTitle}>형광펜 텍스트 시각화 + 타임라인 패널</Text>
+        <Text style={styles.sectionSub}>
+          형광 구간을 누르면 오른쪽 타임라인 패널에 연결된 AI 활용 로그가 시간순으로 표시됩니다.
+        </Text>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>연결 활동 타임라인</Text>
-        <Text style={styles.sectionSub}>시간 순 · 프롬프트 유형/수준 태그(로그 기반 추정)</Text>
-        {!selected ? (
-          <Text style={styles.emptyText}>형광펜 구간을 탭하면 해당 구간과 연계된 로그가 표시됩니다.</Text>
-        ) : linkedEvents.length === 0 ? (
-          <Text style={styles.emptyText}>이 구간에 매핑된 활동 로그가 없습니다.</Text>
-        ) : (
-          <View style={styles.timeline}>
-            {linkedEvents.map((ev, i) => (
-              <View key={ev.id} style={styles.timelineItem}>
-                <View style={styles.timelineDotWrap}>
-                  <View style={[styles.timelineDot, i === 0 && styles.timelineDotActive]} />
-                  {i < linkedEvents.length - 1 ? <View style={styles.timelineLine} /> : null}
-                </View>
-                <View style={styles.timelineCard}>
-                  <Text style={styles.timelineTime}>{formatDate(ev.at)}</Text>
-                  <View style={styles.tagRow}>
-                    <Text style={styles.tag}>{ev.prompt_type}</Text>
-                    <Text style={styles.tagMuted}>{ev.level}</Text>
-                    {ev.kind === 'web_search' ? <Text style={styles.tagOutline}>웹 검색</Text> : null}
-                    {ev.kind === 'ai_session' ? <Text style={styles.tagOutline}>AI 세션</Text> : null}
-                  </View>
-                  <Text style={styles.timelineTitle}>{ev.title}</Text>
-                  {ev.tool ? <Text style={styles.timelineTool}>도구: {ev.tool}</Text> : null}
-                  {ev.url ? <Text style={styles.timelineUrl} numberOfLines={2}>{ev.url}</Text> : null}
+        <View style={styles.highlightTimelineRow}>
+          <View style={styles.highlightColumn}>
+            {(rep?.stages_content || []).map((sc) => (
+              <View key={sc.stage_id} style={styles.stageBlock}>
+                <Text style={styles.stageHeading}>{sc.order_num}. {sc.stage_title}</Text>
+                {sc.segments.length === 0 ? (
+                  <Text style={styles.emptyInline}>이 단계에 저장된 작성 내용이 없습니다.</Text>
+                ) : (
+                  <Text style={styles.tapHint}>구간 탭 → 우측 패널에 타임라인 표시</Text>
+                )}
+                <View style={styles.hlWrap}>
+                  {sc.segments.map((seg, idx) => {
+                    const isSel = selected?.stageId === sc.stage_id && selected?.segmentIdx === idx;
+                    return (
+                      <TouchableOpacity
+                        key={seg.id}
+                        activeOpacity={0.7}
+                        onPress={() => setSelected({
+                          stageId: sc.stage_id,
+                          segmentIdx: idx,
+                          linkedIds: seg.linked_log_ids || [],
+                        })}
+                        style={[
+                          styles.hlChunk,
+                          {
+                            backgroundColor: CAT_BG[seg.category] || THEME.border,
+                            borderColor: isSel ? THEME.primary : (CAT_BORDER[seg.category] || THEME.border),
+                            borderWidth: isSel ? 2 : 1,
+                          },
+                        ]}
+                      >
+                        <Text style={styles.hlText}>{seg.text}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               </View>
             ))}
           </View>
-        )}
+
+          <View style={styles.timelinePanel}>
+            <Text style={styles.timelinePanelTitle}>연결 활동 타임라인</Text>
+            <Text style={styles.timelinePanelSub}>시간 순 · 프롬프트 유형/수준 태그</Text>
+            {!selected ? (
+              <Text style={styles.emptyText}>좌측 형광 구간을 탭하면 타임라인이 표시됩니다.</Text>
+            ) : linkedEvents.length === 0 ? (
+              <Text style={styles.emptyText}>이 구간에 매핑된 활동 로그가 없습니다.</Text>
+            ) : (
+              <View style={styles.timeline}>
+                {linkedEvents.map((ev, i) => (
+                  <View key={ev.id} style={styles.timelineItem}>
+                    <View style={styles.timelineDotWrap}>
+                      <View style={[styles.timelineDot, i === 0 && styles.timelineDotActive]} />
+                      {i < linkedEvents.length - 1 ? <View style={styles.timelineLine} /> : null}
+                    </View>
+                    <View style={styles.timelineCard}>
+                      <Text style={styles.timelineTime}>{formatDate(ev.at)}</Text>
+                      <View style={styles.tagRow}>
+                        <Text style={styles.tag}>{ev.prompt_type}</Text>
+                        <Text style={styles.tagMuted}>{ev.level}</Text>
+                        {ev.kind === 'web_search' ? <Text style={styles.tagOutline}>웹 검색</Text> : null}
+                        {ev.kind === 'ai_session' ? <Text style={styles.tagOutline}>AI 세션</Text> : null}
+                      </View>
+                      <Text style={styles.timelineTitle}>{ev.title}</Text>
+                      {ev.tool ? <Text style={styles.timelineTool}>도구: {ev.tool}</Text> : null}
+                      {ev.url ? <Text style={styles.timelineUrl} numberOfLines={2}>{ev.url}</Text> : null}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        </View>
       </View>
 
       {/* (5) 종합 리포트 */}
@@ -378,6 +389,28 @@ const styles = StyleSheet.create({
   legendSwatch: { width: 14, height: 14, borderRadius: 4, marginTop: 3 },
   legendText: { flex: 1, fontSize: 12, color: THEME.text, lineHeight: 18 },
   legendKey: { fontWeight: '800' },
+  highlightTimelineSection: { paddingBottom: 12 },
+  highlightTimelineRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
+  highlightColumn: { flex: 1.05, minWidth: 0 },
+  timelinePanel: {
+    flex: 0.95,
+    minWidth: 0,
+    backgroundColor: THEME.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: THEME.border,
+    padding: 12,
+  },
+  timelinePanelTitle: { fontSize: 14, fontWeight: '700', color: THEME.text, marginBottom: 4 },
+  timelinePanelSub: { fontSize: 11, color: THEME.textSecondary, marginBottom: 8 },
+  stageBlock: {
+    backgroundColor: THEME.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: THEME.border,
+    padding: 10,
+    marginBottom: 10,
+  },
   stageHeading: { fontSize: 16, fontWeight: 'bold', color: THEME.primary, marginBottom: 8 },
   tapHint: { fontSize: 11, color: THEME.textSecondary, marginBottom: 8 },
   emptyInline: { fontSize: 13, color: THEME.textSecondary, fontStyle: 'italic' },

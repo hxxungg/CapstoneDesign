@@ -20,12 +20,19 @@ if (Platform.OS !== 'web') {
   WebView = require('react-native-webview').WebView;
 }
 
+const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
-const HEADER_HEIGHT = Platform.OS === 'ios' ? 110 : 90;
-const DIVIDER_HEIGHT = 30;
-const MIN_RATIO = 0.2;
-const MAX_RATIO = 0.75;
+const DIVIDER_WIDTH = 22;
+const MIN_RATIO = 0.28;
+const MAX_RATIO = 0.72;
 const DEFAULT_RATIO = 0.42;
+const PANEL_MARGIN = 10;
+const PANEL_INITIAL_WIDTH = Math.min(Math.max(Math.floor(SCREEN_WIDTH * 0.46), 360), 780);
+const PANEL_INITIAL_HEIGHT = Math.floor(SCREEN_HEIGHT * 0.76);
+const PANEL_MIN_WIDTH = 280;
+const PANEL_MIN_HEIGHT = 200;
+const PANEL_INITIAL_TOP = Platform.OS === 'ios' ? 90 : 76;
+const PANEL_INITIAL_LEFT = Math.max(PANEL_MARGIN, SCREEN_WIDTH - PANEL_INITIAL_WIDTH - 14);
 
 export default function WorkScreen({ navigation, route }) {
   const { assignment: initialAssignment } = route.params;
@@ -42,6 +49,17 @@ export default function WorkScreen({ navigation, route }) {
   const [exitAttemptCount, setExitAttemptCount] = useState(0);
   const [writingText, setWritingText] = useState('');
   const [writingSaveStatus, setWritingSaveStatus] = useState('idle'); // idle | saving | saved | error
+  const [showPreviousWritingsModal, setShowPreviousWritingsModal] = useState(false);
+  const [isPreviousPanelMinimized, setIsPreviousPanelMinimized] = useState(false);
+  const [selectedPreviousStage, setSelectedPreviousStage] = useState(null);
+  const [panelPosition, setPanelPosition] = useState({
+    x: PANEL_INITIAL_LEFT,
+    y: PANEL_INITIAL_TOP,
+  });
+  const [panelSize, setPanelSize] = useState({
+    width: PANEL_INITIAL_WIDTH,
+    height: PANEL_INITIAL_HEIGHT,
+  });
 
   const webViewRef = useRef(null);
   const splitRatioRef = useRef(DEFAULT_RATIO);
@@ -51,7 +69,15 @@ export default function WorkScreen({ navigation, route }) {
   const appStateRef = useRef(AppState.currentState);
   const saveWritingTimerRef = useRef(null);
   const writingTextRef = useRef('');
+  const panelDragStartRef = useRef({ x: PANEL_INITIAL_LEFT, y: PANEL_INITIAL_TOP });
+  const panelResizeStartRef = useRef({ width: PANEL_INITIAL_WIDTH, height: PANEL_INITIAL_HEIGHT });
+  const miniDragStartRef = useRef({ x: PANEL_INITIAL_LEFT, y: PANEL_INITIAL_TOP });
+  const miniMovedRef = useRef(false);
+  const panelPositionRef = useRef({ x: PANEL_INITIAL_LEFT, y: PANEL_INITIAL_TOP });
+  const panelSizeRef = useRef({ width: PANEL_INITIAL_WIDTH, height: PANEL_INITIAL_HEIGHT });
   writingTextRef.current = writingText;
+  panelPositionRef.current = panelPosition;
+  panelSizeRef.current = panelSize;
 
   const loadAssignment = async () => {
     try {
@@ -204,11 +230,65 @@ export default function WorkScreen({ navigation, route }) {
         panStartRatioRef.current = splitRatioRef.current;
       },
       onPanResponderMove: (_, gestureState) => {
-        const availableHeight = SCREEN_HEIGHT - HEADER_HEIGHT - DIVIDER_HEIGHT;
-        const delta = gestureState.dy / availableHeight;
+        const availableWidth = SCREEN_WIDTH - DIVIDER_WIDTH;
+        const delta = gestureState.dx / availableWidth;
         const newRatio = Math.max(MIN_RATIO, Math.min(MAX_RATIO, panStartRatioRef.current + delta));
         splitRatioRef.current = newRatio;
         setSplitRatio(newRatio);
+      },
+    })
+  ).current;
+
+  const panelPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        panelDragStartRef.current = panelPositionRef.current;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const nextX = panelDragStartRef.current.x + gestureState.dx;
+        const nextY = panelDragStartRef.current.y + gestureState.dy;
+        setPanelPosition({ x: nextX, y: nextY });
+      },
+    })
+  ).current;
+
+  const panelResizeResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        panelResizeStartRef.current = panelSizeRef.current;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const nextWidth = Math.max(PANEL_MIN_WIDTH, panelResizeStartRef.current.width + gestureState.dx);
+        const nextHeight = Math.max(PANEL_MIN_HEIGHT, panelResizeStartRef.current.height + gestureState.dy);
+        setPanelSize({ width: nextWidth, height: nextHeight });
+      },
+    })
+  ).current;
+
+  const miniPanelResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        miniDragStartRef.current = panelPositionRef.current;
+        miniMovedRef.current = false;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2) {
+          miniMovedRef.current = true;
+        }
+        const nextX = miniDragStartRef.current.x + gestureState.dx;
+        const nextY = miniDragStartRef.current.y + gestureState.dy;
+        setPanelPosition({ x: nextX, y: nextY });
+      },
+      onPanResponderRelease: () => {
+        if (!miniMovedRef.current) {
+          setIsPreviousPanelMinimized(false);
+        }
       },
     })
   ).current;
@@ -227,6 +307,20 @@ export default function WorkScreen({ navigation, route }) {
   const currentStage = assignment?.stages?.find(s => s.order_num === currentStageOrder);
   const isCompleted = assignment?.studentProgress?.status === 'completed';
   const aiAllowed = stageAllowsAiBrowser(currentStage);
+  const previousStageWritings = (assignment?.stages || [])
+    .filter((stage) => stage.order_num < currentStageOrder)
+    .sort((a, b) => a.order_num - b.order_num)
+    .map((stage) => {
+      const sw = assignment?.stageWritings || {};
+      const row = sw[stage.id] ?? sw[String(stage.id)];
+      return {
+        stageId: stage.id,
+        orderNum: stage.order_num,
+        title: stage.title,
+        content: row?.content ?? '',
+      };
+    })
+    .filter((item) => item.content.trim().length > 0);
 
   const navigateFromAddressBar = () => {
     const raw = addressDraft.trim();
@@ -263,187 +357,281 @@ export default function WorkScreen({ navigation, route }) {
         </View>
       </View>
 
-      {/* ── 수행평가 패널 ── */}
-      <View style={[styles.taskPanel, { flex: aiAllowed ? splitRatio : 1 }]}>
-        <ScrollView
-          contentContainerStyle={styles.taskScroll}
-          keyboardShouldPersistTaps="handled"
-        >
-          {currentStage?.description ? (
-            <View style={styles.infoBox}>
-              <Text style={styles.infoBoxLabel}>📋 수행 내용</Text>
-              <Text style={styles.infoBoxText}>{currentStage.description}</Text>
-            </View>
-          ) : (
-            <View style={styles.infoBox}>
-              <Text style={styles.infoBoxText}>이 단계의 수행평가를 진행하세요.</Text>
-            </View>
-          )}
+      <View style={aiAllowed ? styles.splitContainer : styles.fullContent}>
+        {/* ── 수행평가 패널 ── */}
+        <View style={[styles.taskPanel, { flex: aiAllowed ? splitRatio : 1 }]}>
+          <ScrollView
+            contentContainerStyle={styles.taskScroll}
+            keyboardShouldPersistTaps="handled"
+          >
+            {currentStage?.description ? (
+              <View style={styles.infoBox}>
+                <Text style={styles.infoBoxLabel}>📋 수행 내용</Text>
+                <Text style={styles.infoBoxText}>{currentStage.description}</Text>
+              </View>
+            ) : (
+              <View style={styles.infoBox}>
+                <Text style={styles.infoBoxText}>이 단계의 수행평가를 진행하세요.</Text>
+              </View>
+            )}
 
-          {currentStage?.ai_guidance ? (
-            <View style={[styles.infoBox, styles.guidanceBox]}>
-              <Text style={styles.infoBoxLabel}>📌 AI 활용 지침</Text>
-              <Text style={styles.infoBoxText}>{currentStage.ai_guidance}</Text>
-            </View>
-          ) : null}
+            {currentStage?.ai_guidance ? (
+              <View style={[styles.infoBox, styles.guidanceBox]}>
+                <Text style={styles.infoBoxLabel}>📌 AI 활용 지침</Text>
+                <Text style={styles.infoBoxText}>{currentStage.ai_guidance}</Text>
+              </View>
+            ) : null}
 
-          <View style={styles.writingBox}>
-            <View style={styles.writingHeader}>
-              <Text style={styles.infoBoxLabel}>✏️ 작성 공간</Text>
-              <Text style={styles.writingSaveHint}>
-                {writingSaveStatus === 'saving'
-                  ? '저장 중…'
-                  : writingSaveStatus === 'saved'
-                    ? '저장됨'
-                    : writingSaveStatus === 'error'
-                      ? '저장 오류'
-                      : '입력 시 자동 저장'}
+            <View style={styles.writingBox}>
+              <View style={styles.writingHeader}>
+                <Text style={styles.infoBoxLabel}>✏️ 작성 공간</Text>
+              <View style={styles.writingHeaderRight}>
+                {currentStageOrder > 1 && (
+                  <TouchableOpacity
+                    style={styles.prevViewBtn}
+                    onPress={() => {
+                      setShowPreviousWritingsModal(true);
+                      setIsPreviousPanelMinimized(false);
+                      setSelectedPreviousStage(null);
+                    }}
+                  >
+                    <Text style={styles.prevViewBtnText}>이전 내용 보기</Text>
+                  </TouchableOpacity>
+                )}
+                <Text style={styles.writingSaveHint}>
+                  {writingSaveStatus === 'saving'
+                    ? '저장 중…'
+                    : writingSaveStatus === 'saved'
+                      ? '저장됨'
+                      : writingSaveStatus === 'error'
+                        ? '저장 오류'
+                        : '입력 시 자동 저장'}
+                </Text>
+              </View>
+              </View>
+              <Text style={styles.writingHint}>
+                단계마다 내용이 따로 저장됩니다. 다음 단계로 넘어가기 전에 자동으로 한 번 더 저장됩니다.
               </Text>
+              <TextInput
+                style={styles.writingInput}
+                multiline
+                textAlignVertical="top"
+                placeholder="이 단계에서 조사·정리·성찰 등 작성할 내용을 입력하세요."
+                placeholderTextColor={THEME.textSecondary}
+                value={writingText}
+                onChangeText={(t) => {
+                  setWritingText(t);
+                  if (assignment && currentStage) {
+                    scheduleSaveWriting(assignment.id, currentStage.id);
+                  }
+                }}
+                onBlur={() => {
+                  if (!assignment || !currentStage) return;
+                  if (saveWritingTimerRef.current) {
+                    clearTimeout(saveWritingTimerRef.current);
+                    saveWritingTimerRef.current = null;
+                  }
+                  persistStageWriting(assignment.id, currentStage.id, writingTextRef.current);
+                }}
+              />
             </View>
-            <Text style={styles.writingHint}>
-              단계마다 내용이 따로 저장됩니다. 다음 단계로 넘어가기 전에 자동으로 한 번 더 저장됩니다.
-            </Text>
-            <TextInput
-              style={styles.writingInput}
-              multiline
-              textAlignVertical="top"
-              placeholder="이 단계에서 조사·정리·성찰 등 작성할 내용을 입력하세요."
-              placeholderTextColor={THEME.textSecondary}
-              value={writingText}
-              onChangeText={(t) => {
-                setWritingText(t);
-                if (assignment && currentStage) {
-                  scheduleSaveWriting(assignment.id, currentStage.id);
-                }
-              }}
-              onBlur={() => {
-                if (!assignment || !currentStage) return;
-                if (saveWritingTimerRef.current) {
-                  clearTimeout(saveWritingTimerRef.current);
-                  saveWritingTimerRef.current = null;
-                }
-                persistStageWriting(assignment.id, currentStage.id, writingTextRef.current);
-              }}
-            />
-          </View>
 
-          {!aiAllowed && (
-            <View style={[styles.infoBox, styles.noAiBox]}>
-              <Text style={styles.noAiIcon}>🚫</Text>
-              <Text style={styles.noAiTitle}>AI 사용 제한 단계</Text>
-              <Text style={styles.noAiDesc}>교사가 이 단계의 AI 사용을 허용하지 않았습니다.</Text>
-            </View>
-          )}
+            {!aiAllowed && (
+              <View style={[styles.infoBox, styles.noAiBox]}>
+                <Text style={styles.noAiIcon}>🚫</Text>
+                <Text style={styles.noAiTitle}>AI 사용 제한 단계</Text>
+                <Text style={styles.noAiDesc}>교사가 이 단계의 AI 사용을 허용하지 않았습니다.</Text>
+              </View>
+            )}
 
-          {isCompleted ? (
-            <View style={styles.completedBox}>
-              <Text style={styles.completedText}>🎉 모든 단계 완료!</Text>
+            {isCompleted ? (
+              <View style={styles.completedBox}>
+                <Text style={styles.completedText}>🎉 모든 단계 완료!</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.advanceBtn}
+                onPress={() => Alert.alert(
+                  currentStageOrder === totalStages ? '수행평가 완료' : '다음 단계로 이동',
+                  currentStageOrder === totalStages
+                    ? '수행평가를 완료하시겠습니까?'
+                    : '현재 단계를 완료하고 다음 단계로 이동하시겠습니까?',
+                  [
+                    { text: '취소', style: 'cancel' },
+                    { text: currentStageOrder === totalStages ? '완료' : '이동', onPress: handleAdvanceStage },
+                  ]
+                )}
+              >
+                <Text style={styles.advanceBtnText}>
+                  {currentStageOrder === totalStages ? '✅ 수행평가 완료' : '다음 단계로 →'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
+        </View>
+
+        {/* ── 분할선 + AI 브라우저 패널 (AI 허용 시만 표시) ── */}
+        {aiAllowed && (
+          <>
+            <View style={styles.divider} {...panResponder.panHandlers}>
+              <View style={styles.dividerHandle} />
+              <Text style={styles.dividerHint}>좌우 드래그</Text>
             </View>
-          ) : (
-            <TouchableOpacity
-              style={styles.advanceBtn}
-              onPress={() => Alert.alert(
-                currentStageOrder === totalStages ? '수행평가 완료' : '다음 단계로 이동',
-                currentStageOrder === totalStages
-                  ? '수행평가를 완료하시겠습니까?'
-                  : '현재 단계를 완료하고 다음 단계로 이동하시겠습니까?',
-                [
-                  { text: '취소', style: 'cancel' },
-                  { text: currentStageOrder === totalStages ? '완료' : '이동', onPress: handleAdvanceStage },
-                ]
-              )}
-            >
-              <Text style={styles.advanceBtnText}>
-                {currentStageOrder === totalStages ? '✅ 수행평가 완료' : '다음 단계로 →'}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </ScrollView>
+
+            <View style={[styles.browserPanel, { flex: 1 - splitRatio }]}>
+              {Platform.OS === 'web' ? (
+                <View style={styles.webFallback}>
+                  <Text style={styles.webFallbackTitle}>📱 인앱 브라우저</Text>
+                  <Text style={styles.webFallbackDesc}>
+                    WebView는 모바일 앱(Expo Go)에서만 동작합니다.{'\n'}
+                    웹에서는 검색만 외부 브라우저로 열 수 있습니다.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.webFallbackBtn}
+                    onPress={() => Linking.openURL('https://www.google.com')}
+                  >
+                    <Text style={styles.webFallbackBtnText}>Google 검색 열기 ↗</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : WebView ? (
+                <>
+                  <View style={styles.browserUrlBar}>
+                    <TextInput
+                      style={styles.browserUrlInput}
+                      value={addressDraft}
+                      onChangeText={setAddressDraft}
+                      onSubmitEditing={navigateFromAddressBar}
+                      placeholder="검색어 (https://… 직접 입력 가능)"
+                      placeholderTextColor="#666"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="url"
+                      returnKeyType="go"
+                    />
+                    <TouchableOpacity style={styles.browserUrlGo} onPress={navigateFromAddressBar}>
+                      <Text style={styles.browserUrlGoText}>검색</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <WebView
+                    ref={webViewRef}
+                    source={{ uri: aiUrl }}
+                    style={styles.webView}
+                    onLoadStart={() => setAiPageLoading(true)}
+                    onLoadEnd={(e) => {
+                      setAiPageLoading(false);
+                      logPageVisit(e.nativeEvent.url, e.nativeEvent.title, 0);
+                    }}
+                    onNavigationStateChange={(state) => {
+                      setCanWebViewGoBack(state.canGoBack);
+                      if (state.url && state.url !== aiUrl) {
+                        setAiUrl(state.url);
+                        setAddressDraft(state.url);
+                      }
+                    }}
+                    onShouldStartLoadWithRequest={(req) => {
+                      const url = req.url;
+                      if (/^https?:\/\//i.test(url) || url.startsWith('about:') || url.startsWith('data:') || url.startsWith('blob:')) {
+                        return true;
+                      }
+                      if (/^(mailto|tel|sms):/i.test(url)) {
+                        Linking.openURL(url).catch(() => {});
+                        return false;
+                      }
+                      return true;
+                    }}
+                    javaScriptEnabled
+                    domStorageEnabled
+                    userAgent="Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+                  />
+                  {aiPageLoading && (
+                    <View style={styles.aiLoadingOverlay}>
+                      <ActivityIndicator size="large" color={THEME.primary} />
+                      <Text style={styles.aiLoadingText}>페이지 불러오는 중...</Text>
+                    </View>
+                  )}
+                </>
+              ) : null}
+            </View>
+          </>
+        )}
       </View>
 
-      {/* ── 분할선 (AI 허용 시만 표시) ── */}
-      {aiAllowed && (
-        <View style={styles.divider} {...panResponder.panHandlers}>
-          <View style={styles.dividerHandle} />
-          <Text style={styles.dividerHint}>드래그하여 위·아래 크기 조절</Text>
-        </View>
-      )}
-
-      {/* ── AI 브라우저 패널 (AI 허용 시만 표시) ── */}
-      {aiAllowed && (
-        <View style={[styles.browserPanel, { flex: 1 - splitRatio }]}>
-          {Platform.OS === 'web' ? (
-            <View style={styles.webFallback}>
-              <Text style={styles.webFallbackTitle}>📱 인앱 브라우저</Text>
-              <Text style={styles.webFallbackDesc}>
-                WebView는 모바일 앱(Expo Go)에서만 동작합니다.{'\n'}
-                웹에서는 검색만 외부 브라우저로 열 수 있습니다.
-              </Text>
-              <TouchableOpacity
-                style={styles.webFallbackBtn}
-                onPress={() => Linking.openURL('https://www.google.com')}
-              >
-                <Text style={styles.webFallbackBtnText}>Google 검색 열기 ↗</Text>
-              </TouchableOpacity>
+      {showPreviousWritingsModal && (
+        <View pointerEvents="box-none" style={styles.floatingPanelHost}>
+          {isPreviousPanelMinimized ? (
+            <View
+              style={[styles.floatingMiniToggle, { left: panelPosition.x, top: panelPosition.y }]}
+              {...miniPanelResponder.panHandlers}
+            >
+              <Text style={styles.floatingMiniText}>이전</Text>
             </View>
-          ) : WebView ? (
-            <>
-              <View style={styles.browserUrlBar}>
-                <TextInput
-                  style={styles.browserUrlInput}
-                  value={addressDraft}
-                  onChangeText={setAddressDraft}
-                  onSubmitEditing={navigateFromAddressBar}
-                  placeholder="검색어 (https://… 직접 입력 가능)"
-                  placeholderTextColor="#666"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="url"
-                  returnKeyType="go"
-                />
-                <TouchableOpacity style={styles.browserUrlGo} onPress={navigateFromAddressBar}>
-                  <Text style={styles.browserUrlGoText}>검색</Text>
-                </TouchableOpacity>
-              </View>
-              <WebView
-                ref={webViewRef}
-                source={{ uri: aiUrl }}
-                style={styles.webView}
-                onLoadStart={() => setAiPageLoading(true)}
-                onLoadEnd={(e) => {
-                  setAiPageLoading(false);
-                  logPageVisit(e.nativeEvent.url, e.nativeEvent.title, 0);
-                }}
-                onNavigationStateChange={(state) => {
-                  setCanWebViewGoBack(state.canGoBack);
-                  if (state.url && state.url !== aiUrl) {
-                    setAiUrl(state.url);
-                    setAddressDraft(state.url);
-                  }
-                }}
-                onShouldStartLoadWithRequest={(req) => {
-                  const url = req.url;
-                  if (/^https?:\/\//i.test(url) || url.startsWith('about:') || url.startsWith('data:') || url.startsWith('blob:')) {
-                    return true;
-                  }
-                  if (/^(mailto|tel|sms):/i.test(url)) {
-                    Linking.openURL(url).catch(() => {});
-                    return false;
-                  }
-                  return true;
-                }}
-                javaScriptEnabled
-                domStorageEnabled
-                userAgent="Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-              />
-              {aiPageLoading && (
-                <View style={styles.aiLoadingOverlay}>
-                  <ActivityIndicator size="large" color={THEME.primary} />
-                  <Text style={styles.aiLoadingText}>페이지 불러오는 중...</Text>
+          ) : (
+            <View style={[styles.floatingPanel, { left: panelPosition.x, top: panelPosition.y, width: panelSize.width, height: panelSize.height }]}>
+              <View style={styles.floatingPanelHeader} {...panelPanResponder.panHandlers}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalTitle}>이전 단계 작성 내용</Text>
+                  <Text style={styles.modalSubTitle}>읽기 전용 · 헤더 드래그로 이동</Text>
                 </View>
-              )}
-            </>
-          ) : null}
+                <View style={styles.floatingHeaderActions}>
+                  <TouchableOpacity
+                    style={styles.floatingMinBtn}
+                    onPress={() => setIsPreviousPanelMinimized(true)}
+                  >
+                    <Text style={styles.floatingMinText}>—</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.floatingCloseBtn}
+                    onPress={() => {
+                      setShowPreviousWritingsModal(false);
+                      setIsPreviousPanelMinimized(false);
+                      setSelectedPreviousStage(null);
+                    }}
+                  >
+                    <Text style={styles.floatingCloseText}>X</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
+                {previousStageWritings.length === 0 ? (
+                  <Text style={styles.modalEmpty}>이전 단계가 없거나 저장된 작성 내용이 없습니다.</Text>
+                ) : selectedPreviousStage ? (
+                  <View style={styles.prevDetailWrap}>
+                    <TouchableOpacity
+                      style={styles.prevBackBtn}
+                      onPress={() => setSelectedPreviousStage(null)}
+                    >
+                      <Text style={styles.prevBackBtnText}>← 전체 목록 보기</Text>
+                    </TouchableOpacity>
+                    <View style={styles.prevItemBox}>
+                      <Text style={styles.prevItemTitle}>
+                        단계 {selectedPreviousStage.orderNum}. {selectedPreviousStage.title}
+                      </Text>
+                      <Text style={styles.prevItemContent}>{selectedPreviousStage.content}</Text>
+                    </View>
+                  </View>
+                ) : (
+                  previousStageWritings.map((item) => (
+                    <TouchableOpacity
+                      key={item.stageId}
+                      style={styles.prevPreviewItem}
+                      onPress={() => setSelectedPreviousStage(item)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.prevItemTitle}>단계 {item.orderNum}. {item.title}</Text>
+                      <Text style={styles.prevPreviewContent} numberOfLines={1} ellipsizeMode="tail">
+                        {item.content}
+                      </Text>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+
+              <View style={styles.resizeHandleWrap} {...panelResizeResponder.panHandlers}>
+                <View style={styles.resizeHandleInner} />
+              </View>
+            </View>
+          )}
         </View>
       )}
     </View>
@@ -469,6 +657,8 @@ const styles = StyleSheet.create({
   aiBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
 
   // 수행평가 패널
+  splitContainer: { flex: 1, flexDirection: 'row' },
+  fullContent: { flex: 1 },
   taskPanel: { backgroundColor: THEME.background },
   taskScroll: { padding: 14, gap: 10 },
   infoBox: {
@@ -495,6 +685,24 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 6,
+  },
+  writingHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  prevViewBtn: {
+    backgroundColor: THEME.primaryLight,
+    borderWidth: 1,
+    borderColor: THEME.primary,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  prevViewBtnText: {
+    color: THEME.primary,
+    fontSize: 11,
+    fontWeight: '700',
   },
   writingSaveHint: { fontSize: 11, color: THEME.textSecondary, fontWeight: '600' },
   writingHint: { fontSize: 12, color: THEME.textSecondary, marginBottom: 10, lineHeight: 17 },
@@ -526,14 +734,14 @@ const styles = StyleSheet.create({
 
   // 분할선
   divider: {
-    height: DIVIDER_HEIGHT, backgroundColor: '#1a1a2e',
+    width: DIVIDER_WIDTH, backgroundColor: '#1a1a2e',
     justifyContent: 'center', alignItems: 'center',
   },
   dividerHandle: {
-    width: 40, height: 4, borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.35)', marginBottom: 2,
+    width: 4, height: 44, borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.35)', marginBottom: 6,
   },
-  dividerHint: { fontSize: 10, color: 'rgba(255,255,255,0.45)' },
+  dividerHint: { fontSize: 9, color: 'rgba(255,255,255,0.5)' },
 
   // AI 브라우저 패널
   browserPanel: { position: 'relative', backgroundColor: '#000' },
@@ -571,4 +779,119 @@ const styles = StyleSheet.create({
     alignItems: 'center', borderWidth: 1, borderColor: THEME.border, marginBottom: 8,
   },
   webFallbackBtnText: { fontSize: 15, fontWeight: '600', color: THEME.primary },
+
+  // 이전 내용 보기 플로팅 패널 (비차단)
+  floatingPanelHost: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 30,
+    elevation: 30,
+  },
+  floatingPanel: {
+    position: 'absolute',
+    backgroundColor: THEME.card,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: THEME.border,
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 9,
+  },
+  floatingPanelHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+    gap: 10,
+    backgroundColor: THEME.background,
+    borderRadius: 10,
+    padding: 8,
+  },
+  floatingCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: THEME.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingCloseText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  floatingHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  floatingMinBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: THEME.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingMinText: { color: THEME.text, fontSize: 13, fontWeight: '800' },
+  floatingMiniToggle: {
+    position: 'absolute',
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    backgroundColor: THEME.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: THEME.primary,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 8,
+  },
+  floatingMiniText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: THEME.text },
+  modalSubTitle: { fontSize: 12, color: THEME.textSecondary, marginTop: 4, marginBottom: 10 },
+  modalScroll: { flex: 1 },
+  modalScrollContent: { paddingBottom: 8, gap: 10 },
+  modalEmpty: { color: THEME.textSecondary, fontSize: 13, textAlign: 'center', paddingVertical: 18 },
+  prevDetailWrap: { gap: 8 },
+  prevBackBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: THEME.primaryLight,
+    borderWidth: 1,
+    borderColor: THEME.primary,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  prevBackBtnText: { color: THEME.primary, fontSize: 12, fontWeight: '700' },
+  prevPreviewItem: {
+    backgroundColor: THEME.background,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: THEME.border,
+    padding: 12,
+  },
+  prevItemBox: {
+    backgroundColor: THEME.background,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: THEME.border,
+    padding: 12,
+  },
+  prevItemTitle: { fontSize: 13, fontWeight: '700', color: THEME.primary, marginBottom: 6 },
+  prevPreviewContent: { fontSize: 13, color: THEME.textSecondary, lineHeight: 20 },
+  prevItemContent: { fontSize: 14, color: THEME.text, lineHeight: 21 },
+  resizeHandleWrap: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resizeHandleInner: {
+    width: 12,
+    height: 12,
+    borderRightWidth: 2,
+    borderBottomWidth: 2,
+    borderColor: THEME.primary,
+    transform: [{ rotate: '0deg' }],
+  },
 });
