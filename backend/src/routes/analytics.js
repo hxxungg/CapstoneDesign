@@ -3,6 +3,7 @@ const router = express.Router();
 const { getDb } = require('../database');
 const { authenticateToken, requireTeacher } = require('../middleware/auth');
 const { normalizeStage } = require('../stageNormalize');
+const { buildComprehensiveReport } = require('../studentReportBuilder');
 
 function detectAITool(url) {
   if (!url) return null;
@@ -80,8 +81,10 @@ router.get('/assignment/:id', authenticateToken, requireTeacher, (req, res) => {
   const db = getDb();
   const assignmentId = parseInt(req.params.id);
 
-  const assignment = db.get('assignments').find({ id: assignmentId, teacher_id: req.user.id }).value();
-  if (!assignment) return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
+  const assignment = db.get('assignments').find({ id: assignmentId }).value();
+  if (!assignment || Number(assignment.teacher_id) !== Number(req.user.id)) {
+    return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
+  }
 
   const stages = db.get('stages').filter({ assignment_id: assignmentId }).value()
     .sort((a, b) => a.order_num - b.order_num)
@@ -141,8 +144,10 @@ router.get('/assignment/:assignmentId/student/:studentId', authenticateToken, re
   const assignmentId = parseInt(req.params.assignmentId);
   const studentId = parseInt(req.params.studentId);
 
-  const assignment = db.get('assignments').find({ id: assignmentId, teacher_id: req.user.id }).value();
-  if (!assignment) return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
+  const assignment = db.get('assignments').find({ id: assignmentId }).value();
+  if (!assignment || Number(assignment.teacher_id) !== Number(req.user.id)) {
+    return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
+  }
 
   const student = db.get('users').find({ id: studentId }).value();
   if (!student) return res.status(404).json({ error: '학생을 찾을 수 없습니다.' });
@@ -181,7 +186,25 @@ router.get('/assignment/:assignmentId/student/:studentId', authenticateToken, re
 
   const { password: _, ...safeStudent } = student;
 
-  res.json({ student: safeStudent, assignment, progress, stages, logs, exitAttempts, timeline });
+  const comprehensive_report = buildComprehensiveReport(
+    db,
+    assignmentId,
+    studentId,
+    stages,
+    logs,
+    progress,
+  );
+
+  res.json({
+    student: safeStudent,
+    assignment,
+    progress,
+    stages,
+    logs,
+    exitAttempts,
+    timeline,
+    comprehensive_report,
+  });
 });
 
 module.exports = router;

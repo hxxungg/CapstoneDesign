@@ -66,6 +66,7 @@ export const logAPI = {
 // 분석
 export const analyticsAPI = {
   getAssignmentAnalytics: (id) => apiClient.get(`/analytics/assignment/${id}`),
+  /** 교사: 학생별 상세 + 종합 리포트(comprehensive_report) */
   getStudentAnalytics: (assignmentId, studentId) =>
     apiClient.get(`/analytics/assignment/${assignmentId}/student/${studentId}`),
 };

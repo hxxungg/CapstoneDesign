@@ -101,7 +101,7 @@ function TeacherStack() {
       <Stack.Screen
         name="StudentLogs"
         component={StudentLogsScreen}
-        options={{ title: '학생 AI 사용 로그' }}
+        options={{ title: '종합 분석 리포트' }}
       />
       <Stack.Screen
         name="Analytics"
