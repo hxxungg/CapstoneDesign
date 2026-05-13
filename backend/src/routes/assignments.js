@@ -214,7 +214,7 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req, res) => {
       pool.query('DELETE FROM teacher_db.stages WHERE assignment_id = ?', [assignmentId]),
       pool.query('DELETE FROM student_db.student_assignments WHERE assignment_id = ?', [assignmentId]),
       pool.query('DELETE FROM student_db.student_stage_writings WHERE assignment_id = ?', [assignmentId]),
-      pool.query('DELETE FROM log_db.ai_logs WHERE assignment_id = ?', [assignmentId]),
+      pool.query('DELETE FROM log_db.activity_logs WHERE assignment_id = ?', [assignmentId]),
       pool.query('DELETE FROM log_db.exit_attempts WHERE assignment_id = ?', [assignmentId]),
     ]);
 
@@ -384,7 +384,7 @@ router.get('/:id/students', authenticateToken, requireTeacher, async (req, res) 
       const user = userRows[0] || {};
 
       const [[{ logCount }]] = await pool.query(
-        'SELECT COUNT(*) as logCount FROM log_db.ai_logs WHERE student_id = ? AND assignment_id = ?',
+        'SELECT COUNT(*) as logCount FROM log_db.activity_logs WHERE student_id = ? AND assignment_id = ?',
         [sa.student_id, assignmentId]
       );
       const [[{ exitCount }]] = await pool.query(

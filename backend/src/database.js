@@ -81,7 +81,7 @@ async function initDatabase() {
     `);
 
     await conn.query(`
-      CREATE TABLE IF NOT EXISTS log_db.ai_logs (
+      CREATE TABLE IF NOT EXISTS log_db.activity_logs (
         id INT AUTO_INCREMENT PRIMARY KEY,
         student_id INT NOT NULL,
         assignment_id INT NOT NULL,

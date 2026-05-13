@@ -23,7 +23,7 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 
     const [result] = await pool.query(
-      `INSERT INTO log_db.ai_logs
+      `INSERT INTO log_db.activity_logs
         (student_id, assignment_id, stage_id, stage_order, action_type, url, page_title, duration_seconds)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -91,7 +91,7 @@ router.get('/student/:studentId/assignment/:assignmentId', authenticateToken, as
     );
 
     const [logsRaw] = await pool.query(
-      'SELECT * FROM log_db.ai_logs WHERE student_id = ? AND assignment_id = ? ORDER BY created_at',
+      'SELECT * FROM log_db.activity_logs WHERE student_id = ? AND assignment_id = ? ORDER BY created_at',
       [studentId, assignmentId]
     );
     const logs = logsRaw.map(log => {

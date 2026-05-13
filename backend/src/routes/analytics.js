@@ -99,7 +99,7 @@ router.get('/assignment/:id', authenticateToken, requireTeacher, async (req, res
       const user = userRows[0] || {};
 
       const [logs] = await pool.query(
-        'SELECT * FROM log_db.ai_logs WHERE student_id = ? AND assignment_id = ? ORDER BY created_at',
+        'SELECT * FROM log_db.activity_logs WHERE student_id = ? AND assignment_id = ? ORDER BY created_at',
         [sa.student_id, assignmentId]
       );
       const [[{ exitCount }]] = await pool.query(
@@ -121,7 +121,7 @@ router.get('/assignment/:id', authenticateToken, requireTeacher, async (req, res
     }));
 
     const [allLogs] = await pool.query(
-      'SELECT * FROM log_db.ai_logs WHERE assignment_id = ?',
+      'SELECT * FROM log_db.activity_logs WHERE assignment_id = ?',
       [assignmentId]
     );
     const [[{ totalExitAttempts }]] = await pool.query(
@@ -192,7 +192,7 @@ router.get('/assignment/:assignmentId/student/:studentId', authenticateToken, re
     );
 
     const [logsRaw] = await pool.query(
-      'SELECT * FROM log_db.ai_logs WHERE student_id = ? AND assignment_id = ? ORDER BY created_at',
+      'SELECT * FROM log_db.activity_logs WHERE student_id = ? AND assignment_id = ? ORDER BY created_at',
       [studentId, assignmentId]
     );
     const logs = logsRaw.map(log => {
@@ -224,7 +224,7 @@ router.get('/assignment/:assignmentId/student/:studentId', authenticateToken, re
       [assignmentId]
     );
     const [allLogs] = await pool.query(
-      'SELECT * FROM log_db.ai_logs WHERE assignment_id = ?',
+      'SELECT * FROM log_db.activity_logs WHERE assignment_id = ?',
       [assignmentId]
     );
     const [studentWritings] = await pool.query(
