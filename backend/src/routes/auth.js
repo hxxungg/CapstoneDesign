@@ -7,13 +7,16 @@ const { authenticateToken, JWT_SECRET } = require('../middleware/auth');
 
 // 회원가입
 router.post('/register', async (req, res) => {
-  const { email, name, password, role, school, subject, grade, class_num } = req.body;
+  const { email, name, password, role, school, subject, grade, class_num, invite_code } = req.body;
 
   if (!email || !name || !password || !role) {
     return res.status(400).json({ error: '필수 정보를 입력해주세요.' });
   }
   if (!['teacher', 'student'].includes(role)) {
     return res.status(400).json({ error: '역할은 teacher 또는 student여야 합니다.' });
+  }
+  if (role === 'student' && !invite_code) {
+    return res.status(400).json({ error: '교사에게 받은 초대 코드를 입력해주세요.' });
   }
 
   const conn = await pool.getConnection();
@@ -27,6 +30,20 @@ router.post('/register', async (req, res) => {
     if (existing.length > 0) {
       await conn.rollback();
       return res.status(409).json({ error: '이미 사용 중인 이메일입니다.' });
+    }
+
+    // 학생: 초대 코드 유효성 확인
+    let assessment = null;
+    if (role === 'student') {
+      const [assessmentRows] = await conn.query(
+        "SELECT id, teacher_id FROM teacher_db.assessments WHERE invite_code = ? AND status = 'active'",
+        [invite_code.toUpperCase()]
+      );
+      if (assessmentRows.length === 0) {
+        await conn.rollback();
+        return res.status(400).json({ error: '유효하지 않은 초대 코드입니다.' });
+      }
+      assessment = assessmentRows[0];
     }
 
     // users 테이블에 기본 정보 저장
@@ -50,9 +67,14 @@ router.post('/register', async (req, res) => {
         [userId, school || null, subject || null]
       );
     } else {
-      await conn.query(
+      const [studentResult] = await conn.query(
         'INSERT INTO student_db.students (user_id, school, grade, class_num) VALUES (?, ?, ?, ?)',
         [userId, school || null, grade || null, class_num || null]
+      );
+      // 초대 코드로 수행평가 자동 참여
+      await conn.query(
+        'INSERT INTO student_db.participations (assessment_id, student_id) VALUES (?, ?)',
+        [assessment.id, studentResult.insertId]
       );
     }
 

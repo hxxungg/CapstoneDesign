@@ -27,6 +27,7 @@ export default function RegisterScreen({ navigation }) {
   // 학생 전용
   const [grade, setGrade] = useState('');
   const [classNum, setClassNum] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
 
   const validate = () => {
     if (!name.trim()) return '이름을 입력해주세요.';
@@ -56,8 +57,13 @@ export default function RegisterScreen({ navigation }) {
     if (role === 'teacher') {
       payload.subject = subject.trim() || undefined;
     } else {
+      if (!inviteCode.trim()) {
+        Alert.alert('입력 오류', '교사에게 받은 초대 코드를 입력해주세요.');
+        return;
+      }
       payload.grade = grade || undefined;
       payload.class_num = classNum.trim() || undefined;
+      payload.invite_code = inviteCode.trim().toUpperCase();
     }
 
     setLoading(true);
@@ -114,6 +120,13 @@ export default function RegisterScreen({ navigation }) {
           {/* 학생 전용 */}
           {role === 'student' && (
             <>
+              <Field
+                label="초대 코드 *"
+                value={inviteCode}
+                onChangeText={setInviteCode}
+                placeholder="교사에게 받은 초대 코드 입력"
+                autoCapitalize="characters"
+              />
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>학년</Text>
                 <View style={styles.gradeSelector}>
