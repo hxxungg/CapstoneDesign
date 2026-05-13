@@ -10,8 +10,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-initDatabase();
-
 app.use('/api/auth', require('./src/routes/auth'));
 app.use('/api/assignments', require('./src/routes/assignments'));
 app.use('/api/stages', require('./src/routes/stages'));
@@ -29,6 +27,14 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
-app.listen(PORT, HOST, () => {
-  console.log(`서버가 http://${HOST}:${PORT} 에서 실행 중입니다.`);
-});
+
+initDatabase()
+  .then(() => {
+    app.listen(PORT, HOST, () => {
+      console.log(`서버가 http://${HOST}:${PORT} 에서 실행 중입니다.`);
+    });
+  })
+  .catch((err) => {
+    console.error('DB 초기화 실패:', err);
+    process.exit(1);
+  });

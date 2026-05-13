@@ -154,20 +154,24 @@ function countPromptTypesAndLevels(timeline) {
   return { types, levels };
 }
 
-function buildClassOriginalityRatios(db, assignmentId, stages) {
-  const sas = db.get('student_assignments').filter({ assignment_id: assignmentId }).value();
-  const writings = db.get('student_stage_writings').filter({ assignment_id: assignmentId }).value();
-  const logs = db.get('ai_logs').filter({ assignment_id: assignmentId }).value();
+/**
+ * classData: { studentAssignments, allWritings, allLogs }
+ * studentAssignments: [{ student_id, ... }]
+ * allWritings: [{ student_id, stage_id, content, updated_at, ... }]
+ * allLogs: [{ student_id, stage_id, url, ... }]
+ */
+function buildClassOriginalityRatios(stages, classData) {
+  const { studentAssignments = [], allWritings = [], allLogs = [] } = classData || {};
   let r = 0;
   let y = 0;
   let g = 0;
-  sas.forEach((sa) => {
+  studentAssignments.forEach((sa) => {
     stages.forEach((stage) => {
-      const w = writings.find(
+      const w = allWritings.find(
         (x) => x.student_id === sa.student_id && x.stage_id === stage.id,
       );
       const text = w?.content || '';
-      const stageLogs = logs.filter(
+      const stageLogs = allLogs.filter(
         (l) => l.student_id === sa.student_id && l.stage_id === stage.id,
       );
       splitIntoSegments(text).forEach((seg) => {
@@ -179,7 +183,7 @@ function buildClassOriginalityRatios(db, assignmentId, stages) {
     });
   });
   const t = r + y + g || 1;
-  return { red: r / t, yellow: y / t, green: g / t, student_count: sas.length };
+  return { red: r / t, yellow: y / t, green: g / t, student_count: studentAssignments.length };
 }
 
 function integratedSummary(studentName, orig, complianceRows, classRatios, timelineLen) {
@@ -208,13 +212,17 @@ function integratedSummary(studentName, orig, complianceRows, classRatios, timel
   return { student_paragraph: studentParagraph, class_paragraph: classParagraph, comparison_bullets: bullets };
 }
 
-function buildComprehensiveReport(db, assignmentId, studentId, stages, logsWithStage, progress) {
-  const writings = db
-    .get('student_stage_writings')
-    .filter({ student_id: studentId, assignment_id: assignmentId })
-    .value();
+/**
+ * @param {string} studentName
+ * @param {Array}  stages           - normalizeStage()가 적용된 stage 배열
+ * @param {Array}  logsWithStage    - stage_title이 추가된 ai_logs 배열
+ * @param {object} progress         - student_assignments 행
+ * @param {Array}  writings         - 해당 학생의 student_stage_writings 배열
+ * @param {object} classData        - { studentAssignments, allWritings, allLogs }
+ */
+function buildComprehensiveReport(studentName, stages, logsWithStage, progress, writings, classData) {
   const writingsByStageId = {};
-  writings.forEach((w) => {
+  (writings || []).forEach((w) => {
     writingsByStageId[w.stage_id] = w;
   });
 
@@ -254,11 +262,10 @@ function buildComprehensiveReport(db, assignmentId, studentId, stages, logsWithS
   });
 
   const compliance_rows = complianceForStages(stages, writingsByStageId, progress);
-  const classRatios = buildClassOriginalityRatios(db, assignmentId, stages);
-  const studentName = db.get('users').find({ id: studentId }).value()?.name || '학생';
+  const classRatios = buildClassOriginalityRatios(stages, classData);
 
   const integrated = integratedSummary(
-    studentName,
+    studentName || '학생',
     { red, yellow, green },
     compliance_rows,
     classRatios,

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getDb } = require('../database');
+const { pool } = require('../database');
 const { authenticateToken, requireTeacher } = require('../middleware/auth');
 const { normalizeStage } = require('../stageNormalize');
 const { buildComprehensiveReport } = require('../studentReportBuilder');
@@ -18,16 +18,7 @@ function detectAITool(url) {
   return null;
 }
 
-function buildStudentAnalytics(db, student, assignmentId, stages) {
-  const logs = db.get('ai_logs')
-    .filter({ student_id: student.id, assignment_id: assignmentId })
-    .value()
-    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-
-  const exitAttempts = db.get('exit_attempts')
-    .filter({ student_id: student.id, assignment_id: assignmentId })
-    .size().value();
-
+function buildStudentAnalytics(studentId, assignmentId, stages, logs, exitAttemptCount) {
   const byStage = stages.map(stage => {
     const stageLogs = logs.filter(l => l.stage_id === stage.id || l.stage_order === stage.order_num);
     const totalDuration = stageLogs.reduce((sum, l) => sum + (l.duration_seconds || 0), 0);
@@ -46,7 +37,7 @@ function buildStudentAnalytics(db, student, assignmentId, stages) {
       stage_id: stage.id,
       stage_title: stage.title,
       stage_order: stage.order_num,
-      ai_allowed: stage.ai_allowed,
+      ai_allowed: !!stage.ai_allowed,
       total_sessions: stageLogs.filter(l => l.action_type === 'page_visit').length,
       total_duration_seconds: totalDuration,
       unique_urls: Array.from(urlSet),
@@ -72,139 +63,198 @@ function buildStudentAnalytics(db, student, assignmentId, stages) {
       tools_used: allToolsUsed,
       by_stage: byStage,
     },
-    exit_attempts: exitAttempts,
+    exit_attempts: exitAttemptCount,
   };
 }
 
-// 수행평가 종합 분석 (교사)
-router.get('/assignment/:id', authenticateToken, requireTeacher, (req, res) => {
-  const db = getDb();
+router.get('/assignment/:id', authenticateToken, requireTeacher, async (req, res) => {
   const assignmentId = parseInt(req.params.id);
 
-  const assignment = db.get('assignments').find({ id: assignmentId }).value();
-  if (!assignment || Number(assignment.teacher_id) !== Number(req.user.id)) {
-    return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
-  }
-
-  const stages = db.get('stages').filter({ assignment_id: assignmentId }).value()
-    .sort((a, b) => a.order_num - b.order_num)
-    .map(normalizeStage);
-
-  const studentAssignments = db.get('student_assignments').filter({ assignment_id: assignmentId }).value();
-
-  const studentsData = studentAssignments.map(sa => {
-    const user = db.get('users').find({ id: sa.student_id }).value();
-    const { password: _, ...safeUser } = user || {};
-    const studentInfo = {
-      id: sa.student_id,
-      name: safeUser.name,
-      email: safeUser.email,
-      current_stage_order: sa.current_stage_order,
-      status: sa.status,
-      started_at: sa.started_at,
-      completed_at: sa.completed_at,
-    };
-    const analytics = buildStudentAnalytics(db, { id: sa.student_id }, assignmentId, stages);
-    return { student: studentInfo, ...analytics };
-  });
-
-  // 전체 요약
-  const allLogs = db.get('ai_logs').filter({ assignment_id: assignmentId }).value();
-  const totalDuration = allLogs.reduce((sum, l) => sum + (l.duration_seconds || 0), 0);
-  const totalExitAttempts = db.get('exit_attempts').filter({ assignment_id: assignmentId }).size().value();
-  const completedStudents = studentAssignments.filter(sa => sa.status === 'completed').length;
-
-  const allToolsCount = {};
-  allLogs.forEach(log => {
-    if (log.url) {
-      const tool = detectAITool(log.url);
-      if (tool) allToolsCount[tool] = (allToolsCount[tool] || 0) + 1;
+  try {
+    const [aRows] = await pool.query(
+      'SELECT * FROM teacher_db.assignments WHERE id = ?',
+      [assignmentId]
+    );
+    const assignment = aRows[0];
+    if (!assignment || Number(assignment.teacher_id) !== Number(req.user.id)) {
+      return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
     }
-  });
 
-  res.json({
-    assignment,
-    stages,
-    summary: {
-      total_students: studentAssignments.length,
-      completed_students: completedStudents,
-      in_progress_students: studentAssignments.length - completedStudents,
-      total_log_count: allLogs.length,
-      total_duration_seconds: totalDuration,
-      total_exit_attempts: totalExitAttempts,
-      tools_used: allToolsCount,
-    },
-    students: studentsData,
-  });
+    const [stages] = await pool.query(
+      'SELECT * FROM teacher_db.stages WHERE assignment_id = ? ORDER BY order_num',
+      [assignmentId]
+    );
+    const normalizedStages = stages.map(normalizeStage);
+
+    const [studentAssignments] = await pool.query(
+      'SELECT * FROM student_db.student_assignments WHERE assignment_id = ?',
+      [assignmentId]
+    );
+
+    const studentsData = await Promise.all(studentAssignments.map(async (sa) => {
+      const [userRows] = await pool.query(
+        'SELECT id, name, email FROM capstonedesign.users WHERE id = ?',
+        [sa.student_id]
+      );
+      const user = userRows[0] || {};
+
+      const [logs] = await pool.query(
+        'SELECT * FROM log_db.ai_logs WHERE student_id = ? AND assignment_id = ? ORDER BY created_at',
+        [sa.student_id, assignmentId]
+      );
+      const [[{ exitCount }]] = await pool.query(
+        'SELECT COUNT(*) as exitCount FROM log_db.exit_attempts WHERE student_id = ? AND assignment_id = ?',
+        [sa.student_id, assignmentId]
+      );
+
+      const studentInfo = {
+        id: sa.student_id,
+        name: user.name,
+        email: user.email,
+        current_stage_order: sa.current_stage_order,
+        status: sa.status,
+        started_at: sa.started_at,
+        completed_at: sa.completed_at,
+      };
+      const analytics = buildStudentAnalytics(sa.student_id, assignmentId, normalizedStages, logs, exitCount);
+      return { student: studentInfo, ...analytics };
+    }));
+
+    const [allLogs] = await pool.query(
+      'SELECT * FROM log_db.ai_logs WHERE assignment_id = ?',
+      [assignmentId]
+    );
+    const [[{ totalExitAttempts }]] = await pool.query(
+      'SELECT COUNT(*) as totalExitAttempts FROM log_db.exit_attempts WHERE assignment_id = ?',
+      [assignmentId]
+    );
+
+    const totalDuration = allLogs.reduce((sum, l) => sum + (l.duration_seconds || 0), 0);
+    const completedStudents = studentAssignments.filter(sa => sa.status === 'completed').length;
+
+    const allToolsCount = {};
+    allLogs.forEach(log => {
+      if (log.url) {
+        const tool = detectAITool(log.url);
+        if (tool) allToolsCount[tool] = (allToolsCount[tool] || 0) + 1;
+      }
+    });
+
+    res.json({
+      assignment: { ...assignment, is_active: !!assignment.is_active },
+      stages: normalizedStages,
+      summary: {
+        total_students: studentAssignments.length,
+        completed_students: completedStudents,
+        in_progress_students: studentAssignments.length - completedStudents,
+        total_log_count: allLogs.length,
+        total_duration_seconds: totalDuration,
+        total_exit_attempts: totalExitAttempts,
+        tools_used: allToolsCount,
+      },
+      students: studentsData,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '서버 오류가 발생했습니다.' });
+  }
 });
 
-// 특정 학생의 수행평가 상세 분석
-router.get('/assignment/:assignmentId/student/:studentId', authenticateToken, requireTeacher, (req, res) => {
-  const db = getDb();
+router.get('/assignment/:assignmentId/student/:studentId', authenticateToken, requireTeacher, async (req, res) => {
   const assignmentId = parseInt(req.params.assignmentId);
   const studentId = parseInt(req.params.studentId);
 
-  const assignment = db.get('assignments').find({ id: assignmentId }).value();
-  if (!assignment || Number(assignment.teacher_id) !== Number(req.user.id)) {
-    return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
-  }
+  try {
+    const [aRows] = await pool.query(
+      'SELECT * FROM teacher_db.assignments WHERE id = ?',
+      [assignmentId]
+    );
+    const assignment = aRows[0];
+    if (!assignment || Number(assignment.teacher_id) !== Number(req.user.id)) {
+      return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
+    }
 
-  const student = db.get('users').find({ id: studentId }).value();
-  if (!student) return res.status(404).json({ error: '학생을 찾을 수 없습니다.' });
+    const [userRows] = await pool.query(
+      'SELECT id, name, email, role, teacher_code, created_at FROM capstonedesign.users WHERE id = ?',
+      [studentId]
+    );
+    if (userRows.length === 0) return res.status(404).json({ error: '학생을 찾을 수 없습니다.' });
 
-  const stages = db.get('stages').filter({ assignment_id: assignmentId }).value()
-    .sort((a, b) => a.order_num - b.order_num)
-    .map(normalizeStage);
+    const [stages] = await pool.query(
+      'SELECT * FROM teacher_db.stages WHERE assignment_id = ? ORDER BY order_num',
+      [assignmentId]
+    );
+    const normalizedStages = stages.map(normalizeStage);
 
-  const progress = db.get('student_assignments')
-    .find({ student_id: studentId, assignment_id: assignmentId })
-    .value();
+    const [progressRows] = await pool.query(
+      'SELECT * FROM student_db.student_assignments WHERE student_id = ? AND assignment_id = ?',
+      [studentId, assignmentId]
+    );
 
-  const logs = db.get('ai_logs')
-    .filter({ student_id: studentId, assignment_id: assignmentId })
-    .value()
-    .map(log => {
-      const stage = stages.find(s => s.id === log.stage_id);
+    const [logsRaw] = await pool.query(
+      'SELECT * FROM log_db.ai_logs WHERE student_id = ? AND assignment_id = ? ORDER BY created_at',
+      [studentId, assignmentId]
+    );
+    const logs = logsRaw.map(log => {
+      const stage = normalizedStages.find(s => s.id === log.stage_id);
       return { ...log, stage_title: stage?.title || null };
-    })
-    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    });
 
-  const exitAttempts = db.get('exit_attempts')
-    .filter({ student_id: studentId, assignment_id: assignmentId })
-    .value()
-    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    const [exitAttempts] = await pool.query(
+      'SELECT * FROM log_db.exit_attempts WHERE student_id = ? AND assignment_id = ? ORDER BY created_at',
+      [studentId, assignmentId]
+    );
 
-  const timeline = logs.map(log => ({
-    time: log.created_at,
-    type: log.action_type,
-    stage: log.stage_title || `단계 ${log.stage_order}`,
-    url: log.url,
-    page_title: log.page_title,
-    duration: log.duration_seconds,
-    tool: detectAITool(log.url),
-  }));
+    const timeline = logs.map(log => ({
+      time: log.created_at,
+      type: log.action_type,
+      stage: log.stage_title || `단계 ${log.stage_order}`,
+      url: log.url,
+      page_title: log.page_title,
+      duration: log.duration_seconds,
+      tool: detectAITool(log.url),
+    }));
 
-  const { password: _, ...safeStudent } = student;
+    const [studentAssignments] = await pool.query(
+      'SELECT * FROM student_db.student_assignments WHERE assignment_id = ?',
+      [assignmentId]
+    );
+    const [allWritings] = await pool.query(
+      'SELECT * FROM student_db.student_stage_writings WHERE assignment_id = ?',
+      [assignmentId]
+    );
+    const [allLogs] = await pool.query(
+      'SELECT * FROM log_db.ai_logs WHERE assignment_id = ?',
+      [assignmentId]
+    );
+    const [studentWritings] = await pool.query(
+      'SELECT * FROM student_db.student_stage_writings WHERE student_id = ? AND assignment_id = ?',
+      [studentId, assignmentId]
+    );
 
-  const comprehensive_report = buildComprehensiveReport(
-    db,
-    assignmentId,
-    studentId,
-    stages,
-    logs,
-    progress,
-  );
+    const comprehensive_report = buildComprehensiveReport(
+      userRows[0]?.name || '학생',
+      normalizedStages,
+      logs,
+      progressRows[0] || null,
+      studentWritings,
+      { studentAssignments, allWritings, allLogs },
+    );
 
-  res.json({
-    student: safeStudent,
-    assignment,
-    progress,
-    stages,
-    logs,
-    exitAttempts,
-    timeline,
-    comprehensive_report,
-  });
+    res.json({
+      student: userRows[0],
+      assignment: { ...assignment, is_active: !!assignment.is_active },
+      progress: progressRows[0] || null,
+      stages: normalizedStages,
+      logs,
+      exitAttempts,
+      timeline,
+      comprehensive_report,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '서버 오류가 발생했습니다.' });
+  }
 });
 
 module.exports = router;
