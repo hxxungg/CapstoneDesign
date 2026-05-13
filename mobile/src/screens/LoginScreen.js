@@ -84,8 +84,8 @@ export default function LoginScreen({ navigation }) {
 
           <View style={styles.demoBox}>
             <Text style={styles.demoTitle}>테스트 계정</Text>
-            <Text style={styles.demoText}>교사: test1@test.com / 1234</Text>
-            <Text style={styles.demoText}>학생: test@test.com / 1234</Text>
+            <Text style={styles.demoText}>교사: teacher@test.com / 1234</Text>
+            <Text style={styles.demoText}>학생: student@test.com / 1234</Text>
           </View>
         </View>
       </ScrollView>
