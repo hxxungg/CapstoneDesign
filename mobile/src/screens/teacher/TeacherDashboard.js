@@ -1,10 +1,10 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Modal, Clipboard,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { assignmentAPI } from '../../services/api';
+import { assignmentAPI, assessmentAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { THEME } from '../../config/api';
 import { appAlert } from '../../utils/appAlert';
@@ -14,17 +14,39 @@ export default function TeacherDashboard({ navigation }) {
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [codeModalVisible, setCodeModalVisible] = useState(false);
+  const [myInviteCode, setMyInviteCode] = useState(null);
+  const [codesLoading, setCodesLoading] = useState(false);
 
   const loadAssignments = async () => {
     try {
       const data = await assignmentAPI.getList();
       setAssignments(data);
     } catch (err) {
-      appAlert('오류', err.message);
+      // 아직 구현 중인 API - 무시
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  const openCodeModal = async () => {
+    setCodeModalVisible(true);
+    if (myInviteCode) return;
+    setCodesLoading(true);
+    try {
+      const data = await assessmentAPI.getMyInviteCode();
+      setMyInviteCode(data.invite_code);
+    } catch (err) {
+      appAlert('오류', err.message);
+    } finally {
+      setCodesLoading(false);
+    }
+  };
+
+  const copyCode = (code) => {
+    Clipboard.setString(code);
+    appAlert('복사 완료', `초대 코드 ${code}가 복사되었습니다.`);
   };
 
   useFocusEffect(
@@ -41,7 +63,6 @@ export default function TeacherDashboard({ navigation }) {
           text: '삭제', style: 'destructive',
           onPress: () => {
             const id = Number(item.id);
-            // Android 등에서 Alert 닫힌 뒤 비동기 실행이 안정적으로 동작하도록 한 틱 미룸
             setTimeout(() => {
               (async () => {
                 try {
@@ -75,7 +96,6 @@ export default function TeacherDashboard({ navigation }) {
         </View>
         <Text style={styles.cardTitle}>{item.title}</Text>
         {item.description && <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>}
-
         <View style={styles.cardStats}>
           <View style={styles.stat}>
             <Text style={styles.statValue}>{item.stage_count}</Text>
@@ -86,14 +106,8 @@ export default function TeacherDashboard({ navigation }) {
             <Text style={styles.statValue}>{item.student_count}</Text>
             <Text style={styles.statLabel}>참여 학생</Text>
           </View>
-          <View style={styles.statDivider} />
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{item.assignment_code}</Text>
-            <Text style={styles.statLabel}>참여 코드</Text>
-          </View>
         </View>
       </TouchableOpacity>
-
       <View style={styles.cardActions}>
         <TouchableOpacity
           style={styles.actionButton}
@@ -113,10 +127,15 @@ export default function TeacherDashboard({ navigation }) {
 
   return (
     <View style={styles.container}>
+      {/* 상단 헤더 */}
       <View style={styles.welcomeBox}>
-        <View>
-          <Text style={styles.welcomeText}>안녕하세요, <Text style={styles.welcomeName}>{user?.name}</Text> 선생님!</Text>
-          <Text style={styles.teacherCode}>교사 코드: <Text style={styles.teacherCodeValue}>{user?.teacher_code}</Text></Text>
+        <View style={styles.welcomeLeft}>
+          <Text style={styles.welcomeText}>
+            안녕하세요, <Text style={styles.welcomeName}>{user?.name}</Text> 선생님!
+          </Text>
+          <TouchableOpacity style={styles.codeButton} onPress={openCodeModal}>
+            <Text style={styles.codeButtonText}>초대 코드 확인</Text>
+          </TouchableOpacity>
         </View>
         <TouchableOpacity onPress={logout}>
           <Text style={styles.logoutText}>로그아웃</Text>
@@ -149,6 +168,43 @@ export default function TeacherDashboard({ navigation }) {
       >
         <Text style={styles.createButtonText}>+ 수행평가 생성</Text>
       </TouchableOpacity>
+
+      {/* 초대 코드 팝업 */}
+      <Modal
+        visible={codeModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCodeModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setCodeModalVisible(false)}
+        >
+          <View style={styles.modalBox} onStartShouldSetResponder={() => true}>
+            <Text style={styles.modalTitle}>수행평가 초대 코드</Text>
+            <Text style={styles.modalSubtitle}>학생들에게 코드를 공유하세요</Text>
+
+            {codesLoading ? (
+              <ActivityIndicator color={THEME.primary} style={{ marginVertical: 24 }} />
+            ) : (
+              <View style={styles.codeRow}>
+                <View style={styles.codeInfo}>
+                  <Text style={styles.codeTitle}>나의 초대 코드</Text>
+                  <Text style={styles.codeValue}>{myInviteCode || '-'}</Text>
+                </View>
+                <TouchableOpacity style={styles.copyButton} onPress={() => myInviteCode && copyCode(myInviteCode)}>
+                  <Text style={styles.copyButtonText}>복사</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <TouchableOpacity style={styles.modalCloseButton} onPress={() => setCodeModalVisible(false)}>
+              <Text style={styles.modalCloseText}>닫기</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -160,10 +216,15 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.card, paddingHorizontal: 20, paddingVertical: 14,
     borderBottomWidth: 1, borderBottomColor: THEME.border,
   },
+  welcomeLeft: { flex: 1 },
   welcomeText: { fontSize: 15, color: THEME.text },
   welcomeName: { fontWeight: 'bold', color: THEME.primary },
-  teacherCode: { fontSize: 12, color: THEME.textSecondary, marginTop: 2 },
-  teacherCodeValue: { fontWeight: '700', color: THEME.secondary, letterSpacing: 1 },
+  codeButton: {
+    marginTop: 6, alignSelf: 'flex-start',
+    backgroundColor: THEME.primaryLight, paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: 8, borderWidth: 1, borderColor: THEME.primary,
+  },
+  codeButtonText: { fontSize: 12, color: THEME.primary, fontWeight: '700' },
   logoutText: { fontSize: 13, color: THEME.textSecondary },
   list: { padding: 16 },
   card: {
@@ -198,4 +259,18 @@ const styles = StyleSheet.create({
     shadowColor: THEME.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 6,
   },
   createButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  // 모달
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  modalBox: { backgroundColor: '#fff', borderRadius: 20, padding: 24, width: '85%', maxHeight: '70%' },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', color: THEME.text, marginBottom: 4 },
+  modalSubtitle: { fontSize: 13, color: THEME.textSecondary, marginBottom: 20 },
+  emptyCodeText: { fontSize: 14, color: THEME.textSecondary, textAlign: 'center', lineHeight: 22, marginVertical: 16 },
+  codeRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: THEME.border },
+  codeInfo: { flex: 1 },
+  codeTitle: { fontSize: 13, color: THEME.textSecondary, marginBottom: 4 },
+  codeValue: { fontSize: 20, fontWeight: 'bold', color: THEME.primary, letterSpacing: 2 },
+  copyButton: { backgroundColor: THEME.primaryLight, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, marginLeft: 12 },
+  copyButtonText: { fontSize: 13, color: THEME.primary, fontWeight: '700' },
+  modalCloseButton: { marginTop: 20, alignItems: 'center', padding: 12, backgroundColor: THEME.background, borderRadius: 10 },
+  modalCloseText: { fontSize: 14, color: THEME.textSecondary, fontWeight: '600' },
 });

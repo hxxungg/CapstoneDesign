@@ -11,6 +11,7 @@ app.use(cors());
 app.use(express.json());
 
 app.use('/api/auth', require('./src/routes/auth'));
+app.use('/api/assessments', require('./src/routes/assessments'));
 // 아래 라우트들은 새 DB 스키마에 맞게 재작성 예정
 // app.use('/api/assignments', require('./src/routes/assignments'));
 // app.use('/api/stages', require('./src/routes/stages'));

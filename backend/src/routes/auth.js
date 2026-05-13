@@ -2,8 +2,11 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { pool } = require('../database');
 const { authenticateToken, JWT_SECRET } = require('../middleware/auth');
+
+const generateInviteCode = () => crypto.randomBytes(4).toString('hex').toUpperCase();
 
 // 회원가입
 router.post('/register', async (req, res) => {
@@ -32,18 +35,16 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ error: '이미 사용 중인 이메일입니다.' });
     }
 
-    // 학생: 초대 코드 유효성 확인
-    let assessment = null;
+    // 학생: 교사 초대 코드 유효성 확인
     if (role === 'student') {
-      const [assessmentRows] = await conn.query(
-        "SELECT id, teacher_id FROM teacher_db.assessments WHERE invite_code = ? AND status = 'active'",
+      const [teacherRows] = await conn.query(
+        'SELECT id FROM teacher_db.teachers WHERE invite_code = ?',
         [invite_code.toUpperCase()]
       );
-      if (assessmentRows.length === 0) {
+      if (teacherRows.length === 0) {
         await conn.rollback();
         return res.status(400).json({ error: '유효하지 않은 초대 코드입니다.' });
       }
-      assessment = assessmentRows[0];
     }
 
     // users 테이블에 기본 정보 저장
@@ -62,19 +63,22 @@ router.post('/register', async (req, res) => {
 
     // 역할별 추가 정보 저장
     if (role === 'teacher') {
+      let inviteCode;
+      let attempts = 0;
+      while (attempts < 10) {
+        inviteCode = generateInviteCode();
+        const [dup] = await conn.query('SELECT id FROM teacher_db.teachers WHERE invite_code = ?', [inviteCode]);
+        if (dup.length === 0) break;
+        attempts++;
+      }
       await conn.query(
-        'INSERT INTO teacher_db.teachers (user_id, school, subject) VALUES (?, ?, ?)',
-        [userId, school || null, subject || null]
+        'INSERT INTO teacher_db.teachers (user_id, school, subject, invite_code) VALUES (?, ?, ?, ?)',
+        [userId, school || null, subject || null, inviteCode]
       );
     } else {
-      const [studentResult] = await conn.query(
+      await conn.query(
         'INSERT INTO student_db.students (user_id, school, grade, class_num) VALUES (?, ?, ?, ?)',
         [userId, school || null, grade || null, class_num || null]
-      );
-      // 초대 코드로 수행평가 자동 참여
-      await conn.query(
-        'INSERT INTO student_db.participations (assessment_id, student_id) VALUES (?, ?)',
-        [assessment.id, studentResult.insertId]
       );
     }
 

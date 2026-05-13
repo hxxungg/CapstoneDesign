@@ -63,6 +63,11 @@ export const logAPI = {
     apiClient.get(`/logs/student/${studentId}/assignment/${assignmentId}`),
 };
 
+// 수행평가 (assessments)
+export const assessmentAPI = {
+  getMyInviteCode: () => apiClient.get('/assessments/invite-codes'),
+};
+
 // 분석
 export const analyticsAPI = {
   getAssignmentAnalytics: (id) => apiClient.get(`/analytics/assignment/${id}`),
