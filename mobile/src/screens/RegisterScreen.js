@@ -108,7 +108,10 @@ export default function RegisterScreen({ navigation }) {
 
           {/* 교사 전용 */}
           {role === 'teacher' && (
-            <Field label="담당 과목" value={subject} onChangeText={setSubject} placeholder="담당 과목 (선택)" />
+            <>
+              <Field label="담당 과목" value={subject} onChangeText={setSubject} placeholder="담당 과목 (선택)" />
+              <Field label="반" value={classNum} onChangeText={setClassNum} placeholder="담당 반 (예: 3)" keyboardType="numeric" />
+            </>
           )}
 
           {/* 학생 전용 */}
