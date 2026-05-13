@@ -46,8 +46,8 @@ router.post('/register', async (req, res) => {
     // 역할별 추가 정보 저장
     if (role === 'teacher') {
       await conn.query(
-        'INSERT INTO teacher_db.teachers (user_id, school, class_num, subject) VALUES (?, ?, ?, ?)',
-        [userId, school || null, class_num || null, subject || null]
+        'INSERT INTO teacher_db.teachers (user_id, school, subject) VALUES (?, ?, ?)',
+        [userId, school || null, subject || null]
       );
     } else {
       await conn.query(
@@ -102,16 +102,6 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' });
     }
 
-    // 학생은 교사 승인 후 로그인 가능
-    if (user.role === 'student') {
-      const [studentRows] = await pool.query(
-        'SELECT is_approved FROM student_db.students WHERE user_id = ?',
-        [user.id]
-      );
-      if (studentRows.length > 0 && !studentRows[0].is_approved) {
-        return res.status(403).json({ error: '아직 교사 승인이 완료되지 않았습니다. 담당 교사에게 문의해주세요.' });
-      }
-    }
 
     const token = jwt.sign(
       { id: user.id, name: user.name, email: user.email, role: user.role },
