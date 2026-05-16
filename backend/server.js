@@ -12,11 +12,10 @@ app.use(express.json());
 
 app.use('/api/auth', require('./src/routes/auth'));
 app.use('/api/assessments', require('./src/routes/assessments'));
-// 아래 라우트들은 새 DB 스키마에 맞게 재작성 예정
-// app.use('/api/assignments', require('./src/routes/assignments'));
-// app.use('/api/stages', require('./src/routes/stages'));
-// app.use('/api/logs', require('./src/routes/logs'));
-// app.use('/api/analytics', require('./src/routes/analytics'));
+app.use('/api/assignments', require('./src/routes/assignments'));
+app.use('/api/stages', require('./src/routes/stages'));
+app.use('/api/logs', require('./src/routes/logs'));
+app.use('/api/analytics', require('./src/routes/analytics'));
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: '수행평가 AI 관리 서버가 실행 중입니다.' });

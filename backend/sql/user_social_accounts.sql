@@ -1,0 +1,2 @@
+-- 프로젝트 DB는 capstonedesign.user_oauth_connections 사용 (아래 참고)
+-- 이 파일은 초기 초안이며, 실제 운영 테이블은 user_oauth_connections 입니다.

@@ -4,9 +4,11 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { View, ActivityIndicator } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { THEME } from '../config/api';
+import ProfileHeaderButton from '../components/ProfileHeaderButton';
 
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
+import SocialRegisterScreen from '../screens/SocialRegisterScreen';
 
 import AssignmentListScreen from '../screens/student/AssignmentListScreen';
 import StageListScreen from '../screens/student/StageListScreen';
@@ -43,7 +45,7 @@ function StudentStack() {
       <Stack.Screen
         name="AssignmentList"
         component={AssignmentListScreen}
-        options={{ title: '내 수행평가' }}
+        options={{ title: '내 수행평가', headerRight: () => <ProfileHeaderButton /> }}
       />
       <Stack.Screen
         name="Enroll"
@@ -81,7 +83,7 @@ function TeacherStack() {
       <Stack.Screen
         name="TeacherDashboard"
         component={TeacherDashboard}
-        options={{ title: '교사 대시보드' }}
+        options={{ title: '교사 대시보드', headerRight: () => <ProfileHeaderButton /> }}
       />
       <Stack.Screen
         name="CreateAssignment"
@@ -124,6 +126,7 @@ export default function AppNavigator() {
           <>
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
+            <Stack.Screen name="SocialRegister" component={SocialRegisterScreen} />
           </>
         ) : user.role === 'student' ? (
           <Stack.Screen name="StudentRoot" component={StudentStack} />

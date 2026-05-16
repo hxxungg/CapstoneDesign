@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { assignmentAPI, stageAPI } from '../../services/api';
+import { assessmentAPI } from '../../services/api';
 import { THEME } from '../../config/api';
 import {
   AI_MODE,
@@ -75,22 +75,20 @@ export default function CreateAssignmentScreen({ navigation }) {
 
     setLoading(true);
     try {
-      const assignment = await assignmentAPI.create({ title: title.trim(), description: description.trim(), subject });
-
-      for (const stage of stages) {
-        await stageAPI.create({
-          assignment_id: assignment.id,
+      const assessment = await assessmentAPI.create({
+        title: title.trim(),
+        description: description.trim() || undefined,
+        steps: stages.map(stage => ({
           title: stage.title.trim(),
-          description: stage.description.trim(),
+          description: stage.description.trim() || undefined,
           ai_mode: stage.ai_mode,
-          ai_guidance: stage.ai_mode === AI_MODE.DISALLOWED ? '' : stage.ai_guidance.trim(),
-        });
-      }
+        })),
+      });
 
       navigation.goBack();
       appAlert(
         '✅ 생성 완료',
-        `수행평가가 생성되었습니다.\n\n참여 코드: ${assignment.assignment_code}\n\n학생들에게 이 코드를 알려주세요.`
+        `수행평가가 생성되었습니다.\n\n초대 코드: ${assessment.invite_code}\n\n학생들에게 이 코드를 알려주세요.`
       );
     } catch (err) {
       appAlert('생성 실패', err.message);

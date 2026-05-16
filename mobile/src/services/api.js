@@ -18,8 +18,12 @@ apiClient.interceptors.request.use(async (config) => {
 apiClient.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    const message = error.response?.data?.error || '서버 연결에 실패했습니다.';
-    return Promise.reject(new Error(message));
+    const data = error.response?.data;
+    const message = data?.error || '서버 연결에 실패했습니다.';
+    const err = new Error(message);
+    err.status = error.response?.status;
+    err.data = data;
+    return Promise.reject(err);
   }
 );
 
@@ -27,8 +31,11 @@ apiClient.interceptors.response.use(
 export const authAPI = {
   login: (email, password) => apiClient.post('/auth/login', { email, password }),
   register: (data) => apiClient.post('/auth/register', data),
+  socialLogin: (data) => apiClient.post('/auth/social', data),
   getMe: () => apiClient.get('/auth/me'),
   getStudents: () => apiClient.get('/auth/students'),
+  changePassword: (data) => apiClient.put('/auth/password', data),
+  deleteAccount: () => apiClient.delete('/auth/account'),
 };
 
 // 수행평가
@@ -63,9 +70,14 @@ export const logAPI = {
     apiClient.get(`/logs/student/${studentId}/assignment/${assignmentId}`),
 };
 
-// 수행평가 (assessments)
+// 수행평가 (assessments — teacher_db.assessments)
 export const assessmentAPI = {
   getMyInviteCode: () => apiClient.get('/assessments/invite-codes'),
+  getList: () => apiClient.get('/assessments'),
+  getDetail: (id) => apiClient.get(`/assessments/${id}`),
+  create: (data) => apiClient.post('/assessments', data),
+  remove: (id) => apiClient.delete(`/assessments/${id}`),
+  removeStep: (assessmentId, stepId) => apiClient.delete(`/assessments/${assessmentId}/steps/${stepId}`),
 };
 
 // 분석

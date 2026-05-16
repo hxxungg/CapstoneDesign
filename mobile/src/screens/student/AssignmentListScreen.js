@@ -9,7 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { THEME } from '../../config/api';
 
 export default function AssignmentListScreen({ navigation }) {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -78,9 +78,6 @@ export default function AssignmentListScreen({ navigation }) {
     <View style={styles.container}>
       <View style={styles.welcomeBox}>
         <Text style={styles.welcomeText}>안녕하세요, <Text style={styles.welcomeName}>{user?.name}</Text>님!</Text>
-        <TouchableOpacity onPress={logout}>
-          <Text style={styles.logoutText}>로그아웃</Text>
-        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -122,7 +119,6 @@ const styles = StyleSheet.create({
   },
   welcomeText: { fontSize: 15, color: THEME.text },
   welcomeName: { fontWeight: 'bold', color: THEME.primary },
-  logoutText: { fontSize: 13, color: THEME.textSecondary },
   list: { padding: 16 },
   card: {
     backgroundColor: THEME.card, borderRadius: 16, marginBottom: 14,
