@@ -257,4 +257,172 @@ router.get('/assignment/:assignmentId/student/:studentId', authenticateToken, re
   }
 });
 
+// ────────────────────────────────────────────────────────────────────────────
+// 신규 assessments 시스템 — 참여(participation)별 분석
+// ────────────────────────────────────────────────────────────────────────────
+
+function classifyPromptType(prompt) {
+  if (!prompt) return 'info';
+  const p = prompt.toLowerCase();
+  if (/요약|정리|summarize|summary/.test(p))                        return 'summary';
+  if (/비교|차이|compare|versus|vs\.?/.test(p))                     return 'compare';
+  if (/예측|전망|예상|predict|forecast/.test(p))                    return 'predict';
+  if (/평가|분석|evaluate|assess|critique|장단점|pros|cons/.test(p)) return 'evaluate';
+  if (/작성|생성|써줘|만들어|write|create|generate/.test(p))        return 'generate';
+  return 'info';
+}
+
+router.get('/participation/:id', authenticateToken, requireTeacher, async (req, res) => {
+  const participationId = parseInt(req.params.id);
+
+  try {
+    // 참여 레코드 + 수행평가 소유자 확인
+    const [pRows] = await pool.query(
+      `SELECT p.*, a.teacher_id, a.title AS assessment_title,
+              u.name AS student_name, u.email AS student_email
+       FROM student_db.participations p
+       JOIN teacher_db.assessments a ON p.assessment_id = a.id
+       JOIN capstonedesign.users u   ON p.student_id    = u.id
+       WHERE p.id = ?`,
+      [participationId]
+    );
+    if (pRows.length === 0) return res.status(404).json({ error: '참여 기록을 찾을 수 없습니다.' });
+
+    const [teacherRows] = await pool.query(
+      'SELECT id FROM teacher_db.teachers WHERE user_id = ?',
+      [req.user.id]
+    );
+    if (
+      teacherRows.length === 0 ||
+      Number(pRows[0].teacher_id) !== Number(teacherRows[0].id)
+    ) {
+      return res.status(403).json({ error: '권한이 없습니다.' });
+    }
+
+    const participation = pRows[0];
+
+    // 단계 목록
+    const [steps] = await pool.query(
+      `SELECT * FROM teacher_db.assessment_steps
+       WHERE assessment_id = ?
+       ORDER BY step_order`,
+      [participation.assessment_id]
+    );
+
+    // URL 로그
+    const [urlLogs] = await pool.query(
+      `SELECT ul.*, s.title AS step_title, s.step_order
+       FROM log_db.url_logs ul
+       LEFT JOIN teacher_db.assessment_steps s ON ul.step_id = s.id
+       WHERE ul.participation_id = ?
+       ORDER BY ul.visited_at`,
+      [participationId]
+    );
+
+    // AI 로그
+    const [aiLogs] = await pool.query(
+      `SELECT al.*, s.title AS step_title, s.step_order
+       FROM log_db.ai_logs al
+       LEFT JOIN teacher_db.assessment_steps s ON al.step_id = s.id
+       WHERE al.participation_id = ?
+       ORDER BY al.logged_at`,
+      [participationId]
+    );
+
+    // 이탈 시도
+    const [[{ exitCount }]] = await pool.query(
+      'SELECT COUNT(*) AS exitCount FROM log_db.exit_attempts WHERE student_id = ?',
+      [participation.student_id]
+    );
+
+    // 단계별 분석
+    const byStep = steps.map((step) => {
+      const stepUrlLogs = urlLogs.filter((l) => l.step_id === step.id);
+      const stepAiLogs  = aiLogs.filter((l) => l.step_id === step.id);
+
+      const toolsUsed = {};
+      stepUrlLogs.forEach((l) => {
+        const tool = detectAITool(l.url);
+        if (tool) toolsUsed[tool] = (toolsUsed[tool] || 0) + 1;
+      });
+
+      const promptTypes = {};
+      stepAiLogs.forEach((l) => {
+        const t = l.prompt_type || classifyPromptType(l.prompt);
+        promptTypes[t] = (promptTypes[t] || 0) + 1;
+      });
+
+      // URL 체류 시간: complete_at - visited_at
+      const totalDuration = stepUrlLogs.reduce((sum, l) => {
+        if (!l.visited_at || !l.complete_at) return sum;
+        const diff = (new Date(l.complete_at) - new Date(l.visited_at)) / 1000;
+        return sum + (diff > 0 ? diff : 0);
+      }, 0);
+
+      return {
+        step_id:        step.id,
+        step_title:     step.title,
+        step_order:     step.step_order,
+        ai_permission:  step.ai_permission,
+        url_count:      stepUrlLogs.length,
+        ai_prompt_count: stepAiLogs.length,
+        total_duration_seconds: Math.round(totalDuration),
+        tools_used:     toolsUsed,
+        prompt_types:   promptTypes,
+      };
+    });
+
+    // 전체 프롬프트 유형/수준 집계
+    const allPromptTypes  = {};
+    const allPromptLevels = {};
+    aiLogs.forEach((l) => {
+      const t = l.prompt_type || classifyPromptType(l.prompt);
+      allPromptTypes[t]  = (allPromptTypes[t]  || 0) + 1;
+      const lv = String(l.prompt_level || 1);
+      allPromptLevels[lv] = (allPromptLevels[lv] || 0) + 1;
+    });
+
+    // 전체 AI 도구 집계
+    const allTools = {};
+    urlLogs.forEach((l) => {
+      const tool = detectAITool(l.url);
+      if (tool) allTools[tool] = (allTools[tool] || 0) + 1;
+    });
+
+    // 검색 쿼리 추출 (Google/Naver 등)
+    const searchQueries = urlLogs
+      .filter((l) => /google\.com\/search|search\.naver\.com|bing\.com\/search/.test(l.url))
+      .map((l) => {
+        try {
+          const u = new URL(l.url);
+          return u.searchParams.get('q') || u.searchParams.get('query') || null;
+        } catch (e) { return null; }
+      })
+      .filter(Boolean);
+
+    res.json({
+      participation,
+      steps,
+      summary: {
+        total_url_visits:  urlLogs.length,
+        total_ai_prompts:  aiLogs.length,
+        total_exit_attempts: exitCount,
+        tools_used:        allTools,
+        prompt_types:      allPromptTypes,
+        prompt_levels:     allPromptLevels,
+        search_queries:    [...new Set(searchQueries)],
+      },
+      by_step:  byStep,
+      url_logs: urlLogs,
+      ai_logs:  aiLogs.map((l) => ({
+        ...l,
+        prompt_type: l.prompt_type || classifyPromptType(l.prompt),
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '서버 오류가 발생했습니다.' });
+  }
+});
+
 module.exports = router;

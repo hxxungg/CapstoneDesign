@@ -11,6 +11,21 @@ import { analyticsAPI } from '../../services/api';
 import { THEME } from '../../config/api';
 import { appAlert } from '../../utils/appAlert';
 
+const PROMPT_TYPE_LABEL = {
+  info:     '정보 요청',
+  summary:  '요약 요청',
+  compare:  '비교 요청',
+  predict:  '예측 요청',
+  evaluate: '평가 요청',
+  generate: '생성 요청',
+};
+
+const PROMPT_LEVEL_LABEL = {
+  '1': '단순 (30자 미만)',
+  '2': '중간 (30~100자)',
+  '3': '복잡 (100자 이상)',
+};
+
 const CAT_BG = {
   borrowed: 'rgba(248,113,113,0.35)',
   adapted: 'rgba(251,191,36,0.45)',
@@ -23,10 +38,12 @@ const CAT_BORDER = {
 };
 
 export default function StudentLogsScreen({ route }) {
-  const { studentId, studentName, assignmentId, assignmentTitle } = route.params;
+  const { studentId, studentName, assignmentId, assignmentTitle, participationId } = route.params;
   const [data, setData] = useState(null);
+  const [participationData, setParticipationData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
+  const [expandedAiLog, setExpandedAiLog] = useState(null);
 
   useEffect(() => {
     load();
@@ -34,8 +51,16 @@ export default function StudentLogsScreen({ route }) {
 
   const load = async () => {
     try {
-      const result = await analyticsAPI.getStudentAnalytics(assignmentId, studentId);
-      setData(result);
+      // 구 assignments 시스템 분석 (기존)
+      if (assignmentId) {
+        const result = await analyticsAPI.getStudentAnalytics(assignmentId, studentId);
+        setData(result);
+      }
+      // 신규 assessments 시스템 분석
+      if (participationId) {
+        const pResult = await analyticsAPI.getParticipationAnalytics(participationId);
+        setParticipationData(pResult);
+      }
     } catch (err) {
       appAlert('오류', err.message);
     } finally {
@@ -287,24 +312,178 @@ export default function StudentLogsScreen({ route }) {
         ))}
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>원시 활동 로그</Text>
-        {data?.logs?.length === 0 ? (
-          <Text style={styles.emptyText}>기록이 없습니다.</Text>
-        ) : (
-          data.logs.map((log, idx) => (
-            <View key={log.id ?? idx} style={styles.logRow}>
-              <Text style={styles.logTime}>{formatDate(log.created_at)}</Text>
-              <View style={{ flex: 1 }}>
-                {log.stage_title ? (
-                  <Text style={styles.logStage}>{log.stage_title}</Text>
-                ) : null}
-                <Text style={styles.logUrl} numberOfLines={2}>{log.url || log.page_title || '—'}</Text>
+      {/* ── 신규 assessments 시스템: AI 프롬프트 & 응답 로그 ── */}
+      {participationData && (
+        <>
+          {/* 요약 카드 */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>AI 활용 요약</Text>
+            <View style={styles.summaryGrid}>
+              <View style={styles.summaryGridItem}>
+                <Text style={styles.summaryGridValue}>{participationData.summary?.total_url_visits ?? 0}</Text>
+                <Text style={styles.summaryGridLabel}>URL 방문</Text>
+              </View>
+              <View style={styles.summaryGridItem}>
+                <Text style={styles.summaryGridValue}>{participationData.summary?.total_ai_prompts ?? 0}</Text>
+                <Text style={styles.summaryGridLabel}>AI 프롬프트</Text>
+              </View>
+              <View style={styles.summaryGridItem}>
+                <Text style={styles.summaryGridValue}>{participationData.summary?.total_exit_attempts ?? 0}</Text>
+                <Text style={styles.summaryGridLabel}>이탈 시도</Text>
               </View>
             </View>
-          ))
-        )}
-      </View>
+            {Object.keys(participationData.summary?.tools_used || {}).length > 0 && (
+              <View style={{ marginTop: 10 }}>
+                <Text style={styles.inlineLabel}>사용 AI 도구</Text>
+                <View style={styles.tagWrap}>
+                  {Object.entries(participationData.summary.tools_used).map(([tool, cnt]) => (
+                    <View key={tool} style={styles.toolTag}>
+                      <Text style={styles.toolTagText}>{tool} ({cnt})</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+            {participationData.summary?.search_queries?.length > 0 && (
+              <View style={{ marginTop: 10 }}>
+                <Text style={styles.inlineLabel}>검색어 목록</Text>
+                {participationData.summary.search_queries.map((q, i) => (
+                  <Text key={i} style={styles.searchQuery}>🔍 {q}</Text>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* 프롬프트 유형 / 수준 바 차트 */}
+          {Object.keys(participationData.summary?.prompt_types || {}).length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>프롬프트 유형 분포</Text>
+              {renderBarBlock(
+                Object.fromEntries(
+                  Object.entries(participationData.summary.prompt_types).map(
+                    ([k, v]) => [PROMPT_TYPE_LABEL[k] || k, v]
+                  )
+                ),
+                THEME.primary
+              )}
+              <Text style={[styles.sectionTitle, { marginTop: 14 }]}>프롬프트 수준 분포</Text>
+              {renderBarBlock(
+                Object.fromEntries(
+                  Object.entries(participationData.summary.prompt_levels || {}).map(
+                    ([k, v]) => [PROMPT_LEVEL_LABEL[k] || `수준 ${k}`, v]
+                  )
+                ),
+                '#6366F1'
+              )}
+            </View>
+          )}
+
+          {/* AI 프롬프트 & 응답 목록 */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>AI 프롬프트 & 응답 전체 기록</Text>
+            <Text style={styles.sectionSub}>탭하면 응답 내용을 펼칩니다.</Text>
+            {participationData.ai_logs?.length === 0 ? (
+              <Text style={styles.emptyText}>AI 프롬프트 기록이 없습니다.</Text>
+            ) : (
+              participationData.ai_logs.map((log, idx) => {
+                const isExpanded = expandedAiLog === log.id;
+                return (
+                  <TouchableOpacity
+                    key={log.id ?? idx}
+                    style={styles.aiLogCard}
+                    activeOpacity={0.75}
+                    onPress={() => setExpandedAiLog(isExpanded ? null : log.id)}
+                  >
+                    <View style={styles.aiLogHeader}>
+                      <View style={styles.aiLogMeta}>
+                        <Text style={styles.aiLogTime}>{formatDate(log.logged_at)}</Text>
+                        {log.step_title ? (
+                          <Text style={styles.aiLogStep}>{log.step_title}</Text>
+                        ) : null}
+                      </View>
+                      <View style={styles.aiLogTags}>
+                        <View style={[styles.tag, { backgroundColor: THEME.primary }]}>
+                          <Text style={styles.tagText}>
+                            {PROMPT_TYPE_LABEL[log.prompt_type] || log.prompt_type || 'info'}
+                          </Text>
+                        </View>
+                        <View style={[styles.tag, { backgroundColor: '#6366F1' }]}>
+                          <Text style={styles.tagText}>
+                            수준 {log.prompt_level || 1}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                    <Text style={styles.aiPromptText}>💬 {log.prompt}</Text>
+                    {isExpanded && log.response ? (
+                      <View style={styles.aiResponseBox}>
+                        <Text style={styles.aiResponseLabel}>AI 응답</Text>
+                        <Text style={styles.aiResponseText}>{log.response}</Text>
+                      </View>
+                    ) : isExpanded && !log.response ? (
+                      <Text style={styles.aiResponseEmpty}>응답이 기록되지 않았습니다.</Text>
+                    ) : null}
+                    <Text style={styles.aiLogUrl} numberOfLines={1}>{log.url}</Text>
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </View>
+
+          {/* URL 방문 기록 */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>URL 방문 기록</Text>
+            {participationData.url_logs?.length === 0 ? (
+              <Text style={styles.emptyText}>방문 기록이 없습니다.</Text>
+            ) : (
+              participationData.url_logs.map((log, idx) => {
+                const duration =
+                  log.visited_at && log.complete_at
+                    ? Math.round((new Date(log.complete_at) - new Date(log.visited_at)) / 1000)
+                    : null;
+                return (
+                  <View key={log.id ?? idx} style={styles.logRow}>
+                    <Text style={styles.logTime}>{formatDate(log.visited_at)}</Text>
+                    <View style={{ flex: 1 }}>
+                      {log.step_title ? (
+                        <Text style={styles.logStage}>{log.step_title}</Text>
+                      ) : null}
+                      <Text style={styles.logUrl} numberOfLines={2}>
+                        {log.page_title || log.url || '—'}
+                      </Text>
+                      {duration !== null ? (
+                        <Text style={styles.logDuration}>체류: {duration}초</Text>
+                      ) : null}
+                    </View>
+                  </View>
+                );
+              })
+            )}
+          </View>
+        </>
+      )}
+
+      {/* 구 시스템: 원시 활동 로그 */}
+      {data?.logs && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>원시 활동 로그</Text>
+          {data.logs.length === 0 ? (
+            <Text style={styles.emptyText}>기록이 없습니다.</Text>
+          ) : (
+            data.logs.map((log, idx) => (
+              <View key={log.id ?? idx} style={styles.logRow}>
+                <Text style={styles.logTime}>{formatDate(log.created_at)}</Text>
+                <View style={{ flex: 1 }}>
+                  {log.stage_title ? (
+                    <Text style={styles.logStage}>{log.stage_title}</Text>
+                  ) : null}
+                  <Text style={styles.logUrl} numberOfLines={2}>{log.url || log.page_title || '—'}</Text>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+      )}
 
       <View style={{ height: 48 }} />
     </ScrollView>
@@ -464,5 +643,45 @@ const styles = StyleSheet.create({
   logTime: { width: 72, fontSize: 11, color: THEME.textSecondary },
   logStage: { fontSize: 11, fontWeight: '600', color: THEME.primary, marginBottom: 2 },
   logUrl: { fontSize: 11, color: THEME.textSecondary },
+  logDuration: { fontSize: 10, color: THEME.textSecondary, marginTop: 2 },
   emptyText: { fontSize: 13, color: THEME.textSecondary, textAlign: 'center', paddingVertical: 12 },
+
+  // AI 로그
+  summaryGrid: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  summaryGridItem: {
+    flex: 1, backgroundColor: THEME.background, borderRadius: 10,
+    padding: 10, alignItems: 'center', borderWidth: 1, borderColor: THEME.border,
+  },
+  summaryGridValue: { fontSize: 22, fontWeight: '800', color: THEME.primary },
+  summaryGridLabel: { fontSize: 11, color: THEME.textSecondary, marginTop: 2 },
+  inlineLabel: { fontSize: 12, fontWeight: '700', color: THEME.text, marginBottom: 6 },
+  tagWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  toolTag: {
+    backgroundColor: THEME.primaryLight, borderRadius: 12,
+    paddingHorizontal: 10, paddingVertical: 4,
+    borderWidth: 1, borderColor: THEME.primary,
+  },
+  toolTagText: { fontSize: 11, color: THEME.primary, fontWeight: '600' },
+  searchQuery: { fontSize: 12, color: THEME.text, paddingVertical: 3 },
+  aiLogCard: {
+    backgroundColor: THEME.background, borderRadius: 12,
+    borderWidth: 1, borderColor: THEME.border,
+    padding: 12, marginBottom: 10,
+  },
+  aiLogHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
+  aiLogMeta: { flex: 1 },
+  aiLogTime: { fontSize: 11, color: THEME.textSecondary },
+  aiLogStep: { fontSize: 11, fontWeight: '600', color: THEME.primary, marginTop: 2 },
+  aiLogTags: { flexDirection: 'row', gap: 4 },
+  tag: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  tagText: { fontSize: 10, color: '#fff', fontWeight: '700' },
+  aiPromptText: { fontSize: 13, color: THEME.text, lineHeight: 20, marginBottom: 6 },
+  aiResponseBox: {
+    backgroundColor: THEME.card, borderRadius: 8, padding: 10,
+    borderLeftWidth: 3, borderLeftColor: THEME.primary, marginTop: 6,
+  },
+  aiResponseLabel: { fontSize: 10, fontWeight: '700', color: THEME.primary, marginBottom: 4 },
+  aiResponseText: { fontSize: 12, color: THEME.text, lineHeight: 18 },
+  aiResponseEmpty: { fontSize: 11, color: THEME.textSecondary, fontStyle: 'italic', marginTop: 4 },
+  aiLogUrl: { fontSize: 10, color: THEME.textSecondary, marginTop: 4 },
 });

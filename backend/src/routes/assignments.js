@@ -28,11 +28,16 @@ router.get('/', authenticateToken, async (req, res) => {
       return res.json(result);
     }
 
-    // 학생
-    const [studentAssignments] = await pool.query(
-      'SELECT * FROM student_db.student_assignments WHERE student_id = ?',
-      [req.user.id]
-    );
+    // 학생 (student_assignments 테이블이 없을 수 있으므로 오류 시 빈 배열 반환)
+    let studentAssignments = [];
+    try {
+      [studentAssignments] = await pool.query(
+        'SELECT * FROM student_db.student_assignments WHERE student_id = ?',
+        [req.user.id]
+      );
+    } catch (tableErr) {
+      return res.json([]);
+    }
 
     const result = await Promise.all(studentAssignments.map(async (sa) => {
       const [aRows] = await pool.query(

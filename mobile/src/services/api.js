@@ -64,10 +64,19 @@ export const stageAPI = {
 
 // 로그
 export const logAPI = {
-  record: (data) => apiClient.post('/logs', data),
+  /** URL 방문 기록 (신규 assessments 시스템) */
+  recordUrl: (data) => apiClient.post('/logs/url', data),
+  /** AI 프롬프트 기록 (신규 assessments 시스템) */
+  recordAi: (data) => apiClient.post('/logs/ai', data),
+  /** AI 응답 추가 업데이트 */
+  updateAiResponse: (id, data) => apiClient.patch(`/logs/ai/${id}/response`, data),
+  /** 이탈 시도 기록 (신규) */
+  recordExit: (data) => apiClient.post('/logs/exit', data),
+  /** 이탈 시도 기록 (하위 호환) */
   recordExitAttempt: (data) => apiClient.post('/logs/exit-attempt', data),
-  getStudentLogs: (studentId, assignmentId) =>
-    apiClient.get(`/logs/student/${studentId}/assignment/${assignmentId}`),
+  /** 교사: 참여별 로그 전체 조회 */
+  getParticipationLogs: (participationId) =>
+    apiClient.get(`/logs/participation/${participationId}`),
 };
 
 // 수행평가 (assessments — teacher_db.assessments)
@@ -78,14 +87,27 @@ export const assessmentAPI = {
   create: (data) => apiClient.post('/assessments', data),
   remove: (id) => apiClient.delete(`/assessments/${id}`),
   removeStep: (assessmentId, stepId) => apiClient.delete(`/assessments/${assessmentId}/steps/${stepId}`),
+  /** 학생: invite_code로 수행평가 참여 → participation 레코드 생성 */
+  join: (invite_code) => apiClient.post('/assessments/join', { invite_code }),
+  /** 학생: 내 참여 목록 조회 */
+  getMyParticipations: () => apiClient.get('/assessments/my-participations'),
+  /** 학생: 참여 상세(단계 목록 포함) 조회 */
+  getParticipationDetail: (participationId) =>
+    apiClient.get(`/assessments/participation/${participationId}`),
+  /** 학생: 단계 제출 + 다음 단계 진행 */
+  submitStep: (participationId, data) =>
+    apiClient.post(`/assessments/participation/${participationId}/submit`, data),
 };
 
 // 분석
 export const analyticsAPI = {
   getAssignmentAnalytics: (id) => apiClient.get(`/analytics/assignment/${id}`),
-  /** 교사: 학생별 상세 + 종합 리포트(comprehensive_report) */
+  /** 교사: 학생별 상세 + 종합 리포트(comprehensive_report) — 구 assignments 시스템 */
   getStudentAnalytics: (assignmentId, studentId) =>
     apiClient.get(`/analytics/assignment/${assignmentId}/student/${studentId}`),
+  /** 교사: 신규 assessments 시스템 — 참여별 AI·URL 로그 분석 */
+  getParticipationAnalytics: (participationId) =>
+    apiClient.get(`/analytics/participation/${participationId}`),
 };
 
 export default apiClient;

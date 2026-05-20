@@ -5,7 +5,7 @@ import {
   BackHandler, AppState, Linking, TextInput, Keyboard,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { assignmentAPI, logAPI } from '../../services/api';
+import { assignmentAPI, assessmentAPI, logAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { THEME, INAPP_BROWSER_HOME } from '../../config/api';
 import {
@@ -14,6 +14,7 @@ import {
   getStudentAiBadgeColor,
 } from '../../config/defaultPerformanceStages';
 import ExitWarningModal from '../../components/ExitWarningModal';
+import { WEBVIEW_LOG_SCRIPT } from '../../utils/webviewInjection';
 
 let WebView = null;
 if (Platform.OS !== 'web') {
@@ -35,7 +36,15 @@ const PANEL_INITIAL_TOP = Platform.OS === 'ios' ? 90 : 76;
 const PANEL_INITIAL_LEFT = Math.max(PANEL_MARGIN, SCREEN_WIDTH - PANEL_INITIAL_WIDTH - 14);
 
 export default function WorkScreen({ navigation, route }) {
-  const { assignment: initialAssignment } = route.params;
+  // participation_id / step_id: 신규 assessments 시스템 (선택적)
+  const {
+    assignment: initialAssignment,
+    participation_id,
+    step_id,
+    stage: initialStage,       // 신규 시스템에서 전달되는 단계 객체
+    assessment: initialAssessment, // 신규 시스템에서 전달되는 수행평가 기본 정보
+  } = route.params;
+  const isNewSystem = !!participation_id;
   const { user } = useAuth();
 
   const [assignment, setAssignment] = useState(null);
@@ -61,12 +70,14 @@ export default function WorkScreen({ navigation, route }) {
     height: PANEL_INITIAL_HEIGHT,
   });
 
-  const webViewRef = useRef(null);
-  const splitRatioRef = useRef(DEFAULT_RATIO);
-  const panStartRatioRef = useRef(DEFAULT_RATIO);
-  const pageStartTimeRef = useRef(Date.now());
-  const lastLoggedUrlRef = useRef(null);
-  const appStateRef = useRef(AppState.currentState);
+  const webViewRef          = useRef(null);
+  const splitRatioRef       = useRef(DEFAULT_RATIO);
+  const panStartRatioRef    = useRef(DEFAULT_RATIO);
+  const pageStartTimeRef    = useRef(Date.now());
+  const visitedAtRef        = useRef(new Date().toISOString());
+  const lastLoggedUrlRef    = useRef(null);
+  const pendingAiLogIdRef   = useRef(null);
+  const appStateRef         = useRef(AppState.currentState);
   const saveWritingTimerRef = useRef(null);
   const writingTextRef = useRef('');
   const panelDragStartRef = useRef({ x: PANEL_INITIAL_LEFT, y: PANEL_INITIAL_TOP });
@@ -81,14 +92,35 @@ export default function WorkScreen({ navigation, route }) {
 
   const loadAssignment = async () => {
     try {
-      const data = await assignmentAPI.getDetail(initialAssignment.id);
-      setAssignment(data);
-
-      const stageOrder = data.studentProgress?.current_stage_order || 1;
-      const stage = data.stages?.find(s => s.order_num === stageOrder);
-      if (stageAllowsAiBrowser(stage)) {
-        setAiUrl(INAPP_BROWSER_HOME);
-        setAddressDraft(INAPP_BROWSER_HOME);
+      if (isNewSystem) {
+        // 신규 시스템: StageListScreen에서 넘겨준 stage/assessment 파라미터로 가상 객체 생성
+        const s = initialStage;
+        const syntheticStage = s ? { ...s, order_num: s.step_order } : null;
+        const syntheticAssignment = {
+          id: initialAssessment?.id,
+          title: initialAssessment?.title,
+          studentProgress: {
+            current_stage_order: s?.step_order || 1,
+            status: 'in_progress',
+          },
+          stages: syntheticStage ? [syntheticStage] : [],
+          stageWritings: {},
+        };
+        setAssignment(syntheticAssignment);
+        if (stageAllowsAiBrowser(syntheticStage)) {
+          setAiUrl(INAPP_BROWSER_HOME);
+          setAddressDraft(INAPP_BROWSER_HOME);
+        }
+      } else {
+        // 구 시스템
+        const data = await assignmentAPI.getDetail(initialAssignment.id);
+        setAssignment(data);
+        const stageOrder = data.studentProgress?.current_stage_order || 1;
+        const stage = data.stages?.find(s => s.order_num === stageOrder);
+        if (stageAllowsAiBrowser(stage)) {
+          setAiUrl(INAPP_BROWSER_HOME);
+          setAddressDraft(INAPP_BROWSER_HOME);
+        }
       }
     } catch (err) {
       Alert.alert('오류', err.message);
@@ -149,29 +181,103 @@ export default function WorkScreen({ navigation, route }) {
     setShowExitModal(true);
     try {
       await logAPI.recordExitAttempt({
-        assignment_id: assignment?.id || initialAssignment.id,
+        assignment_id: assignment?.id || initialAssignment?.id,
         attempt_type: type,
       });
     } catch (err) {}
   };
 
-  const logPageVisit = async (url, title, duration = 0) => {
-    if (!url || url === lastLoggedUrlRef.current || !currentStage) return;
-    lastLoggedUrlRef.current = url;
+  // ── 신규: URL 방문 로그 ──────────────────────────────────────────
+  const logUrl = async (url, title, visitedAt, completeAt) => {
+    if (!participation_id || !url) return;
     try {
-      await logAPI.record({
-        assignment_id: assignment.id,
-        stage_id: currentStage.id,
-        stage_order: currentStage.order_num,
-        action_type: 'page_visit',
+      await logAPI.recordUrl({
+        participation_id,
+        step_id: step_id || null,
         url,
         page_title: title || '',
-        duration_seconds: Math.floor(duration / 1000),
+        visited_at: visitedAt,
+        complete_at: completeAt,
       });
-    } catch (err) {}
+    } catch (err) {
+      console.log('URL 로그 실패:', err.message);
+    }
+  };
+
+  // ── 신규: AI 프롬프트 로그 ───────────────────────────────────────
+  const logAiPrompt = async (prompt, url) => {
+    if (!participation_id || !prompt) return null;
+    try {
+      const result = await logAPI.recordAi({
+        participation_id,
+        step_id: step_id || null,
+        prompt,
+      });
+      return result?.id || null;
+    } catch (err) {
+      console.log('AI 로그 실패:', err.message);
+      return null;
+    }
+  };
+
+  // ── 신규: AI 응답 업데이트 ───────────────────────────────────────
+  const updateAiResponse = async (logId, response) => {
+    if (!logId || !response) return;
+    try {
+      await logAPI.updateAiResponse(logId, { response });
+    } catch (err) {
+      console.log('AI 응답 업데이트 실패:', err.message);
+    }
+  };
+
+  // ── WebView → RN 메시지 수신 ─────────────────────────────────────
+  const handleWebViewMessage = async (data) => {
+    let msg;
+    try { msg = typeof data === 'string' ? JSON.parse(data) : data; }
+    catch (e) { return; }
+
+    switch (msg.type) {
+      case 'page_load': {
+        if (lastLoggedUrlRef.current && lastLoggedUrlRef.current !== msg.url) {
+          await logUrl(
+            lastLoggedUrlRef.current,
+            aiUrl,
+            visitedAtRef.current,
+            new Date().toISOString()
+          );
+        }
+        visitedAtRef.current    = msg.visited_at || new Date().toISOString();
+        lastLoggedUrlRef.current = msg.url;
+        break;
+      }
+      case 'ai_prompt': {
+        const logId = await logAiPrompt(msg.prompt, msg.url);
+        if (logId) {
+          pendingAiLogIdRef.current = logId;
+          webViewRef.current?.injectJavaScript(
+            `window._setPendingAiLogId(${logId}); true;`
+          );
+        }
+        break;
+      }
+      case 'ai_response': {
+        const id = msg.log_id || pendingAiLogIdRef.current;
+        await updateAiResponse(id, msg.response);
+        pendingAiLogIdRef.current = null;
+        break;
+      }
+      default:
+        break;
+    }
   };
 
   const persistStageWriting = async (assignmentId, stageId, text) => {
+    // 신규 시스템은 별도 저장 엔드포인트 미사용
+    if (isNewSystem) {
+      setWritingSaveStatus('saved');
+      setTimeout(() => setWritingSaveStatus((s) => (s === 'saved' ? 'idle' : s)), 1600);
+      return true;
+    }
     if (!assignmentId || !stageId) return true;
     setWritingSaveStatus('saving');
     try {
@@ -196,6 +302,45 @@ export default function WorkScreen({ navigation, route }) {
 
   const handleAdvanceStage = async () => {
     if (!assignment) return;
+
+    if (isNewSystem) {
+      // 작성 내용 저장 타이머 flush
+      if (saveWritingTimerRef.current) {
+        clearTimeout(saveWritingTimerRef.current);
+        saveWritingTimerRef.current = null;
+      }
+      try {
+        const result = await assessmentAPI.submitStep(participation_id, {
+          step_id: step_id || null,
+          content: writingTextRef.current,
+        });
+
+        if (result.status === 'submitted') {
+          Alert.alert('🎉 수행평가 완료!', '모든 단계를 완료하여 제출되었습니다. 수고하셨습니다!', [
+            { text: '확인', onPress: () => navigation.goBack() },
+          ]);
+        } else {
+          // 다음 단계 정보로 WorkScreen 갱신
+          const nextStage = result.next_step_info;
+          const syntheticStage = nextStage ? { ...nextStage, order_num: nextStage.step_order } : null;
+          setAssignment(prev => ({
+            ...prev,
+            studentProgress: {
+              current_stage_order: result.next_step,
+              status: 'in_progress',
+            },
+            stages: syntheticStage ? [syntheticStage] : prev.stages,
+            stageWritings: {},
+          }));
+          setWritingText('');
+          Alert.alert('단계 완료', result.message || `${result.next_step}단계로 이동했습니다.`);
+        }
+      } catch (err) {
+        Alert.alert('오류', err.message);
+      }
+      return;
+    }
+
     const order = assignment.studentProgress?.current_stage_order || 1;
     const stage = assignment.stages?.find((s) => s.order_num === order);
     if (stage) {
@@ -519,13 +664,24 @@ export default function WorkScreen({ navigation, route }) {
                     onLoadStart={() => setAiPageLoading(true)}
                     onLoadEnd={(e) => {
                       setAiPageLoading(false);
-                      logPageVisit(e.nativeEvent.url, e.nativeEvent.title, 0);
+                      // duration 버그 수정: completeAt을 현재 시각으로 기록
+                      logUrl(
+                        e.nativeEvent.url,
+                        e.nativeEvent.title,
+                        visitedAtRef.current,
+                        new Date().toISOString()
+                      );
                     }}
                     onNavigationStateChange={(state) => {
                       setCanWebViewGoBack(state.canGoBack);
                       if (state.url && state.url !== aiUrl) {
+                        // 이전 URL 체류 완료
+                        logUrl(aiUrl, state.title || '', visitedAtRef.current, new Date().toISOString());
                         setAiUrl(state.url);
                         setAddressDraft(state.url);
+                        visitedAtRef.current    = new Date().toISOString();
+                        lastLoggedUrlRef.current = null;
+                        pageStartTimeRef.current = Date.now();
                       }
                     }}
                     onShouldStartLoadWithRequest={(req) => {
@@ -539,6 +695,8 @@ export default function WorkScreen({ navigation, route }) {
                       }
                       return true;
                     }}
+                    injectedJavaScript={WEBVIEW_LOG_SCRIPT}
+                    onMessage={(e) => handleWebViewMessage(e.nativeEvent.data)}
                     javaScriptEnabled
                     domStorageEnabled
                     userAgent="Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"

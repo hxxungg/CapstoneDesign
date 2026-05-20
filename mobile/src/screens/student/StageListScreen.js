@@ -4,25 +4,46 @@ import {
   Alert, ActivityIndicator, BackHandler, AppState,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { assignmentAPI, logAPI } from '../../services/api';
+import { assignmentAPI, assessmentAPI, logAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { THEME } from '../../config/api';
 import { stageAllowsAiBrowser, getTeacherAiModeStyle } from '../../config/defaultPerformanceStages';
 import ExitWarningModal from '../../components/ExitWarningModal';
 
 export default function StageListScreen({ navigation, route }) {
-  const { assignment: initialAssignment } = route.params;
+  // 구 시스템: route.params.assignment
+  // 신규 시스템: route.params.participation_id + (assessment_id, title)
+  const { assignment: initialAssignment, participation_id, assessment_id } = route.params || {};
+  const isNewSystem = !!participation_id;
+
   const { user } = useAuth();
-  const [assignment, setAssignment] = useState(null);
+  const [data, setData] = useState(null);   // 공통 표시 데이터
   const [loading, setLoading] = useState(true);
   const [showExitModal, setShowExitModal] = useState(false);
   const [exitAttemptCount, setExitAttemptCount] = useState(0);
   const appStateRef = React.useRef(AppState.currentState);
 
-  const loadAssignment = async () => {
+  const loadData = async () => {
     try {
-      const data = await assignmentAPI.getDetail(initialAssignment.id);
-      setAssignment(data);
+      if (isNewSystem) {
+        // 신규 assessments 시스템
+        const res = await assessmentAPI.getParticipationDetail(participation_id);
+        setData({
+          _type: 'assessment',
+          id: res.assessment_id,
+          participation_id: res.participation_id,
+          title: res.title,
+          description: res.description,
+          subject: res.subject,
+          status: res.status,
+          current_step: res.current_step || 1,
+          steps: res.steps || [],
+        });
+      } else {
+        // 구 assignments 시스템
+        const res = await assignmentAPI.getDetail(initialAssignment.id);
+        setData({ _type: 'assignment', ...res });
+      }
     } catch (err) {
       Alert.alert('오류', err.message);
     } finally {
@@ -30,11 +51,7 @@ export default function StageListScreen({ navigation, route }) {
     }
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      loadAssignment();
-    }, [])
-  );
+  useFocusEffect(useCallback(() => { loadData(); }, []));
 
   // 뒤로가기 버튼 차단
   useFocusEffect(
@@ -45,7 +62,7 @@ export default function StageListScreen({ navigation, route }) {
       };
       const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
       return () => subscription.remove();
-    }, [assignment])
+    }, [data])
   );
 
   // 앱 백그라운드 전환 감지
@@ -57,15 +74,14 @@ export default function StageListScreen({ navigation, route }) {
       appStateRef.current = nextState;
     });
     return () => subscription.remove();
-  }, [assignment]);
+  }, [data]);
 
   const handleExitAttempt = async (type) => {
     setExitAttemptCount(prev => prev + 1);
     setShowExitModal(true);
-
     try {
       await logAPI.recordExitAttempt({
-        assignment_id: assignment?.id || initialAssignment.id,
+        assignment_id: data?.id || initialAssignment?.id,
         attempt_type: type,
       });
     } catch (err) {
@@ -73,30 +89,47 @@ export default function StageListScreen({ navigation, route }) {
     }
   };
 
-  const currentStage = assignment?.studentProgress?.current_stage_order || 1;
+  // ── 구 시스템 ──────────────────────────────────────────────────
+  const currentStage = isNewSystem
+    ? (data?.current_step || 1)
+    : (data?.studentProgress?.current_stage_order || 1);
 
   const getStageStatus = (stage) => {
-    if (stage.order_num < currentStage) return 'completed';
-    if (stage.order_num === currentStage) return 'current';
+    const order = isNewSystem ? stage.step_order : stage.order_num;
+    if (order < currentStage) return 'completed';
+    if (order === currentStage) return 'current';
     return 'locked';
   };
 
-  const handleStartStage = () => {
-    navigation.navigate('Work', {
-      assignment: { id: assignment.id, title: assignment.title },
-    });
+  const handleStartStage = (stage) => {
+    if (isNewSystem) {
+      navigation.navigate('Work', {
+        participation_id: data.participation_id,
+        step_id: stage.id,
+        assessment: { id: data.id, title: data.title },
+        stage: stage,
+      });
+    } else {
+      navigation.navigate('Work', {
+        assignment: { id: data.id, title: data.title },
+      });
+    }
   };
 
   const handleAdvanceStage = async () => {
-    if (!assignment) return;
+    if (!data) return;
+    if (isNewSystem) {
+      Alert.alert('안내', '현재 단계를 완료하고 다음 단계로 이동합니다.');
+      return;
+    }
     try {
-      const result = await assignmentAPI.updateProgress(assignment.id, {
+      const result = await assignmentAPI.updateProgress(data.id, {
         next_stage_order: currentStage + 1,
       });
       if (result.status === 'completed') {
         Alert.alert('🎉 수행평가 완료!', '모든 단계를 완료했습니다. 수고하셨습니다!');
       }
-      loadAssignment();
+      loadData();
     } catch (err) {
       Alert.alert('오류', err.message);
     }
@@ -110,8 +143,15 @@ export default function StageListScreen({ navigation, route }) {
     );
   }
 
-  const stages = assignment?.stages || [];
-  const isCompleted = assignment?.studentProgress?.status === 'completed';
+  const stages = isNewSystem ? (data?.steps || []) : (data?.stages || []);
+  const isCompleted = isNewSystem
+    ? (data?.status === 'submitted' || data?.status === 'graded')
+    : (data?.studentProgress?.status === 'completed');
+
+  const getStageOrder = (stage) => isNewSystem ? stage.step_order : stage.order_num;
+  const getStageName = (stage) => stage.title;
+  const getStageDesc = (stage) => stage.description;
+  const getStageGuidance = () => null;
 
   return (
     <View style={styles.container}>
@@ -122,11 +162,13 @@ export default function StageListScreen({ navigation, route }) {
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* 수행평가 헤더 */}
+        {/* 헤더 */}
         <View style={styles.assignmentHeader}>
-          {assignment?.subject && <Text style={styles.subject}>{assignment.subject}</Text>}
-          <Text style={styles.assignmentTitle}>{assignment?.title}</Text>
-          {assignment?.description && <Text style={styles.assignmentDesc}>{assignment.description}</Text>}
+          {data?.subject && <Text style={styles.subject}>{data.subject}</Text>}
+          <Text style={styles.assignmentTitle}>{data?.title}</Text>
+          {data?.description && (
+            <Text style={styles.assignmentDesc}>{data.description}</Text>
+          )}
           <View style={styles.progressInfo}>
             <Text style={styles.progressText}>
               {isCompleted ? '✅ 완료' : `진행 중: ${currentStage}/${stages.length} 단계`}
@@ -142,22 +184,29 @@ export default function StageListScreen({ navigation, route }) {
           </Text>
         </View>
 
-        {/* 단계 목록 */}
         <Text style={styles.sectionTitle}>단계별 진행</Text>
 
         {stages.map((stage) => {
           const status = getStageStatus(stage);
           const aiStyle = getTeacherAiModeStyle(THEME, stage);
+          const order = getStageOrder(stage);
+          const name = getStageName(stage);
+          const desc = getStageDesc(stage);
+          const guidance = getStageGuidance(stage);
+
           return (
-            <View key={stage.id} style={[styles.stageCard, status === 'locked' && styles.stageCardLocked]}>
+            <View
+              key={stage.id}
+              style={[styles.stageCard, status === 'locked' && styles.stageCardLocked]}
+            >
               <View style={styles.stageHeader}>
                 <View style={styles.stageOrderBadge}>
                   <Text style={styles.stageOrderText}>
-                    {status === 'completed' ? '✓' : stage.order_num}
+                    {status === 'completed' ? '✓' : order}
                   </Text>
                 </View>
                 <View style={styles.stageTitleSection}>
-                  <Text style={styles.stageTitleText}>{stage.title}</Text>
+                  <Text style={styles.stageTitleText}>{name}</Text>
                   <View style={[styles.aiStatusBadge, { backgroundColor: aiStyle.bg }]}>
                     <Text style={[styles.aiStatusText, { color: aiStyle.color }]}>
                       {aiStyle.label}
@@ -166,22 +215,22 @@ export default function StageListScreen({ navigation, route }) {
                 </View>
               </View>
 
-              {stage.description && (
-                <Text style={styles.stageDescription}>{stage.description}</Text>
-              )}
+              {desc ? (
+                <Text style={styles.stageDescription}>{desc}</Text>
+              ) : null}
 
-              {stage.ai_guidance && (
+              {guidance ? (
                 <View style={styles.guidanceBox}>
                   <Text style={styles.guidanceTitle}>📌 AI 활용 지침</Text>
-                  <Text style={styles.guidanceText}>{stage.ai_guidance}</Text>
+                  <Text style={styles.guidanceText}>{guidance}</Text>
                 </View>
-              )}
+              ) : null}
 
               {status === 'current' && !isCompleted && (
                 <View style={styles.stageActions}>
                   <TouchableOpacity
                     style={styles.browserButton}
-                    onPress={handleStartStage}
+                    onPress={() => handleStartStage(stage)}
                   >
                     <Text style={styles.browserButtonText}>
                       {stageAllowsAiBrowser(stage) ? '🌐 단계 시작 (AI·웹)' : '📝 단계 시작'}

@@ -71,6 +71,154 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
   }
 });
 
+// 학생: 내 참여 목록 조회 — /:id 보다 반드시 먼저 등록
+router.get('/my-participations', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'student') {
+    return res.status(403).json({ error: '학생 전용 API입니다.' });
+  }
+
+  try {
+    const [sRows] = await pool.query(
+      'SELECT id FROM student_db.students WHERE user_id = ?',
+      [req.user.id]
+    );
+    if (sRows.length === 0) return res.json([]);
+
+    const [rows] = await pool.query(
+      `SELECT p.*, a.title AS assessment_title, a.description AS assessment_description,
+              a.invite_code, a.status AS assessment_status,
+              (SELECT COUNT(*) FROM teacher_db.assessment_steps WHERE assessment_id = a.id) AS total_steps
+       FROM student_db.participations p
+       JOIN teacher_db.assessments a ON p.assessment_id = a.id
+       WHERE p.student_id = ?
+       ORDER BY p.created_at DESC`,
+      [sRows[0].id]
+    );
+
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// 학생: 참여 상세 조회 (단계 목록 포함) — /:id 보다 반드시 먼저 등록
+router.get('/participation/:participationId', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'student') {
+    return res.status(403).json({ error: '학생 전용 API입니다.' });
+  }
+
+  const participationId = parseInt(req.params.participationId, 10);
+  if (isNaN(participationId)) return res.status(400).json({ error: '잘못된 ID입니다.' });
+
+  try {
+    // 본인 참여인지 확인
+    const [sRows] = await pool.query(
+      'SELECT id FROM student_db.students WHERE user_id = ?',
+      [req.user.id]
+    );
+    if (sRows.length === 0) return res.status(404).json({ error: '학생 정보를 찾을 수 없습니다.' });
+
+    const [pRows] = await pool.query(
+      `SELECT p.*, a.title AS assessment_title, a.description AS assessment_description,
+              a.invite_code
+       FROM student_db.participations p
+       JOIN teacher_db.assessments a ON p.assessment_id = a.id
+       WHERE p.id = ? AND p.student_id = ?`,
+      [participationId, sRows[0].id]
+    );
+    if (pRows.length === 0) return res.status(404).json({ error: '참여 정보를 찾을 수 없습니다.' });
+
+    const participation = pRows[0];
+
+    const [steps] = await pool.query(
+      'SELECT * FROM teacher_db.assessment_steps WHERE assessment_id = ? ORDER BY step_order',
+      [participation.assessment_id]
+    );
+
+    res.json({
+      participation_id: participation.id,
+      assessment_id: participation.assessment_id,
+      title: participation.assessment_title,
+      description: participation.assessment_description,
+      invite_code: participation.invite_code,
+      status: participation.status,
+      current_step: participation.current_step,
+      steps: steps.map(s => ({ ...s, ai_mode: toFrontendAiMode(s.ai_permission) })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// 학생: invite_code로 수행평가 참여 — /:id 보다 반드시 먼저 등록
+router.post('/join', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'student') {
+    return res.status(403).json({ error: '학생만 수행평가에 참여할 수 있습니다.' });
+  }
+
+  const { invite_code } = req.body;
+  if (!invite_code?.trim()) {
+    return res.status(400).json({ error: '초대 코드를 입력해주세요.' });
+  }
+
+  try {
+    const [aRows] = await pool.query(
+      "SELECT * FROM teacher_db.assessments WHERE invite_code = ? AND status = 'active'",
+      [invite_code.trim().toUpperCase()]
+    );
+    if (aRows.length === 0) {
+      return res.status(404).json({ error: '유효하지 않은 초대 코드입니다.' });
+    }
+    const assessment = aRows[0];
+
+    const [sRows] = await pool.query(
+      'SELECT id FROM student_db.students WHERE user_id = ?',
+      [req.user.id]
+    );
+    if (sRows.length === 0) {
+      return res.status(404).json({ error: '학생 정보를 찾을 수 없습니다.' });
+    }
+    const studentId = sRows[0].id;
+
+    const [existing] = await pool.query(
+      'SELECT id, status FROM student_db.participations WHERE assessment_id = ? AND student_id = ?',
+      [assessment.id, studentId]
+    );
+    if (existing.length > 0) {
+      return res.status(409).json({
+        error: '이미 참여 중인 수행평가입니다.',
+        participation_id: existing[0].id,
+      });
+    }
+
+    const [result] = await pool.query(
+      `INSERT INTO student_db.participations
+        (assessment_id, student_id, consent_given, consent_at, current_step, status)
+       VALUES (?, ?, 1, NOW(), 1, 'in_progress')`,
+      [assessment.id, studentId]
+    );
+
+    const [steps] = await pool.query(
+      'SELECT * FROM teacher_db.assessment_steps WHERE assessment_id = ? ORDER BY step_order',
+      [assessment.id]
+    );
+
+    res.status(201).json({
+      participation_id: result.insertId,
+      assessment: {
+        ...assessment,
+        steps: steps.map(s => ({ ...s, ai_mode: toFrontendAiMode(s.ai_permission) })),
+      },
+      message: `"${assessment.title}" 수행평가에 참여했습니다.`,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '서버 오류가 발생했습니다.' });
+  }
+});
+
 // 수행평가 상세 조회 (steps 포함)
 router.get('/:id', authenticateToken, requireTeacher, async (req, res) => {
   const assessmentId = parseInt(req.params.id, 10);
@@ -228,6 +376,107 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req, res) => {
     await pool.query('DELETE FROM teacher_db.assessments WHERE id = ?', [assessmentId]);
 
     res.json({ message: '수행평가가 삭제되었습니다.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// 학생: 단계 제출 + 다음 단계로 진행
+// POST /assessments/participation/:participationId/submit
+router.post('/participation/:participationId/submit', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'student') {
+    return res.status(403).json({ error: '학생 전용 API입니다.' });
+  }
+
+  const participationId = parseInt(req.params.participationId, 10);
+  if (isNaN(participationId)) return res.status(400).json({ error: '잘못된 ID입니다.' });
+
+  const { step_id, content } = req.body;
+
+  try {
+    // 본인 참여인지 확인
+    const [sRows] = await pool.query(
+      'SELECT id FROM student_db.students WHERE user_id = ?',
+      [req.user.id]
+    );
+    if (sRows.length === 0) return res.status(404).json({ error: '학생 정보를 찾을 수 없습니다.' });
+
+    const [pRows] = await pool.query(
+      `SELECT p.*, a.id AS assessment_id
+       FROM student_db.participations p
+       JOIN teacher_db.assessments a ON p.assessment_id = a.id
+       WHERE p.id = ? AND p.student_id = ?`,
+      [participationId, sRows[0].id]
+    );
+    if (pRows.length === 0) return res.status(404).json({ error: '참여 정보를 찾을 수 없습니다.' });
+
+    const participation = pRows[0];
+
+    // 전체 단계 수 조회
+    const [[{ totalSteps }]] = await pool.query(
+      'SELECT COUNT(*) AS totalSteps FROM teacher_db.assessment_steps WHERE assessment_id = ?',
+      [participation.assessment_id]
+    );
+
+    // 제출 내용 저장 (content 있을 때만)
+    if (content && content.trim()) {
+      const [subResult] = await pool.query(
+        `INSERT INTO log_db.submissions (participation_id, step_id, content, submitted_at)
+         VALUES (?, ?, ?, NOW())`,
+        [participationId, step_id || null, content.trim()]
+      );
+
+      // submissions_step: 내용을 단락 단위로 분리해 저장 (Gemini 분석 전 기초 저장)
+      const submissionId = subResult.insertId;
+      const paragraphs = content.trim().split(/\n+/).filter(p => p.trim().length > 0);
+      const segmentRows = paragraphs.map((p, i) => [submissionId, i + 1, p.trim()]);
+      if (segmentRows.length > 0) {
+        await pool.query(
+          `INSERT INTO log_db.submissions_step (submission_id, segment_order, content) VALUES ?`,
+          [segmentRows]
+        );
+      }
+    }
+
+    const currentStep = participation.current_step || 1;
+    const nextStep = currentStep + 1;
+    const isLastStep = currentStep >= totalSteps;
+
+    if (isLastStep) {
+      // 마지막 단계 → 전체 제출 완료
+      await pool.query(
+        `UPDATE student_db.participations
+         SET status = 'submitted', updated_at = NOW()
+         WHERE id = ?`,
+        [participationId]
+      );
+      return res.json({ status: 'submitted', message: '수행평가를 제출했습니다.' });
+    } else {
+      // 다음 단계로 진행
+      await pool.query(
+        `UPDATE student_db.participations
+         SET current_step = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [nextStep, participationId]
+      );
+
+      // 다음 단계 정보 반환
+      const [nextStepRows] = await pool.query(
+        'SELECT * FROM teacher_db.assessment_steps WHERE assessment_id = ? AND step_order = ?',
+        [participation.assessment_id, nextStep]
+      );
+
+      return res.json({
+        status: 'in_progress',
+        next_step: nextStep,
+        total_steps: totalSteps,
+        next_step_info: nextStepRows[0]
+          ? { ...nextStepRows[0], ai_mode: toFrontendAiMode(nextStepRows[0].ai_permission) }
+          : null,
+        message: `${nextStep}단계로 이동했습니다.`,
+      });
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: '서버 오류가 발생했습니다.' });

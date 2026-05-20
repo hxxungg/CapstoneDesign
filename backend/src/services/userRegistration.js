@@ -22,6 +22,7 @@ async function createUserWithRole(conn, {
     throw err;
   }
 
+  let teacherId = null;
   if (role === 'student') {
     const [teacherRows] = await conn.query(
       'SELECT id FROM teacher_db.teachers WHERE invite_code = ?',
@@ -32,6 +33,7 @@ async function createUserWithRole(conn, {
       err.status = 400;
       throw err;
     }
+    teacherId = teacherRows[0].id;
   }
 
   const [userResult] = await conn.query(
@@ -58,8 +60,8 @@ async function createUserWithRole(conn, {
     );
   } else {
     await conn.query(
-      'INSERT INTO student_db.students (user_id, school, grade, class_num) VALUES (?, ?, ?, ?)',
-      [userId, school || null, grade || null, class_num || null]
+      'INSERT INTO student_db.students (user_id, teacher_id, school, grade, class_num) VALUES (?, ?, ?, ?, ?)',
+      [userId, teacherId, school || null, grade || null, class_num || null]
     );
   }
 

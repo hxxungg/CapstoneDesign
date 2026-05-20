@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { assignmentAPI } from '../../services/api';
+import { assignmentAPI, assessmentAPI } from '../../services/api';
 import { THEME } from '../../config/api';
 
 export default function EnrollScreen({ navigation }) {
@@ -11,17 +11,39 @@ export default function EnrollScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
 
   const handleEnroll = async () => {
-    if (!code.trim()) {
+    const trimmedCode = code.trim().toUpperCase();
+    if (!trimmedCode) {
       Alert.alert('입력 오류', '수행평가 코드를 입력해주세요.');
       return;
     }
 
     setLoading(true);
     try {
-      const result = await assignmentAPI.enroll(code.trim().toUpperCase());
+      // 신규 assessments 시스템 먼저 시도
+      const result = await assessmentAPI.join(trimmedCode);
       navigation.goBack();
-      Alert.alert('참여 완료', `"${result.assignment.title}" 수행평가에 참여했습니다.`);
+      Alert.alert('참여 완료', result.message || `수행평가에 참여했습니다.`);
     } catch (err) {
+      // 409: 이미 참여 중
+      if (err.status === 409) {
+        Alert.alert('이미 참여 중', '이미 참여한 수행평가입니다.');
+        navigation.goBack();
+        return;
+      }
+
+      // 404: 새 시스템에 코드 없음 → 구 assignments 시스템 시도
+      if (err.status === 404) {
+        try {
+          const oldResult = await assignmentAPI.enroll(trimmedCode);
+          navigation.goBack();
+          Alert.alert('참여 완료', `"${oldResult.assignment?.title}" 수행평가에 참여했습니다.`);
+          return;
+        } catch (oldErr) {
+          Alert.alert('참여 실패', '유효하지 않은 수행평가 코드입니다.');
+          return;
+        }
+      }
+
       Alert.alert('참여 실패', err.message);
     } finally {
       setLoading(false);
@@ -33,11 +55,11 @@ export default function EnrollScreen({ navigation }) {
       <View style={styles.content}>
         <Text style={styles.icon}>🔑</Text>
         <Text style={styles.title}>수행평가 참여</Text>
-        <Text style={styles.desc}>교사에게 받은 수행평가 코드를 입력하세요.</Text>
+        <Text style={styles.desc}>교사에게 받은 수행평가 초대 코드를 입력하세요.</Text>
 
         <TextInput
           style={styles.input}
-          placeholder="예: ASNABCD1234"
+          placeholder="예: AB12CD34"
           placeholderTextColor={THEME.textSecondary}
           value={code}
           onChangeText={setCode}
