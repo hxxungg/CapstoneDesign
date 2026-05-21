@@ -258,6 +258,152 @@ router.get('/assignment/:assignmentId/student/:studentId', authenticateToken, re
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// 신규 assessments 시스템 — 수행평가 전체(클래스 레벨) 분석
+// ────────────────────────────────────────────────────────────────────────────
+
+router.get('/assessment/:id', authenticateToken, requireTeacher, async (req, res) => {
+  const assessmentId = parseInt(req.params.id);
+
+  try {
+    // 소유자 확인
+    const [aRows] = await pool.query(
+      `SELECT a.* FROM teacher_db.assessments a
+       JOIN teacher_db.teachers t ON a.teacher_id = t.id
+       WHERE a.id = ? AND t.user_id = ?`,
+      [assessmentId, req.user.id]
+    );
+    if (aRows.length === 0) {
+      return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
+    }
+    const assessment = aRows[0];
+
+    // 단계 목록 (order_num 으로 정규화)
+    const [steps] = await pool.query(
+      'SELECT * FROM teacher_db.assessment_steps WHERE assessment_id = ? ORDER BY step_order',
+      [assessmentId]
+    );
+    const normalizedStages = steps.map(s => ({
+      ...s,
+      order_num: s.step_order,
+      ai_mode: s.ai_permission === 'denied' ? 'disallowed' : s.ai_permission,
+      ai_allowed: s.ai_permission !== 'denied',
+    }));
+
+    // 참여 목록 + 학생 정보 (participations.student_id → students.id → users.id)
+    const [participations] = await pool.query(
+      `SELECT p.*, s.user_id, u.name, u.email
+       FROM student_db.participations p
+       JOIN student_db.students s ON p.student_id = s.id
+       JOIN capstonedesign.users u ON s.user_id = u.id
+       WHERE p.assessment_id = ?`,
+      [assessmentId]
+    );
+
+    const totalStudents = participations.length;
+    const completedStudents = participations.filter(
+      p => p.status === 'submitted' || p.status === 'graded'
+    ).length;
+
+    // 참여 ID 목록
+    const pIds = participations.map(p => p.id);
+
+    let allAiLogs = [];
+    let allUrlLogs = [];
+    let allExitAttempts = [];
+
+    if (pIds.length > 0) {
+      [allAiLogs] = await pool.query(
+        'SELECT participation_id, prompt, logged_at FROM log_db.ai_logs WHERE participation_id IN (?)',
+        [pIds]
+      );
+      [allUrlLogs] = await pool.query(
+        'SELECT participation_id, url FROM log_db.url_logs WHERE participation_id IN (?)',
+        [pIds]
+      );
+    }
+
+    // 전체 이탈 시도 (exit_attempts.student_id = users.id)
+    const userIds = participations.map(p => p.user_id);
+    if (userIds.length > 0) {
+      [allExitAttempts] = await pool.query(
+        'SELECT student_id FROM log_db.exit_attempts WHERE student_id IN (?)',
+        [userIds]
+      );
+    }
+
+    // 전체 AI 도구 집계
+    const summaryTools = {};
+    allUrlLogs.forEach(l => {
+      const tool = detectAITool(l.url);
+      if (tool) summaryTools[tool] = (summaryTools[tool] || 0) + 1;
+    });
+
+    // 참여별 그룹핑
+    const aiByP  = {};
+    const urlByP = {};
+    allAiLogs.forEach(l => {
+      if (!aiByP[l.participation_id]) aiByP[l.participation_id] = [];
+      aiByP[l.participation_id].push(l);
+    });
+    allUrlLogs.forEach(l => {
+      if (!urlByP[l.participation_id]) urlByP[l.participation_id] = [];
+      urlByP[l.participation_id].push(l);
+    });
+
+    const exitByUser = {};
+    allExitAttempts.forEach(e => {
+      exitByUser[e.student_id] = (exitByUser[e.student_id] || 0) + 1;
+    });
+
+    const studentsData = participations.map(p => {
+      const aiLogs  = aiByP[p.id]  || [];
+      const urlLogs = urlByP[p.id] || [];
+      const toolsUsed = {};
+      urlLogs.forEach(l => {
+        const tool = detectAITool(l.url);
+        if (tool) toolsUsed[tool] = (toolsUsed[tool] || 0) + 1;
+      });
+
+      return {
+        student: {
+          id: p.user_id,          // users.id (StudentLogs 등에서 사용)
+          name: p.name,
+          email: p.email,
+          status: p.status,
+          current_stage_order: p.current_step || 1,
+        },
+        participation_id: p.id,
+        ai_usage: {
+          total_log_count: aiLogs.length + urlLogs.length,
+          total_duration_seconds: 0,
+          tools_used: toolsUsed,
+          by_stage: [],
+        },
+        exit_attempts: exitByUser[p.user_id] || 0,
+      };
+    });
+
+    res.json({
+      assignment: { ...assessment, is_active: assessment.status === 'active' },
+      stages: normalizedStages,
+      summary: {
+        total_students: totalStudents,
+        completed_students: completedStudents,
+        in_progress_students: totalStudents - completedStudents,
+        total_log_count: allAiLogs.length + allUrlLogs.length,
+        total_duration_seconds: 0,
+        total_exit_attempts: allExitAttempts.length,
+        tools_used: summaryTools,
+      },
+      students: studentsData,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // 신규 assessments 시스템 — 참여(participation)별 분석
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -418,6 +564,158 @@ router.get('/participation/:id', authenticateToken, requireTeacher, async (req, 
         ...l,
         prompt_type: l.prompt_type || classifyPromptType(l.prompt),
       })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// AI 대화 로그 분석 (통계 기반 — 의존도·키워드·시간대)
+// ────────────────────────────────────────────────────────────────────────────
+
+const KO_STOP_WORDS = new Set([
+  '을','를','이','가','은','는','에','의','로','으로','에서','에게','한테',
+  '도','만','까지','부터','것','수','등','및','또한','그리고','하지만','그러나',
+  '근데','어떻게','무엇','어떤','왜','언제','어디','누가','뭐','좀','더','잘',
+  '하다','이다','있다','없다','되다','같다','않다','위해','통해','대해','관해',
+  '입니다','합니다','됩니다','인가요','인지','인데','해줘','알려줘','설명해',
+  '해주세요','알려주세요','설명해줘','주세요','해줘요','있나요','없나요','할까요',
+  '할수있나요','해도되나요',
+]);
+
+const EN_STOP_WORDS = new Set([
+  'the','a','an','is','are','was','were','be','been','have','has','had',
+  'do','does','did','will','would','could','should','may','might','shall',
+  'i','you','he','she','it','we','they','me','my','your','his','her','its',
+  'our','their','this','that','these','those','what','how','why','when',
+  'where','who','which','in','on','at','to','for','of','and','or','but',
+  'not','with','from','by','as','if','then','than','so','up','out','can',
+  'about','just','use','get','make','need','want','help','please','tell',
+  'explain','give','show','write','create','generate','find','know',
+]);
+
+function extractKeywords(prompts, topN = 20) {
+  const freq = {};
+  for (const prompt of prompts) {
+    if (!prompt) continue;
+    const words = prompt
+      .toLowerCase()
+      .replace(/[^\w\s가-힣]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length >= 2);
+    for (const w of words) {
+      if (KO_STOP_WORDS.has(w) || EN_STOP_WORDS.has(w)) continue;
+      freq[w] = (freq[w] || 0) + 1;
+    }
+  }
+  return Object.entries(freq)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, topN);
+}
+
+function dependencyLevel(promptCount) {
+  if (promptCount <= 2) return 'low';
+  if (promptCount <= 7) return 'medium';
+  return 'high';
+}
+
+router.get('/assessment/:id/ai-analysis', authenticateToken, requireTeacher, async (req, res) => {
+  const assessmentId = parseInt(req.params.id);
+
+  try {
+    // 소유자 확인
+    const [aRows] = await pool.query(
+      `SELECT a.id FROM teacher_db.assessments a
+       JOIN teacher_db.teachers t ON a.teacher_id = t.id
+       WHERE a.id = ? AND t.user_id = ?`,
+      [assessmentId, req.user.id]
+    );
+    if (aRows.length === 0) {
+      return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
+    }
+
+    // 참여 목록 + 학생 이름 (participations.student_id → students.id → users.id)
+    const [participations] = await pool.query(
+      `SELECT p.id AS participation_id, s.user_id, u.name
+       FROM student_db.participations p
+       JOIN student_db.students s ON p.student_id = s.id
+       JOIN capstonedesign.users u ON s.user_id = u.id
+       WHERE p.assessment_id = ?`,
+      [assessmentId]
+    );
+
+    if (participations.length === 0) {
+      return res.json({
+        per_student: [],
+        class_summary: {
+          dependency_distribution: { low: 0, medium: 0, high: 0 },
+          top_keywords: [],
+          hourly_distribution: {},
+        },
+      });
+    }
+
+    const participationIds = participations.map((p) => p.participation_id);
+
+    // 전체 ai_logs 조회
+    const [aiLogs] = await pool.query(
+      `SELECT participation_id, prompt, logged_at
+       FROM log_db.ai_logs
+       WHERE participation_id IN (?)`,
+      [participationIds]
+    );
+
+    // 참여별 그룹핑
+    const logsByParticipation = {};
+    for (const log of aiLogs) {
+      const pid = log.participation_id;
+      if (!logsByParticipation[pid]) logsByParticipation[pid] = [];
+      logsByParticipation[pid].push(log);
+    }
+
+    // 학생별 통계
+    const perStudent = participations.map((p) => {
+      const logs = logsByParticipation[p.participation_id] || [];
+      const promptCount = logs.length;
+      const avgPromptLength = promptCount > 0
+        ? Math.round(logs.reduce((s, l) => s + (l.prompt?.length || 0), 0) / promptCount)
+        : 0;
+      return {
+        student_id: p.user_id,
+        name: p.name,
+        prompt_count: promptCount,
+        avg_prompt_length: avgPromptLength,
+        dependency_level: dependencyLevel(promptCount),
+      };
+    });
+
+    // 전체 키워드
+    const allPrompts = aiLogs.map((l) => l.prompt);
+    const topKeywords = extractKeywords(allPrompts, 20);
+
+    // 시간대별 분포
+    const hourlyDistribution = {};
+    for (const log of aiLogs) {
+      if (!log.logged_at) continue;
+      const hour = new Date(log.logged_at).getHours();
+      hourlyDistribution[hour] = (hourlyDistribution[hour] || 0) + 1;
+    }
+
+    // 의존도 분포
+    const depDist = { low: 0, medium: 0, high: 0 };
+    for (const s of perStudent) {
+      depDist[s.dependency_level]++;
+    }
+
+    res.json({
+      per_student: perStudent,
+      class_summary: {
+        dependency_distribution: depDist,
+        top_keywords: topKeywords,
+        hourly_distribution: hourlyDistribution,
+      },
     });
   } catch (err) {
     console.error(err);

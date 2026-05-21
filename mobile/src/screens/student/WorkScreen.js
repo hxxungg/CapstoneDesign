@@ -14,6 +14,7 @@ import {
   getStudentAiBadgeColor,
 } from '../../config/defaultPerformanceStages';
 import ExitWarningModal from '../../components/ExitWarningModal';
+import { appAlert } from '../../utils/appAlert';
 import { WEBVIEW_LOG_SCRIPT } from '../../utils/webviewInjection';
 
 let WebView = null;
@@ -40,11 +41,13 @@ export default function WorkScreen({ navigation, route }) {
   const {
     assignment: initialAssignment,
     participation_id,
-    step_id,
-    stage: initialStage,       // 신규 시스템에서 전달되는 단계 객체
-    assessment: initialAssessment, // 신규 시스템에서 전달되는 수행평가 기본 정보
+    step_id: initialStepId,
+    total_steps: routeTotalSteps,
+    stage: initialStage,
+    assessment: initialAssessment,
   } = route.params;
   const isNewSystem = !!participation_id;
+  const [currentStepId, setCurrentStepId] = React.useState(initialStepId);
   const { user } = useAuth();
 
   const [assignment, setAssignment] = useState(null);
@@ -193,7 +196,7 @@ export default function WorkScreen({ navigation, route }) {
     try {
       await logAPI.recordUrl({
         participation_id,
-        step_id: step_id || null,
+        step_id: currentStepId || null,
         url,
         page_title: title || '',
         visited_at: visitedAt,
@@ -210,7 +213,7 @@ export default function WorkScreen({ navigation, route }) {
     try {
       const result = await logAPI.recordAi({
         participation_id,
-        step_id: step_id || null,
+        step_id: currentStepId || null,
         prompt,
       });
       return result?.id || null;
@@ -311,18 +314,18 @@ export default function WorkScreen({ navigation, route }) {
       }
       try {
         const result = await assessmentAPI.submitStep(participation_id, {
-          step_id: step_id || null,
+          step_id: currentStepId || null,
           content: writingTextRef.current,
         });
 
         if (result.status === 'submitted') {
-          Alert.alert('🎉 수행평가 완료!', '모든 단계를 완료하여 제출되었습니다. 수고하셨습니다!', [
+          appAlert('🎉 수행평가 완료!', '모든 단계를 완료하여 제출되었습니다. 수고하셨습니다!', [
             { text: '확인', onPress: () => navigation.goBack() },
           ]);
         } else {
-          // 다음 단계 정보로 WorkScreen 갱신
           const nextStage = result.next_step_info;
           const syntheticStage = nextStage ? { ...nextStage, order_num: nextStage.step_order } : null;
+          if (nextStage?.id) setCurrentStepId(nextStage.id);
           setAssignment(prev => ({
             ...prev,
             studentProgress: {
@@ -333,15 +336,15 @@ export default function WorkScreen({ navigation, route }) {
             stageWritings: {},
           }));
           setWritingText('');
-          Alert.alert('단계 완료', result.message || `${result.next_step}단계로 이동했습니다.`);
+          appAlert('단계 완료', result.message || `${result.next_step}단계로 이동했습니다.`);
         }
       } catch (err) {
-        Alert.alert('오류', err.message);
+        appAlert('오류', err.message);
       }
       return;
-    }
+  }
 
-    const order = assignment.studentProgress?.current_stage_order || 1;
+  const order = assignment.studentProgress?.current_stage_order || 1;
     const stage = assignment.stages?.find((s) => s.order_num === order);
     if (stage) {
       if (saveWritingTimerRef.current) {
@@ -356,13 +359,14 @@ export default function WorkScreen({ navigation, route }) {
         next_stage_order: order + 1,
       });
       if (result.status === 'completed') {
-        Alert.alert('🎉 수행평가 완료!', '모든 단계를 완료했습니다. 수고하셨습니다!');
-        navigation.goBack();
+        appAlert('🎉 수행평가 완료!', '모든 단계를 완료했습니다. 수고하셨습니다!', [
+        { text: '확인', onPress: () => navigation.goBack() },
+      ]);
       } else {
         loadAssignment();
       }
     } catch (err) {
-      Alert.alert('오류', err.message);
+      appAlert('오류', err.message);
     }
   };
 
@@ -448,7 +452,7 @@ export default function WorkScreen({ navigation, route }) {
   }
 
   const currentStageOrder = assignment?.studentProgress?.current_stage_order || 1;
-  const totalStages = assignment?.stages?.length || 0;
+  const totalStages = routeTotalSteps || assignment?.stages?.length || 0;
   const currentStage = assignment?.stages?.find(s => s.order_num === currentStageOrder);
   const isCompleted = assignment?.studentProgress?.status === 'completed';
   const aiAllowed = stageAllowsAiBrowser(currentStage);
@@ -596,7 +600,7 @@ export default function WorkScreen({ navigation, route }) {
             ) : (
               <TouchableOpacity
                 style={styles.advanceBtn}
-                onPress={() => Alert.alert(
+                onPress={() => appAlert(
                   currentStageOrder === totalStages ? '수행평가 완료' : '다음 단계로 이동',
                   currentStageOrder === totalStages
                     ? '수행평가를 완료하시겠습니까?'

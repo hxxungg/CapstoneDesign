@@ -7,6 +7,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { assignmentAPI, assessmentAPI, logAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { THEME } from '../../config/api';
+import { appAlert } from '../../utils/appAlert';
 import { stageAllowsAiBrowser, getTeacherAiModeStyle } from '../../config/defaultPerformanceStages';
 import ExitWarningModal from '../../components/ExitWarningModal';
 
@@ -45,7 +46,7 @@ export default function StageListScreen({ navigation, route }) {
         setData({ _type: 'assignment', ...res });
       }
     } catch (err) {
-      Alert.alert('오류', err.message);
+      appAlert('오류', err.message);
     } finally {
       setLoading(false);
     }
@@ -106,6 +107,7 @@ export default function StageListScreen({ navigation, route }) {
       navigation.navigate('Work', {
         participation_id: data.participation_id,
         step_id: stage.id,
+        total_steps: (data.steps || []).length,
         assessment: { id: data.id, title: data.title },
         stage: stage,
       });
@@ -119,7 +121,7 @@ export default function StageListScreen({ navigation, route }) {
   const handleAdvanceStage = async () => {
     if (!data) return;
     if (isNewSystem) {
-      Alert.alert('안내', '현재 단계를 완료하고 다음 단계로 이동합니다.');
+      appAlert('안내', '현재 단계를 완료하고 다음 단계로 이동합니다.');
       return;
     }
     try {
@@ -127,11 +129,11 @@ export default function StageListScreen({ navigation, route }) {
         next_stage_order: currentStage + 1,
       });
       if (result.status === 'completed') {
-        Alert.alert('🎉 수행평가 완료!', '모든 단계를 완료했습니다. 수고하셨습니다!');
+        appAlert('🎉 수행평가 완료!', '모든 단계를 완료했습니다. 수고하셨습니다!');
       }
       loadData();
     } catch (err) {
-      Alert.alert('오류', err.message);
+      appAlert('오류', err.message);
     }
   };
 
