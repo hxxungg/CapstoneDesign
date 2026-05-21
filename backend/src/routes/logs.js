@@ -119,8 +119,8 @@ router.post('/ai', authenticateToken, async (req, res) => {
       [
         participation_id,
         step_id || null,
-        String(prompt).slice(0, 5000),
-        response ? String(response).slice(0, 5000) : '',
+        String(prompt).slice(0, 2000),
+        response ? String(response).slice(0, 8000) : '',
         finalType,
         finalLevel,
       ]
@@ -152,14 +152,15 @@ router.patch('/ai/:id/response', authenticateToken, async (req, res) => {
     );
     if (rows.length === 0) return res.status(403).json({ error: '수정 권한이 없습니다.' });
 
+    const safeResponse = response ? String(response).slice(0, 8000) : null;
     await pool.query(
       'UPDATE log_db.ai_logs SET response = ?, complete_at = NOW() WHERE id = ?',
-      [response || null, logId]
+      [safeResponse, logId]
     );
 
     res.json({ message: 'AI 응답 업데이트 완료' });
   } catch (err) {
-    console.error(err);
+    console.error('[ai_logs 응답 업데이트 오류]', err.code, err.sqlMessage || err.message);
     res.status(500).json({ error: '서버 오류가 발생했습니다.' });
   }
 });

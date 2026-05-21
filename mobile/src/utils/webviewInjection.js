@@ -4,7 +4,7 @@
  * 수집 대상:
  *  - URL 방문 (page_load): 페이지 로드 시 URL·제목·방문 시각·검색 쿼리
  *  - AI 프롬프트 (ai_prompt): textarea / contenteditable Enter 입력 또는 전송 버튼 클릭 감지
- *  - AI 응답 (ai_response): 프롬프트 후 DOM 안정화(2.5s 디바운스) 시 페이지 신규 텍스트 캡처
+ *  - AI 응답 (ai_response): 사이트별 선택자 우선, 없으면 DOM 텍스트 델타 방식
  */
 export const WEBVIEW_LOG_SCRIPT = `
 (function () {
@@ -35,10 +35,46 @@ export const WEBVIEW_LOG_SCRIPT = `
     } catch (e) {}
   }
 
+  // ── 사이트별 AI 응답 선택자 ───────────────────────────────────────
+  // 각 AI 사이트에서 응답 텍스트가 담긴 마지막 블록을 특정 선택자로 추출
+  var AI_RESPONSE_SELECTORS = [
+    // ChatGPT
+    'div[data-message-author-role="assistant"] .markdown',
+    'div[data-message-author-role="assistant"]',
+    // Claude
+    'div[data-is-streaming="false"] .font-claude-message',
+    '.font-claude-message',
+    // Gemini
+    'model-response .markdown',
+    '.response-container-scrollable',
+    // Perplexity
+    '.prose',
+    // 뤼튼(wrtn), 기타
+    '.assistant-message',
+    '.ai-message',
+    '[data-role="assistant"]',
+  ];
+
+  function extractResponseFromDOM() {
+    for (var i = 0; i < AI_RESPONSE_SELECTORS.length; i++) {
+      try {
+        var els = document.querySelectorAll(AI_RESPONSE_SELECTORS[i]);
+        if (els.length > 0) {
+          // 마지막 응답 블록의 텍스트
+          var lastEl = els[els.length - 1];
+          var text = (lastEl.innerText || lastEl.textContent || '').trim();
+          if (text.length > 20) return text;
+        }
+      } catch (e) {}
+    }
+    return null;
+  }
+
   // ── AI 응답 캡처 상태 ─────────────────────────────────────────────
   var pendingAiLogId      = null;
-  var prePromptTextLength = 0;   // 프롬프트 전송 직전 페이지 텍스트 길이
+  var prePromptTextLength = 0;
   var responseTimer       = null;
+  var maxResponseTimer    = null;
   var isWaitingResponse   = false;
   var lastPromptText      = '';
   var lastPromptTime      = 0;
@@ -47,39 +83,44 @@ export const WEBVIEW_LOG_SCRIPT = `
   function captureResponse() {
     if (!isWaitingResponse) return;
     isWaitingResponse = false;
+    clearTimeout(responseTimer);
+    clearTimeout(maxResponseTimer);
 
-    var fullText = document.body ? document.body.innerText : '';
-
-    // 프롬프트 전송 이후 새로 추가된 텍스트를 응답으로 사용
     var responseText = '';
-    if (prePromptTextLength > 0 && fullText.length > prePromptTextLength) {
-      responseText = fullText.slice(prePromptTextLength).trim().slice(0, 4000);
-    }
 
-    // 새 텍스트가 충분하지 않으면 페이지 하단 텍스트를 fallback으로 사용
-    if (responseText.length < 10) {
-      responseText = fullText.slice(-4000).trim();
+    // 1순위: 사이트별 선택자로 응답 블록 직접 추출
+    var domText = extractResponseFromDOM();
+    if (domText && domText.length >= 10) {
+      responseText = domText.slice(0, 8000);
+    } else {
+      // 2순위: 페이지 전체 텍스트 델타
+      var fullText = document.body ? document.body.innerText : '';
+      if (prePromptTextLength > 0 && fullText.length > prePromptTextLength) {
+        responseText = fullText.slice(prePromptTextLength).trim().slice(0, 8000);
+      }
+      // 3순위: 페이지 하단 텍스트
+      if (responseText.length < 10) {
+        responseText = fullText.slice(-8000).trim();
+      }
     }
 
     if (responseText.length >= 5) {
       send({
         type: 'ai_response',
         log_id: pendingAiLogId,
-        response: responseText.slice(0, 4000),
+        response: responseText,
         complete_at: new Date().toISOString(),
       });
     }
     pendingAiLogId      = null;
     prePromptTextLength = 0;
-    clearTimeout(maxResponseTimer);
   }
 
-  // DOM 변화 감시 → 응답 디바운스 (3초 안정화 대기)
-  var maxResponseTimer = null;
+  // DOM 변화 감시 → 응답 디바운스 (5초 안정화 대기 — 스트리밍 중 조기 캡처 방지)
   var domObserver = new MutationObserver(function () {
     if (!isWaitingResponse) return;
     clearTimeout(responseTimer);
-    responseTimer = setTimeout(captureResponse, 3000);
+    responseTimer = setTimeout(captureResponse, 5000);
   });
 
   function startDomObserver() {
@@ -97,7 +138,6 @@ export const WEBVIEW_LOG_SCRIPT = `
   function onPromptSubmit(text) {
     if (!text || text.trim().length < 2) return;
 
-    // 중복 전송 방지
     var now = Date.now();
     if (text.trim() === lastPromptText && now - lastPromptTime < DEDUP_MS) return;
     lastPromptText = text.trim();
@@ -119,14 +159,13 @@ export const WEBVIEW_LOG_SCRIPT = `
       clearTimeout(maxResponseTimer);
       // 첫 응답 시작 대기 5초
       responseTimer = setTimeout(captureResponse, 5000);
-      // 최대 30초 후 강제 캡처 (긴 응답 대비)
+      // 최대 60초 후 강제 캡처 (긴 응답·느린 모델 대비)
       maxResponseTimer = setTimeout(function () {
         if (isWaitingResponse) captureResponse();
-      }, 30000);
+      }, 60000);
     }
   }
 
-  // 입력 요소에서 현재 텍스트 추출
   function getInputText(el) {
     return (el.value || el.innerText || el.textContent || '').trim();
   }
@@ -136,7 +175,6 @@ export const WEBVIEW_LOG_SCRIPT = `
     if (el._lhTracked) return;
     el._lhTracked = true;
 
-    // Enter 키 전송 감지 (Shift+Enter는 줄바꿈)
     el.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) {
         var text = getInputText(el);
@@ -144,7 +182,6 @@ export const WEBVIEW_LOG_SCRIPT = `
       }
     });
 
-    // 폼 submit 감지
     var form = el.closest('form');
     if (form && !form._lhTracked) {
       form._lhTracked = true;
@@ -155,9 +192,9 @@ export const WEBVIEW_LOG_SCRIPT = `
     }
   }
 
-  // ── 전송 버튼 추적 (ChatGPT·Gemini·Claude 버튼 클릭 대응) ─────────
+  // ── 전송 버튼 추적 ────────────────────────────────────────────────
   var SEND_BUTTON_SELECTORS = [
-    'button[data-testid="send-button"]',          // ChatGPT
+    'button[data-testid="send-button"]',
     'button[aria-label*="Send"]',
     'button[aria-label*="전송"]',
     'button[aria-label*="보내기"]',
@@ -169,12 +206,11 @@ export const WEBVIEW_LOG_SCRIPT = `
     'button[class*="submit"]',
     '[role="button"][aria-label*="Send"]',
     '[role="button"][aria-label*="전송"]',
-    'ms-chat-input button',                        // Copilot
-    'rich-textarea + button',                      // Gemini
+    'ms-chat-input button',
+    'rich-textarea + button',
   ];
 
   function getActiveInputText() {
-    // 현재 포커스된 입력 요소 우선
     var active = document.activeElement;
     if (active) {
       var tag = active.tagName;
@@ -187,7 +223,6 @@ export const WEBVIEW_LOG_SCRIPT = `
         if (t) return t;
       }
     }
-    // 포커스가 버튼 등에 있을 때 가장 최근 입력 요소에서 텍스트 취득
     var inputs = document.querySelectorAll('textarea, [contenteditable="true"], [role="textbox"]');
     for (var i = inputs.length - 1; i >= 0; i--) {
       var t2 = getInputText(inputs[i]);
@@ -200,13 +235,11 @@ export const WEBVIEW_LOG_SCRIPT = `
     if (btn._lhTracked) return;
     btn._lhTracked = true;
     btn.addEventListener('click', function () {
-      // 버튼 클릭 직전 입력 텍스트 추출
       var text = getActiveInputText();
       if (text) onPromptSubmit(text);
-    }, true);  // capture phase → 실제 클릭 전에 텍스트 읽기 위함
+    }, true);
   }
 
-  // 동적 DOM 감시 (React·Vue SPA 대응)
   var inputObserver = new MutationObserver(function () {
     document
       .querySelectorAll('textarea, [contenteditable="true"], [role="textbox"]')
