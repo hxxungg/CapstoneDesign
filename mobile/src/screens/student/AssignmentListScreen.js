@@ -1,12 +1,13 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  RefreshControl, Alert, ActivityIndicator,
+  RefreshControl, ActivityIndicator,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { assignmentAPI, assessmentAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { THEME } from '../../config/api';
+import { appAlert } from '../../utils/appAlert';
 
 export default function AssignmentListScreen({ navigation }) {
   const { user } = useAuth();
@@ -49,7 +50,7 @@ export default function AssignmentListScreen({ navigation }) {
 
       setItems(merged);
     } catch (err) {
-      Alert.alert('오류', err.message);
+      appAlert('오류', err.message, null, { type: 'error' });
     } finally {
       setLoading(false);
       setRefreshing(false);

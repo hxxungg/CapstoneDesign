@@ -7,7 +7,6 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
@@ -16,6 +15,7 @@ import { useAuth } from '../context/AuthContext';
 import { useGoogleAuth } from '../hooks/useGoogleAuth';
 import { useKakaoAuth } from '../hooks/useKakaoAuth';
 import { THEME } from '../config/api';
+import { appAlert } from '../utils/appAlert';
 
 const KAKAO_YELLOW = '#FEE500';
 const KAKAO_BROWN = '#3C1E1E';
@@ -95,7 +95,7 @@ export default function LoginScreen({ navigation }) {
         })
         .catch((err) => {
           console.error(`[OAuth] ${provider} 로그인 오류:`, err);
-          Alert.alert(`${provider === 'google' ? 'Google' : '카카오'} 로그인 실패`, err.message);
+          appAlert(`${provider === 'google' ? 'Google' : '카카오'} 로그인 실패`, err.message, null, { type: 'error' });
         })
         .finally(() => setSocialLoading(null));
     };
@@ -107,14 +107,14 @@ export default function LoginScreen({ navigation }) {
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('입력 오류', '이메일과 비밀번호를 입력해주세요.');
+      appAlert('입력 오류', '이메일과 비밀번호를 입력해주세요.', null, { type: 'warning' });
       return;
     }
     setLoading(true);
     try {
       await login(email.trim(), password);
     } catch (err) {
-      Alert.alert('로그인 실패', err.message);
+      appAlert('로그인 실패', err.message, null, { type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -153,7 +153,7 @@ export default function LoginScreen({ navigation }) {
       }
     } catch (err) {
       const title = provider === 'google' ? 'Google 로그인 실패' : '카카오 로그인 실패';
-      Alert.alert(title, err.message);
+      appAlert(title, err.message, null, { type: 'error' });
     } finally {
       setSocialLoading(null);
     }
@@ -217,7 +217,7 @@ export default function LoginScreen({ navigation }) {
             style={[styles.socialBtn, styles.googleBtn, busy && styles.btnDisabled]}
             onPress={() => {
               if (!googleReady) {
-                Alert.alert('설정 필요', 'mobile/.env에 EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID를 추가해 주세요.');
+                appAlert('설정 필요', 'mobile/.env에 EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID를 추가해 주세요.', null, { type: 'warning' });
                 return;
               }
               handleSocial('google', signInWithGoogle);
@@ -239,7 +239,7 @@ export default function LoginScreen({ navigation }) {
             style={[styles.socialBtn, styles.kakaoBtn, busy && styles.btnDisabled]}
             onPress={() => {
               if (!kakaoReady) {
-                Alert.alert('설정 필요', 'mobile/.env에 EXPO_PUBLIC_KAKAO_REST_API_KEY를 추가해 주세요.');
+                appAlert('설정 필요', 'mobile/.env에 EXPO_PUBLIC_KAKAO_REST_API_KEY를 추가해 주세요.', null, { type: 'warning' });
                 return;
               }
               handleSocial('kakao', signInWithKakao);

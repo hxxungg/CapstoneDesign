@@ -265,6 +265,11 @@ router.put('/password', authenticateToken, async (req, res) => {
       'UPDATE capstonedesign.user_credentials SET password_hash = ? WHERE user_id = ?',
       [newHash, req.user.id]
     );
+    // users.updated_at 갱신 (비밀번호 변경 시각 반영)
+    await pool.query(
+      'UPDATE capstonedesign.users SET updated_at = NOW() WHERE id = ?',
+      [req.user.id]
+    );
     res.json({ message: '비밀번호가 변경되었습니다.' });
   } catch (err) {
     console.error(err);

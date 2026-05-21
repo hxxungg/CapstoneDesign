@@ -85,13 +85,19 @@ export default function CreateAssignmentScreen({ navigation }) {
         })),
       });
 
+      const inviteCode = assessment.invite_code;
       navigation.goBack();
-      appAlert(
-        '✅ 생성 완료',
-        `수행평가가 생성되었습니다.\n\n초대 코드: ${assessment.invite_code}\n\n학생들에게 이 코드를 알려주세요.`
-      );
+      // 화면 전환 애니메이션이 완료된 후 모달 표시
+      setTimeout(() => {
+        appAlert(
+          '생성 완료',
+          `수행평가가 생성되었습니다.\n\n초대 코드: ${inviteCode}\n\n학생들에게 이 코드를 알려주세요.`,
+          null,
+          { type: 'success' }
+        );
+      }, 400);
     } catch (err) {
-      appAlert('생성 실패', err.message);
+      appAlert('생성 실패', err.message, null, { type: 'error' });
     } finally {
       setLoading(false);
     }

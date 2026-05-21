@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, ScrollView,
+  KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { THEME } from '../config/api';
+import { appAlert } from '../utils/appAlert';
 
 const GRADES = ['1학년', '2학년', '3학년'];
 
@@ -23,7 +24,7 @@ export default function SocialRegisterScreen({ navigation, route }) {
 
   const handleSubmit = async () => {
     if (role === 'student' && !inviteCode.trim()) {
-      Alert.alert('입력 오류', '교사에게 받은 초대 코드를 입력해주세요.');
+      appAlert('입력 오류', '교사에게 받은 초대 코드를 입력해주세요.', null, { type: 'warning' });
       return;
     }
 
@@ -51,7 +52,7 @@ export default function SocialRegisterScreen({ navigation, route }) {
     try {
       await socialRegister(payload);
     } catch (err) {
-      Alert.alert('가입 실패', err.message);
+      appAlert('가입 실패', err.message, null, { type: 'error' });
     } finally {
       setLoading(false);
     }

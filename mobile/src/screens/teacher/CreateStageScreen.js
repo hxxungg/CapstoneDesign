@@ -50,9 +50,11 @@ export default function CreateStageScreen({ navigation, route }) {
         ai_guidance: aiMode === AI_MODE.DISALLOWED ? '' : guidance.trim(),
       });
       navigation.goBack();
-      appAlert('완료', '단계가 추가되었습니다.');
+      setTimeout(() => {
+        appAlert('완료', '단계가 추가되었습니다.', null, { type: 'success' });
+      }, 400);
     } catch (err) {
-      appAlert('오류', err.message);
+      appAlert('오류', err.message, null, { type: 'error' });
     } finally {
       setLoading(false);
     }
