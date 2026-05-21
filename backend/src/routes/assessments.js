@@ -382,6 +382,53 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req, res) => {
   }
 });
 
+// 학생: 이전 단계 제출 내용 조회
+router.get('/participation/:participationId/submissions', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'student') {
+    return res.status(403).json({ error: '학생 전용 API입니다.' });
+  }
+
+  const participationId = parseInt(req.params.participationId, 10);
+  if (isNaN(participationId)) return res.status(400).json({ error: '잘못된 ID입니다.' });
+
+  try {
+    const [sRows] = await pool.query(
+      'SELECT id FROM student_db.students WHERE user_id = ?',
+      [req.user.id]
+    );
+    if (sRows.length === 0) return res.status(404).json({ error: '학생 정보를 찾을 수 없습니다.' });
+
+    const [pRows] = await pool.query(
+      'SELECT id FROM student_db.participations WHERE id = ? AND student_id = ?',
+      [participationId, sRows[0].id]
+    );
+    if (pRows.length === 0) return res.status(403).json({ error: '권한이 없습니다.' });
+
+    // 단계별 최신 제출 1건씩만 반환 (중복 제출 시 최신 우선)
+    const [rows] = await pool.query(
+      `SELECT s.id, s.step_id, s.content, s.submitted_at,
+              st.title AS step_title, st.step_order
+       FROM log_db.submissions s
+       LEFT JOIN teacher_db.assessment_steps st ON s.step_id = st.id
+       WHERE s.participation_id = ?
+         AND s.id = (
+           SELECT id FROM log_db.submissions s2
+           WHERE s2.participation_id = s.participation_id
+             AND s2.step_id = s.step_id
+           ORDER BY s2.submitted_at DESC
+           LIMIT 1
+         )
+       ORDER BY st.step_order ASC`,
+      [participationId]
+    );
+
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '서버 오류가 발생했습니다.' });
+  }
+});
+
 // 학생: 단계 제출 + 다음 단계로 진행
 // POST /assessments/participation/:participationId/submit
 router.post('/participation/:participationId/submit', authenticateToken, async (req, res) => {
@@ -427,10 +474,27 @@ router.post('/participation/:participationId/submit', authenticateToken, async (
         [participationId, step_id || null, content.trim()]
       );
 
-      // submissions_step: 내용을 단락 단위로 분리해 저장 (Gemini 분석 전 기초 저장)
+      // submissions_step: 마침표(.) 기준으로 문장을 분리해 저장
       const submissionId = subResult.insertId;
-      const paragraphs = content.trim().split(/\n+/).filter(p => p.trim().length > 0);
-      const segmentRows = paragraphs.map((p, i) => [submissionId, i + 1, p.trim()]);
+
+      const rawText = content.trim();
+
+      // '.' 기준으로 분리 후 마침표를 각 문장 끝에 다시 붙임
+      // 예: "안녕하세요. 반갑습니다." → ["안녕하세요.", "반갑습니다."]
+      const parts = rawText.split('.');
+      const sentences = parts
+        .map((part, idx) => {
+          const trimmed = part.trim();
+          if (!trimmed) return null;
+          // 마지막 조각이 아닌 경우 마침표 복원
+          return idx < parts.length - 1 ? trimmed + '.' : trimmed;
+        })
+        .filter(Boolean);
+
+      // 문장이 하나도 추출되지 않았으면 전체 텍스트를 1개 문장으로 저장
+      const finalSentences = sentences.length > 0 ? sentences : [rawText];
+      const segmentRows = finalSentences.map((s, i) => [submissionId, i + 1, s]);
+
       if (segmentRows.length > 0) {
         await pool.query(
           `INSERT INTO log_db.submissions_step (submission_id, segment_order, content) VALUES ?`,

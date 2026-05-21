@@ -33,19 +33,20 @@ function LoadingScreen() {
   );
 }
 
+const COMMON_HEADER_OPTIONS = {
+  headerStyle: { backgroundColor: THEME.primary },
+  headerTintColor: '#fff',
+  headerTitleStyle: { fontWeight: '700', fontSize: 17 },
+  headerTitleAlign: 'center',
+};
+
 function StudentStack() {
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: THEME.primary },
-        headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: 'bold' },
-      }}
-    >
+    <Stack.Navigator screenOptions={COMMON_HEADER_OPTIONS}>
       <Stack.Screen
         name="AssignmentList"
         component={AssignmentListScreen}
-        options={{ title: '내 수행평가', headerRight: () => <ProfileHeaderButton /> }}
+        options={{ title: '내 수행평가', headerLeft: () => null, headerRight: () => <ProfileHeaderButton /> }}
       />
       <Stack.Screen
         name="Enroll"
@@ -65,7 +66,7 @@ function StudentStack() {
       <Stack.Screen
         name="Work"
         component={WorkScreen}
-        options={{ headerShown: false }}
+        options={{ headerShown: false, gestureEnabled: false }}
       />
     </Stack.Navigator>
   );
@@ -73,17 +74,11 @@ function StudentStack() {
 
 function TeacherStack() {
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: THEME.primary },
-        headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: 'bold' },
-      }}
-    >
+    <Stack.Navigator screenOptions={COMMON_HEADER_OPTIONS}>
       <Stack.Screen
         name="TeacherDashboard"
         component={TeacherDashboard}
-        options={{ title: '교사 대시보드', headerRight: () => <ProfileHeaderButton /> }}
+        options={{ title: '교사 대시보드', headerLeft: () => null, headerRight: () => <ProfileHeaderButton /> }}
       />
       <Stack.Screen
         name="CreateAssignment"

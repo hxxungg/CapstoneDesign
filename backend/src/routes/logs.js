@@ -44,9 +44,33 @@ router.post('/url', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'participation_id와 url은 필수입니다.' });
   }
 
+  // 날짜 파싱 헬퍼 — 잘못된 값이면 null 반환
+  const safeDate = (v) => {
+    if (!v) return null;
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
   try {
     const ok = await verifyParticipation(participation_id, req.user.id);
     if (!ok) return res.status(403).json({ error: '본인의 참여 기록이 아닙니다.' });
+
+    const safeUrl       = String(url).slice(0, 2083);
+    const safeTitle     = page_title ? String(page_title).slice(0, 500) : null;
+    const safeVisitedAt = safeDate(visited_at) || new Date();
+    const safeCompleteAt = safeDate(complete_at);
+
+    // 동일 participation + URL + 1분 이내 중복 삽입 방지
+    const [dupRows] = await pool.query(
+      `SELECT id FROM log_db.url_logs
+       WHERE participation_id = ? AND url = ?
+         AND visited_at >= DATE_SUB(?, INTERVAL 1 MINUTE)
+       LIMIT 1`,
+      [participation_id, safeUrl, safeVisitedAt]
+    );
+    if (dupRows.length > 0) {
+      return res.status(200).json({ id: dupRows[0].id, message: '중복 URL 스킵' });
+    }
 
     const [result] = await pool.query(
       `INSERT INTO log_db.url_logs
@@ -55,17 +79,18 @@ router.post('/url', authenticateToken, async (req, res) => {
       [
         participation_id,
         step_id || null,
-        url,
-        page_title || null,
-        visited_at ? new Date(visited_at) : new Date(),
-        complete_at ? new Date(complete_at) : null,
+        safeUrl,
+        safeTitle,
+        safeVisitedAt,
+        safeCompleteAt,
       ]
     );
 
     res.status(201).json({ id: result.insertId, message: 'URL 방문 기록 완료' });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: '서버 오류가 발생했습니다.' });
+    // 실제 오류 내용을 로그에 출력해 디버깅 편의 제공
+    console.error('[url_logs 저장 오류]', err.code, err.sqlMessage || err.message);
+    res.status(500).json({ error: '서버 오류가 발생했습니다.', detail: err.code });
   }
 });
 
@@ -94,8 +119,8 @@ router.post('/ai', authenticateToken, async (req, res) => {
       [
         participation_id,
         step_id || null,
-        prompt,
-        response || '',
+        String(prompt).slice(0, 5000),
+        response ? String(response).slice(0, 5000) : '',
         finalType,
         finalLevel,
       ]
@@ -103,8 +128,8 @@ router.post('/ai', authenticateToken, async (req, res) => {
 
     res.status(201).json({ id: result.insertId, message: 'AI 로그 기록 완료' });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: '서버 오류가 발생했습니다.' });
+    console.error('[ai_logs 저장 오류]', err.code, err.sqlMessage || err.message);
+    res.status(500).json({ error: '서버 오류가 발생했습니다.', detail: err.code });
   }
 });
 

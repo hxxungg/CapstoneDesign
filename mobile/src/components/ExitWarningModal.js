@@ -14,7 +14,7 @@ export default function ExitWarningModal({ visible, onClose, attemptCount }) {
       transparent
       animationType="fade"
       statusBarTranslucent
-      onRequestClose={onClose}
+      onRequestClose={() => {}}
     >
       <View style={styles.overlay}>
         <View style={[styles.modal, { width: width * 0.88 }]}>

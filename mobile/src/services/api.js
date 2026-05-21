@@ -97,6 +97,9 @@ export const assessmentAPI = {
   /** 학생: 단계 제출 + 다음 단계 진행 */
   submitStep: (participationId, data) =>
     apiClient.post(`/assessments/participation/${participationId}/submit`, data),
+  /** 학생: 이전 단계 제출 내용 목록 조회 */
+  getPreviousSubmissions: (participationId) =>
+    apiClient.get(`/assessments/participation/${participationId}/submissions`),
 };
 
 // 분석

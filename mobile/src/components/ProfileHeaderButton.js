@@ -5,16 +5,17 @@ import {
   TouchableOpacity,
   Modal,
   StyleSheet,
-  Alert,
   TextInput,
   ActivityIndicator,
   Pressable,
   Platform,
+  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { authAPI } from '../services/api';
 import { THEME } from '../config/api';
+import { appAlert } from '../utils/appAlert';
 
 // 공통 확인 모달 (로그아웃 / 회원탈퇴 / 기타)
 function ConfirmModal({ visible, onClose, icon, iconBg, title, message, confirmText, confirmColor, onConfirm, loading }) {
@@ -74,24 +75,24 @@ export default function ProfileHeaderButton() {
 
   const handleChangePassword = async () => {
     if (!currentPw || !newPw || !confirmPw) {
-      Alert.alert('입력 오류', '모든 항목을 입력해주세요.');
+      appAlert('입력 오류', '모든 항목을 입력해주세요.', null, { type: 'warning' });
       return;
     }
     if (newPw.length < 6) {
-      Alert.alert('입력 오류', '새 비밀번호는 6자 이상이어야 합니다.');
+      appAlert('입력 오류', '새 비밀번호는 6자 이상이어야 합니다.', null, { type: 'warning' });
       return;
     }
     if (newPw !== confirmPw) {
-      Alert.alert('입력 오류', '새 비밀번호가 일치하지 않습니다.');
+      appAlert('입력 오류', '새 비밀번호가 일치하지 않습니다.', null, { type: 'warning' });
       return;
     }
     setPwLoading(true);
     try {
       await authAPI.changePassword({ current_password: currentPw, new_password: newPw });
       setPwModalVisible(false);
-      Alert.alert('완료', '비밀번호가 변경되었습니다.');
+      appAlert('완료', '비밀번호가 변경되었습니다.', null, { type: 'success' });
     } catch (err) {
-      Alert.alert('실패', err.message);
+      appAlert('실패', err.message, null, { type: 'error' });
     } finally {
       setPwLoading(false);
     }
@@ -105,7 +106,7 @@ export default function ProfileHeaderButton() {
       logout();
     } catch (err) {
       setDeleteModal(false);
-      Alert.alert('오류', err.message);
+      appAlert('오류', err.message, null, { type: 'error' });
     } finally {
       setDeleteLoading(false);
     }
@@ -190,7 +191,7 @@ export default function ProfileHeaderButton() {
       {/* 비밀번호 변경 모달 */}
       <Modal visible={pwModalVisible} transparent animationType="slide" onRequestClose={() => setPwModalVisible(false)} statusBarTranslucent>
         <Pressable style={styles.overlay} onPress={() => setPwModalVisible(false)}>
-          <Pressable style={styles.pwCard} onPress={() => {}}>
+          <Pressable style={styles.pwCard} onPress={Keyboard.dismiss}>
             <Text style={styles.pwTitle}>비밀번호 변경</Text>
             <Text style={styles.pwLabel}>현재 비밀번호</Text>
             <TextInput style={styles.pwInput} value={currentPw} onChangeText={setCurrentPw} secureTextEntry placeholder="현재 비밀번호" placeholderTextColor="#94A3B8" autoCapitalize="none" />

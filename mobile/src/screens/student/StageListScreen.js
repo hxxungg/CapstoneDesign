@@ -1,14 +1,14 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, BackHandler, AppState,
+  ActivityIndicator,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { assignmentAPI, assessmentAPI, logAPI } from '../../services/api';
+import { assignmentAPI, assessmentAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { THEME } from '../../config/api';
 import { stageAllowsAiBrowser, getTeacherAiModeStyle } from '../../config/defaultPerformanceStages';
-import ExitWarningModal from '../../components/ExitWarningModal';
+import { appAlert } from '../../utils/appAlert';
 
 export default function StageListScreen({ navigation, route }) {
   // 구 시스템: route.params.assignment
@@ -19,9 +19,6 @@ export default function StageListScreen({ navigation, route }) {
   const { user } = useAuth();
   const [data, setData] = useState(null);   // 공통 표시 데이터
   const [loading, setLoading] = useState(true);
-  const [showExitModal, setShowExitModal] = useState(false);
-  const [exitAttemptCount, setExitAttemptCount] = useState(0);
-  const appStateRef = React.useRef(AppState.currentState);
 
   const loadData = async () => {
     try {
@@ -45,49 +42,13 @@ export default function StageListScreen({ navigation, route }) {
         setData({ _type: 'assignment', ...res });
       }
     } catch (err) {
-      Alert.alert('오류', err.message);
+      appAlert('오류', err.message, null, { type: 'error' });
     } finally {
       setLoading(false);
     }
   };
 
   useFocusEffect(useCallback(() => { loadData(); }, []));
-
-  // 뒤로가기 버튼 차단
-  useFocusEffect(
-    useCallback(() => {
-      const onBackPress = () => {
-        handleExitAttempt('back_button');
-        return true;
-      };
-      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-      return () => subscription.remove();
-    }, [data])
-  );
-
-  // 앱 백그라운드 전환 감지
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (appStateRef.current === 'active' && nextState === 'background') {
-        handleExitAttempt('background');
-      }
-      appStateRef.current = nextState;
-    });
-    return () => subscription.remove();
-  }, [data]);
-
-  const handleExitAttempt = async (type) => {
-    setExitAttemptCount(prev => prev + 1);
-    setShowExitModal(true);
-    try {
-      await logAPI.recordExitAttempt({
-        assignment_id: data?.id || initialAssignment?.id,
-        attempt_type: type,
-      });
-    } catch (err) {
-      console.log('이탈 로그 실패:', err.message);
-    }
-  };
 
   // ── 구 시스템 ──────────────────────────────────────────────────
   const currentStage = isNewSystem
@@ -108,6 +69,7 @@ export default function StageListScreen({ navigation, route }) {
         step_id: stage.id,
         assessment: { id: data.id, title: data.title },
         stage: stage,
+        total_steps: data.steps?.length || 0,  // 전체 단계 수 전달
       });
     } else {
       navigation.navigate('Work', {
@@ -119,7 +81,7 @@ export default function StageListScreen({ navigation, route }) {
   const handleAdvanceStage = async () => {
     if (!data) return;
     if (isNewSystem) {
-      Alert.alert('안내', '현재 단계를 완료하고 다음 단계로 이동합니다.');
+      appAlert('안내', '현재 단계를 완료하고 다음 단계로 이동합니다.', null, { type: 'info' });
       return;
     }
     try {
@@ -127,11 +89,11 @@ export default function StageListScreen({ navigation, route }) {
         next_stage_order: currentStage + 1,
       });
       if (result.status === 'completed') {
-        Alert.alert('🎉 수행평가 완료!', '모든 단계를 완료했습니다. 수고하셨습니다!');
+        appAlert('수행평가 완료!', '모든 단계를 완료했습니다. 수고하셨습니다!', null, { type: 'success' });
       }
       loadData();
     } catch (err) {
-      Alert.alert('오류', err.message);
+      appAlert('오류', err.message, null, { type: 'error' });
     }
   };
 
@@ -155,11 +117,6 @@ export default function StageListScreen({ navigation, route }) {
 
   return (
     <View style={styles.container}>
-      <ExitWarningModal
-        visible={showExitModal}
-        onClose={() => setShowExitModal(false)}
-        attemptCount={exitAttemptCount}
-      />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* 헤더 */}

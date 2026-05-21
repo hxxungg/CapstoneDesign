@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Alert, PanResponder, Dimensions, Platform, ActivityIndicator,
+  PanResponder, Dimensions, Platform, ActivityIndicator,
   BackHandler, AppState, Linking, TextInput, Keyboard,
 } from 'react-native';
+import { appAlert } from '../../utils/appAlert';
 import { useFocusEffect } from '@react-navigation/native';
 import { assignmentAPI, assessmentAPI, logAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -41,19 +42,23 @@ export default function WorkScreen({ navigation, route }) {
     assignment: initialAssignment,
     participation_id,
     step_id,
-    stage: initialStage,       // 신규 시스템에서 전달되는 단계 객체
+    stage: initialStage,           // 신규 시스템에서 전달되는 단계 객체
     assessment: initialAssessment, // 신규 시스템에서 전달되는 수행평가 기본 정보
+    total_steps: initialTotalSteps,// 신규 시스템에서 전달되는 전체 단계 수
   } = route.params;
   const isNewSystem = !!participation_id;
   const { user } = useAuth();
 
   const [assignment, setAssignment] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [previousSubmissions, setPreviousSubmissions] = useState([]);
+  const [currentStepId, setCurrentStepId] = useState(step_id); // 신규 시스템: 현재 단계 ID (단계 진행 시 갱신)
   const [splitRatio, setSplitRatio] = useState(DEFAULT_RATIO);
   const [aiUrl, setAiUrl] = useState(INAPP_BROWSER_HOME);
   const [addressDraft, setAddressDraft] = useState(INAPP_BROWSER_HOME);
   const [aiPageLoading, setAiPageLoading] = useState(true);
   const [canWebViewGoBack, setCanWebViewGoBack] = useState(false);
+  const [canWebViewGoForward, setCanWebViewGoForward] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
   const [exitAttemptCount, setExitAttemptCount] = useState(0);
   const [writingText, setWritingText] = useState('');
@@ -71,6 +76,7 @@ export default function WorkScreen({ navigation, route }) {
   });
 
   const webViewRef          = useRef(null);
+  const loadingTimerRef     = useRef(null);
   const splitRatioRef       = useRef(DEFAULT_RATIO);
   const panStartRatioRef    = useRef(DEFAULT_RATIO);
   const pageStartTimeRef    = useRef(Date.now());
@@ -96,6 +102,16 @@ export default function WorkScreen({ navigation, route }) {
         // 신규 시스템: StageListScreen에서 넘겨준 stage/assessment 파라미터로 가상 객체 생성
         const s = initialStage;
         const syntheticStage = s ? { ...s, order_num: s.step_order } : null;
+        const totalCount = initialTotalSteps || 1;
+        // totalStages 계산을 위해 전체 단계 수만큼 placeholder 배열 생성
+        // 현재 단계만 실제 데이터, 나머지는 순서 번호만 있는 빈 객체
+        const allStages = Array.from({ length: totalCount }, (_, i) => {
+          const order = i + 1;
+          if (syntheticStage && syntheticStage.order_num === order) {
+            return syntheticStage;
+          }
+          return { id: `placeholder-${order}`, order_num: order, title: `${order}단계` };
+        });
         const syntheticAssignment = {
           id: initialAssessment?.id,
           title: initialAssessment?.title,
@@ -103,13 +119,21 @@ export default function WorkScreen({ navigation, route }) {
             current_stage_order: s?.step_order || 1,
             status: 'in_progress',
           },
-          stages: syntheticStage ? [syntheticStage] : [],
+          stages: allStages,
           stageWritings: {},
         };
         setAssignment(syntheticAssignment);
         if (stageAllowsAiBrowser(syntheticStage)) {
           setAiUrl(INAPP_BROWSER_HOME);
           setAddressDraft(INAPP_BROWSER_HOME);
+        }
+
+        // 이전 단계 제출 내용 불러오기
+        try {
+          const subs = await assessmentAPI.getPreviousSubmissions(participation_id);
+          setPreviousSubmissions(subs || []);
+        } catch (e) {
+          setPreviousSubmissions([]);
         }
       } else {
         // 구 시스템
@@ -123,7 +147,7 @@ export default function WorkScreen({ navigation, route }) {
         }
       }
     } catch (err) {
-      Alert.alert('오류', err.message);
+      appAlert('오류', err.message, null, { type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -134,6 +158,7 @@ export default function WorkScreen({ navigation, route }) {
   useEffect(() => {
     return () => {
       if (saveWritingTimerRef.current) clearTimeout(saveWritingTimerRef.current);
+      if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
     };
   }, []);
 
@@ -200,7 +225,7 @@ export default function WorkScreen({ navigation, route }) {
         complete_at: completeAt,
       });
     } catch (err) {
-      console.log('URL 로그 실패:', err.message);
+      console.log('URL 로그 실패:', err.message, err.detail || '');
     }
   };
 
@@ -238,16 +263,10 @@ export default function WorkScreen({ navigation, route }) {
 
     switch (msg.type) {
       case 'page_load': {
-        if (lastLoggedUrlRef.current && lastLoggedUrlRef.current !== msg.url) {
-          await logUrl(
-            lastLoggedUrlRef.current,
-            aiUrl,
-            visitedAtRef.current,
-            new Date().toISOString()
-          );
+        // URL 로깅은 onNavigationStateChange 단독 처리 — 여기서는 방문 시각만 갱신
+        if (msg.visited_at) {
+          visitedAtRef.current = msg.visited_at;
         }
-        visitedAtRef.current    = msg.visited_at || new Date().toISOString();
-        lastLoggedUrlRef.current = msg.url;
         break;
       }
       case 'ai_prompt': {
@@ -287,7 +306,7 @@ export default function WorkScreen({ navigation, route }) {
       return true;
     } catch (err) {
       setWritingSaveStatus('error');
-      Alert.alert('저장 실패', err.message || '작성 내용을 저장하지 못했습니다.');
+      appAlert('저장 실패', err.message || '작성 내용을 저장하지 못했습니다.', null, { type: 'error' });
       return false;
     }
   };
@@ -303,6 +322,13 @@ export default function WorkScreen({ navigation, route }) {
   const handleAdvanceStage = async () => {
     if (!assignment) return;
 
+    if (!writingTextRef.current || !writingTextRef.current.trim()) {
+      appAlert('내용을 입력해주세요', '이 단계의 내용을 작성한 후 다음 단계로 이동할 수 있습니다.', [
+        { text: '확인' },
+      ], { type: 'warning' });
+      return;
+    }
+
     if (isNewSystem) {
       // 작성 내용 저장 타이머 flush
       if (saveWritingTimerRef.current) {
@@ -316,27 +342,45 @@ export default function WorkScreen({ navigation, route }) {
         });
 
         if (result.status === 'submitted') {
-          Alert.alert('🎉 수행평가 완료!', '모든 단계를 완료하여 제출되었습니다. 수고하셨습니다!', [
-            { text: '확인', onPress: () => navigation.goBack() },
-          ]);
+          appAlert('수행평가 완료!', '모든 단계를 완료하여 제출되었습니다. 수고하셨습니다!', [
+            { text: '확인', onPress: () => navigation.popToTop() },
+          ], { type: 'success' });
         } else {
           // 다음 단계 정보로 WorkScreen 갱신
           const nextStage = result.next_step_info;
           const syntheticStage = nextStage ? { ...nextStage, order_num: nextStage.step_order } : null;
-          setAssignment(prev => ({
-            ...prev,
-            studentProgress: {
-              current_stage_order: result.next_step,
-              status: 'in_progress',
-            },
-            stages: syntheticStage ? [syntheticStage] : prev.stages,
-            stageWritings: {},
-          }));
+          setAssignment(prev => {
+            // 기존 stages 배열의 총 길이(totalStages)를 유지하면서 현재 단계만 교체
+            const updatedStages = (prev.stages || []).map(stg =>
+              syntheticStage && stg.order_num === syntheticStage.order_num
+                ? syntheticStage
+                : stg
+            );
+            return {
+              ...prev,
+              studentProgress: {
+                current_stage_order: result.next_step,
+                status: 'in_progress',
+              },
+              stages: updatedStages.length > 0 ? updatedStages : prev.stages,
+              stageWritings: {},
+            };
+          });
           setWritingText('');
-          Alert.alert('단계 완료', result.message || `${result.next_step}단계로 이동했습니다.`);
+
+          // 현재 단계 ID 및 이전 제출 목록 갱신
+          if (result.next_step_info?.id) {
+            setCurrentStepId(result.next_step_info.id);
+          }
+          try {
+            const subs = await assessmentAPI.getPreviousSubmissions(participation_id);
+            setPreviousSubmissions(subs || []);
+          } catch (e) {}
+
+          appAlert('단계 완료', result.message || `${result.next_step}단계로 이동했습니다.`, null, { type: 'success' });
         }
       } catch (err) {
-        Alert.alert('오류', err.message);
+        appAlert('오류', err.message, null, { type: 'error' });
       }
       return;
     }
@@ -356,13 +400,13 @@ export default function WorkScreen({ navigation, route }) {
         next_stage_order: order + 1,
       });
       if (result.status === 'completed') {
-        Alert.alert('🎉 수행평가 완료!', '모든 단계를 완료했습니다. 수고하셨습니다!');
-        navigation.goBack();
+        appAlert('수행평가 완료!', '모든 단계를 완료했습니다. 수고하셨습니다!', null, { type: 'success' });
+        navigation.popToTop();
       } else {
         loadAssignment();
       }
     } catch (err) {
-      Alert.alert('오류', err.message);
+      appAlert('오류', err.message, null, { type: 'error' });
     }
   };
 
@@ -452,20 +496,31 @@ export default function WorkScreen({ navigation, route }) {
   const currentStage = assignment?.stages?.find(s => s.order_num === currentStageOrder);
   const isCompleted = assignment?.studentProgress?.status === 'completed';
   const aiAllowed = stageAllowsAiBrowser(currentStage);
-  const previousStageWritings = (assignment?.stages || [])
-    .filter((stage) => stage.order_num < currentStageOrder)
-    .sort((a, b) => a.order_num - b.order_num)
-    .map((stage) => {
-      const sw = assignment?.stageWritings || {};
-      const row = sw[stage.id] ?? sw[String(stage.id)];
-      return {
-        stageId: stage.id,
-        orderNum: stage.order_num,
-        title: stage.title,
-        content: row?.content ?? '',
-      };
-    })
-    .filter((item) => item.content.trim().length > 0);
+  const previousStageWritings = isNewSystem
+    ? previousSubmissions
+        .filter((s) => Number(s.step_id) !== Number(currentStepId))
+        .map((s) => ({
+          key: String(s.id),           // submission 고유 id
+          stageId: s.step_id,
+          orderNum: s.step_order || 0,
+          title: s.step_title || `${s.step_order || '?'}단계`,
+          content: s.content || '',
+        }))
+        .filter((item) => item.content.trim().length > 0)
+    : (assignment?.stages || [])
+        .filter((stage) => stage.order_num < currentStageOrder)
+        .sort((a, b) => a.order_num - b.order_num)
+        .map((stage) => {
+          const sw = assignment?.stageWritings || {};
+          const row = sw[stage.id] ?? sw[String(stage.id)];
+          return {
+            stageId: stage.id,
+            orderNum: stage.order_num,
+            title: stage.title,
+            content: row?.content ?? '',
+          };
+        })
+        .filter((item) => item.content.trim().length > 0);
 
   const navigateFromAddressBar = () => {
     const raw = addressDraft.trim();
@@ -531,7 +586,7 @@ export default function WorkScreen({ navigation, route }) {
               <View style={styles.writingHeader}>
                 <Text style={styles.infoBoxLabel}>✏️ 작성 공간</Text>
               <View style={styles.writingHeaderRight}>
-                {currentStageOrder > 1 && (
+                {(isNewSystem ? previousStageWritings.length > 0 : currentStageOrder > 1) && (
                   <TouchableOpacity
                     style={styles.prevViewBtn}
                     onPress={() => {
@@ -596,7 +651,7 @@ export default function WorkScreen({ navigation, route }) {
             ) : (
               <TouchableOpacity
                 style={styles.advanceBtn}
-                onPress={() => Alert.alert(
+                onPress={() => appAlert(
                   currentStageOrder === totalStages ? '수행평가 완료' : '다음 단계로 이동',
                   currentStageOrder === totalStages
                     ? '수행평가를 완료하시겠습니까?'
@@ -604,7 +659,8 @@ export default function WorkScreen({ navigation, route }) {
                   [
                     { text: '취소', style: 'cancel' },
                     { text: currentStageOrder === totalStages ? '완료' : '이동', onPress: handleAdvanceStage },
-                  ]
+                  ],
+                  { type: 'warning' }
                 )}
               >
                 <Text style={styles.advanceBtnText}>
@@ -641,6 +697,22 @@ export default function WorkScreen({ navigation, route }) {
               ) : WebView ? (
                 <>
                   <View style={styles.browserUrlBar}>
+                    {/* 뒤로 */}
+                    <TouchableOpacity
+                      style={[styles.browserNavBtn, !canWebViewGoBack && styles.browserNavBtnDisabled]}
+                      onPress={() => canWebViewGoBack && webViewRef.current?.goBack()}
+                      activeOpacity={canWebViewGoBack ? 0.7 : 1}
+                    >
+                      <Text style={styles.browserNavBtnText}>‹</Text>
+                    </TouchableOpacity>
+                    {/* 앞으로 */}
+                    <TouchableOpacity
+                      style={[styles.browserNavBtn, !canWebViewGoForward && styles.browserNavBtnDisabled]}
+                      onPress={() => canWebViewGoForward && webViewRef.current?.goForward()}
+                      activeOpacity={canWebViewGoForward ? 0.7 : 1}
+                    >
+                      <Text style={styles.browserNavBtnText}>›</Text>
+                    </TouchableOpacity>
                     <TextInput
                       style={styles.browserUrlInput}
                       value={addressDraft}
@@ -653,6 +725,14 @@ export default function WorkScreen({ navigation, route }) {
                       keyboardType="url"
                       returnKeyType="go"
                     />
+                    {/* 새로고침 */}
+                    <TouchableOpacity
+                      style={styles.browserNavBtn}
+                      onPress={() => webViewRef.current?.reload()}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.browserNavBtnText}>↺</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity style={styles.browserUrlGo} onPress={navigateFromAddressBar}>
                       <Text style={styles.browserUrlGoText}>검색</Text>
                     </TouchableOpacity>
@@ -661,27 +741,49 @@ export default function WorkScreen({ navigation, route }) {
                     ref={webViewRef}
                     source={{ uri: aiUrl }}
                     style={styles.webView}
-                    onLoadStart={() => setAiPageLoading(true)}
-                    onLoadEnd={(e) => {
+                    onLoadStart={() => {
+                      setAiPageLoading(true);
+                      // 최대 6초 후 강제 해제 (캐시 복원 등 onLoadEnd 미발화 대비)
+                      clearTimeout(loadingTimerRef.current);
+                      loadingTimerRef.current = setTimeout(() => {
+                        setAiPageLoading(false);
+                      }, 6000);
+                    }}
+                    onLoadEnd={() => {
+                      clearTimeout(loadingTimerRef.current);
                       setAiPageLoading(false);
-                      // duration 버그 수정: completeAt을 현재 시각으로 기록
-                      logUrl(
-                        e.nativeEvent.url,
-                        e.nativeEvent.title,
-                        visitedAtRef.current,
-                        new Date().toISOString()
-                      );
                     }}
                     onNavigationStateChange={(state) => {
                       setCanWebViewGoBack(state.canGoBack);
-                      if (state.url && state.url !== aiUrl) {
-                        // 이전 URL 체류 완료
-                        logUrl(aiUrl, state.title || '', visitedAtRef.current, new Date().toISOString());
-                        setAiUrl(state.url);
-                        setAddressDraft(state.url);
-                        visitedAtRef.current    = new Date().toISOString();
-                        lastLoggedUrlRef.current = null;
+                      setCanWebViewGoForward(state.canGoForward);
+
+                      // 로딩 완료 처리 — onLoadEnd 미발화 시 여기서 확실히 해제
+                      if (!state.loading) {
+                        clearTimeout(loadingTimerRef.current);
+                        setAiPageLoading(false);
+                      }
+
+                      const newUrl = state.url;
+                      if (
+                        newUrl &&
+                        newUrl !== 'about:blank' &&
+                        newUrl !== lastLoggedUrlRef.current   // 중복 방지
+                      ) {
+                        // 이전 URL 체류 완료 로그
+                        if (lastLoggedUrlRef.current) {
+                          logUrl(
+                            lastLoggedUrlRef.current,
+                            '',
+                            visitedAtRef.current,
+                            new Date().toISOString()
+                          );
+                        }
+                        // 새 URL 추적 시작 (source는 변경하지 않음 — 히스토리 보존)
+                        lastLoggedUrlRef.current = newUrl;
+                        visitedAtRef.current     = new Date().toISOString();
                         pageStartTimeRef.current = Date.now();
+                        // 주소 표시만 업데이트 (WebView source 변경 X)
+                        setAddressDraft(newUrl);
                       }
                     }}
                     onShouldStartLoadWithRequest={(req) => {
@@ -771,7 +873,7 @@ export default function WorkScreen({ navigation, route }) {
                 ) : (
                   previousStageWritings.map((item) => (
                     <TouchableOpacity
-                      key={item.stageId}
+                      key={item.key || String(item.stageId)}
                       style={styles.prevPreviewItem}
                       onPress={() => setSelectedPreviousStage(item)}
                       activeOpacity={0.8}
@@ -904,17 +1006,23 @@ const styles = StyleSheet.create({
   // AI 브라우저 패널
   browserPanel: { position: 'relative', backgroundColor: '#000' },
   browserUrlBar: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#1a1a2e', paddingHorizontal: 10, paddingVertical: 6,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#1a1a2e', paddingHorizontal: 6, paddingVertical: 6,
     borderBottomWidth: 1, borderBottomColor: '#333',
   },
+  browserNavBtn: {
+    width: 32, height: 32, justifyContent: 'center', alignItems: 'center',
+    borderRadius: 6, marginHorizontal: 2,
+  },
+  browserNavBtnDisabled: { opacity: 0.3 },
+  browserNavBtnText: { color: '#fff', fontSize: 20, fontWeight: '600', lineHeight: 24 },
   browserUrlInput: {
     flex: 1, color: '#eee', fontSize: 13,
     backgroundColor: '#0f0f23', borderRadius: 8, paddingHorizontal: 10, paddingVertical: Platform.OS === 'ios' ? 9 : 7,
-    borderWidth: 1, borderColor: '#333',
+    borderWidth: 1, borderColor: '#333', marginHorizontal: 4,
   },
   browserUrlGo: {
-    backgroundColor: THEME.primary, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
+    backgroundColor: THEME.primary, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8,
   },
   browserUrlGoText: { color: '#fff', fontWeight: '700', fontSize: 12 },
   webView: { flex: 1 },

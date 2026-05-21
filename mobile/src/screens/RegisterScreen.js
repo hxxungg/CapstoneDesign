@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ActivityIndicator,
   ScrollView,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { THEME } from '../config/api';
+import { appAlert } from '../utils/appAlert';
 
 const GRADES = ['1학년', '2학년', '3학년'];
 
@@ -42,7 +43,7 @@ export default function RegisterScreen({ navigation }) {
   const handleRegister = async () => {
     const error = validate();
     if (error) {
-      Alert.alert('입력 오류', error);
+      appAlert('입력 오류', error, null, { type: 'warning' });
       return;
     }
 
@@ -58,7 +59,7 @@ export default function RegisterScreen({ navigation }) {
       payload.subject = subject.trim() || undefined;
     } else {
       if (!inviteCode.trim()) {
-        Alert.alert('입력 오류', '교사에게 받은 초대 코드를 입력해주세요.');
+        appAlert('입력 오류', '교사에게 받은 초대 코드를 입력해주세요.', null, { type: 'warning' });
         return;
       }
       payload.grade = grade || undefined;
@@ -70,7 +71,7 @@ export default function RegisterScreen({ navigation }) {
     try {
       await register(payload);
     } catch (err) {
-      Alert.alert('회원가입 실패', err.message);
+      appAlert('회원가입 실패', err.message, null, { type: 'error' });
     } finally {
       setLoading(false);
     }
