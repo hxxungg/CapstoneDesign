@@ -1,8 +1,7 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, Pressable,
   StyleSheet, RefreshControl, ActivityIndicator,
-  Modal, TextInput, Keyboard, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -148,86 +147,6 @@ export default function AssignmentListScreen({ navigation }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [enrollOpen, setEnrollOpen] = useState(false);
-  const [enrollCode, setEnrollCode] = useState('');
-  const [enrollLoading, setEnrollLoading] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-
-  useEffect(() => {
-    if (!enrollOpen) {
-      setKeyboardHeight(0);
-      return undefined;
-    }
-
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, (e) => {
-      setKeyboardHeight(e.endCoordinates.height);
-    });
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      setKeyboardHeight(0);
-    });
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, [enrollOpen]);
-
-  const handleEnroll = async () => {
-    const trimmedCode = enrollCode.trim().toUpperCase();
-    if (!trimmedCode) {
-      appAlert('입력 오류', '수행평가 코드를 입력해주세요.', null, { type: 'warning' });
-      return;
-    }
-    setEnrollLoading(true);
-    try {
-      console.log('[Enroll] joining with code:', trimmedCode);
-      const result = await assessmentAPI.join(trimmedCode);
-      console.log('[Enroll] join result:', JSON.stringify(result));
-      setEnrollOpen(false);
-      setEnrollCode('');
-      loadAll();
-      // 참여 완료 → 바로 단계 화면으로 이동
-      console.log('[Enroll] navigating to Work with participation_id:', result.participation_id);
-      navigation.navigate('Work', {
-        participation_id: result.participation_id,
-      });
-    } catch (err) {
-      console.log('[Enroll] error:', err.status, err.message, JSON.stringify(err.data));
-      if (err.status === 409) {
-        // 이미 참여 중 → 해당 participation으로 바로 이동
-        const participationId = err.data?.participation_id;
-        setEnrollOpen(false);
-        setEnrollCode('');
-        loadAll();
-        if (participationId) {
-          navigation.navigate('Work', { participation_id: participationId });
-        } else {
-          appAlert('이미 참여 중', '이미 참여한 수행평가입니다. 목록에서 확인하세요.', null, { type: 'info' });
-        }
-        return;
-      }
-      if (err.status === 404) {
-        try {
-          const oldResult = await assignmentAPI.enroll(trimmedCode);
-          setEnrollOpen(false);
-          setEnrollCode('');
-          loadAll();
-          if (oldResult.assignment) {
-            navigation.navigate('StageList', { assignment: oldResult.assignment });
-          }
-          return;
-        } catch {
-          appAlert('참여 실패', '유효하지 않은 수행평가 코드입니다.', null, { type: 'error' });
-          return;
-        }
-      }
-      appAlert('참여 실패', err.message, null, { type: 'error' });
-    } finally {
-      setEnrollLoading(false);
-    }
-  };
 
   const loadAll = async () => {
     try {
@@ -280,7 +199,7 @@ export default function AssignmentListScreen({ navigation }) {
   const done       = items.filter(i => i.status === 'submitted' || i.status === 'graded' || i.status === 'completed');
 
   return (
-    <AppShell navigation={navigation} currentScreen="home" onEnroll={() => { setEnrollCode(''); setEnrollOpen(true); }}>
+    <AppShell navigation={navigation} currentScreen="home" onEnrolled={loadAll}>
     <View style={{ flex: 1, backgroundColor: C.background }}>
       <ScrollView
         contentContainerStyle={s.content}
@@ -387,61 +306,6 @@ export default function AssignmentListScreen({ navigation }) {
 
         <View style={{ height: 100 }} />
       </ScrollView>
-
-      {/* ── 초대코드 입력 모달 ──────────────────────────────── */}
-      <Modal
-        visible={enrollOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setEnrollOpen(false)}
-        statusBarTranslucent
-      >
-        <Pressable
-          style={[
-            em.overlay,
-            keyboardHeight > 0
-              ? { justifyContent: 'flex-end', paddingBottom: keyboardHeight + 24 }
-              : { justifyContent: 'flex-start', paddingTop: 72 },
-          ]}
-          onPress={() => setEnrollOpen(false)}
-        >
-          <Pressable style={em.card} onPress={() => {}}>
-            <Text style={em.title}>수행평가 참여</Text>
-            <Text style={em.body}>교사에게 받은 초대 코드를 입력하세요.</Text>
-            <TextInput
-              style={em.input}
-              value={enrollCode}
-              onChangeText={setEnrollCode}
-              placeholder="예: AB12CD34"
-              placeholderTextColor={C.textFaint || C.textSecondary}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              maxLength={15}
-              autoFocus={enrollOpen}
-              onSubmitEditing={handleEnroll}
-            />
-            <View style={em.btnRow}>
-              <Pressable
-                style={({ pressed }) => [em.btn, em.btnCancel, pressed && { opacity: 0.7 }]}
-                onPress={() => setEnrollOpen(false)}
-                disabled={enrollLoading}
-              >
-                <Text style={em.btnCancelText}>취소</Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [em.btn, em.btnPrimary, (pressed || enrollLoading) && { opacity: 0.7 }]}
-                onPress={handleEnroll}
-                disabled={enrollLoading}
-              >
-                {enrollLoading
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <Text style={em.btnConfirmText}>참여하기</Text>
-                }
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
     </View>
     </AppShell>
   );
@@ -502,33 +366,4 @@ const s = StyleSheet.create({
   emptyTitle: { fontFamily: F.sansSemi, fontSize: 17, color: C.text, marginBottom: 8 },
   emptyDesc: { fontFamily: F.sans, fontSize: 13.5, color: C.textSecondary, textAlign: 'center', lineHeight: 20 },
 
-});
-
-const em = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(15,27,45,0.4)',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  card: {
-    width: 340, padding: 28, borderRadius: 16,
-    backgroundColor: C.background, gap: 16,
-    shadowColor: C.dark, shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15, shadowRadius: 20, elevation: 12,
-  },
-  title: { fontFamily: F.serifKo, fontSize: 22, color: C.text },
-  body:  { fontFamily: F.sans, fontSize: 14, color: C.textSoft, lineHeight: 21 },
-  input: {
-    height: 52, paddingHorizontal: 16,
-    backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 12,
-    fontFamily: F.mono, fontSize: 18, color: C.text,
-    textAlign: 'center', letterSpacing: 2,
-  },
-  btnRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
-  btn: { flex: 1, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  btnCancel:  { backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
-  btnPrimary: { backgroundColor: C.dark },
-  btnCancelText:  { fontFamily: F.sansMedium, fontSize: 15, color: C.textSecondary },
-  btnConfirmText: { fontFamily: F.sansMedium, fontSize: 15, color: '#fff' },
 });

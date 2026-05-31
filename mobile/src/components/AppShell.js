@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { authAPI } from '../services/api';
 import { THEME, FONTS } from '../config/api';
 import { appAlert } from '../utils/appAlert';
+import EnrollCodeModal from './EnrollCodeModal';
 
 const C = THEME;
 const F = FONTS;
@@ -251,7 +252,7 @@ const NAV_TEACHER = [
   { id: 'invite', label: '초대 코드 확인' },
 ];
 
-export default function AppShell({ children, navigation, currentScreen = 'home', onEnroll, onInviteCode }) {
+export default function AppShell({ children, navigation, currentScreen = 'home', onEnroll, onInviteCode, onEnrolled }) {
   const { user, logout } = useAuth();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -261,6 +262,15 @@ export default function AppShell({ children, navigation, currentScreen = 'home',
 
   const [logoutOpen, setLogoutOpen]   = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [enrollOpen, setEnrollOpen] = useState(false);
+
+  const openEnroll = () => {
+    if (onEnroll) {
+      onEnroll();
+      return;
+    }
+    setEnrollOpen(true);
+  };
 
   const handleNav = (id) => {
     if (id === 'home') {
@@ -270,7 +280,7 @@ export default function AppShell({ children, navigation, currentScreen = 'home',
       }
       return;
     }
-    if (id === 'enroll')  { if (onEnroll) onEnroll(); else navigation.navigate('Enroll'); return; }
+    if (id === 'enroll')  { openEnroll(); return; }
     if (id === 'create')  navigation.navigate('CreateAssignment');
     if (id === 'log')     navigation.navigate('Analytics');
     if (id === 'invite')  {
@@ -301,6 +311,14 @@ export default function AppShell({ children, navigation, currentScreen = 'home',
           onConfirm={() => { setLogoutOpen(false); logout(); }}
         />
         <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        {!isTeacher && (
+          <EnrollCodeModal
+            visible={enrollOpen}
+            onClose={() => setEnrollOpen(false)}
+            navigation={navigation}
+            onJoined={onEnrolled}
+          />
+        )}
       </View>
     );
   }
@@ -387,6 +405,14 @@ export default function AppShell({ children, navigation, currentScreen = 'home',
         onConfirm={() => { setLogoutOpen(false); logout(); }}
       />
       <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      {!isTeacher && (
+        <EnrollCodeModal
+          visible={enrollOpen}
+          onClose={() => setEnrollOpen(false)}
+          navigation={navigation}
+          onJoined={onEnrolled}
+        />
+      )}
     </View>
     </View>
   );

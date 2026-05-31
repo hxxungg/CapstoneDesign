@@ -61,19 +61,19 @@ function nextAchievementLevelLabel(keys) {
   return `수준${n}`;
 }
 
-/** 빈 평가 요소 블록 (추가 시 기본) */
+/** 채점기준표 — scoreGroups 항목당 수행 수준 1개 + 배점 1개 */
 export const EMPTY_SIMPLE_BLOCK = {
   element: '',
   scoreGroups: [{ score: '', levels: [''] }],
 };
 
-/** 채점기준표 양식 — scoreGroups[].levels 길이 = 배점 셀 rowspan */
 export const DEFAULT_BLOCK_TEMPLATES = [
   {
     element: '',
     scoreGroups: [
       { score: '', levels: [''] },
-      { score: '', levels: ['', ''] },
+      { score: '', levels: [''] },
+      { score: '', levels: [''] },
       { score: '', levels: [''] },
       { score: '', levels: [''] },
     ],
@@ -112,7 +112,8 @@ export const DEFAULT_BLOCK_TEMPLATES = [
     element: '',
     scoreGroups: [
       { score: '', levels: [''] },
-      { score: '', levels: ['', ''] },
+      { score: '', levels: [''] },
+      { score: '', levels: [''] },
       { score: '', levels: [''] },
       { score: '', levels: [''] },
     ],
@@ -151,12 +152,22 @@ function countBlockRows(block) {
   return (block.scoreGroups || []).reduce((sum, g) => sum + g.levels.length, 0);
 }
 
-function normalizeScoreGroups(groups) {
+/** 여러 수행 수준이 하나의 배점을 공유하던 구조 → 행마다 1:1로 분리 */
+function flattenScoreGroups(groups) {
   const list = groups?.length ? groups : [{ score: '', levels: [''] }];
-  return list.map((g) => ({
-    score: g.score ?? '',
-    levels: (g.levels?.length ? g.levels : ['']).map((l) => l ?? ''),
-  }));
+  return list.flatMap((g) => {
+    const score = g.score ?? '';
+    const levels = g.levels?.length ? g.levels : [''];
+    return levels.map((level) => ({
+      score,
+      levels: [level ?? ''],
+    }));
+  });
+}
+
+function normalizeScoreGroups(groups) {
+  const flattened = flattenScoreGroups(groups);
+  return flattened.length > 0 ? flattened : [{ score: '', levels: [''] }];
 }
 
 /** 저장된 블록 구조 유지 (추가된 행·블록 잘리지 않음) */
@@ -203,13 +214,9 @@ function addScoreGroup(block, subIndex = null) {
   };
 }
 
-function removeLevelFromBlock(block, groupIndex, levelIndex, subIndex = null) {
+function removeLevelFromBlock(block, groupIndex, _levelIndex, subIndex = null) {
   const patchGroups = (groups) => {
-    const next = groups.map((g, gi) => {
-      if (gi !== groupIndex) return g;
-      const levels = g.levels.filter((_, li) => li !== levelIndex);
-      return levels.length > 0 ? { ...g, levels } : null;
-    }).filter(Boolean);
+    const next = groups.filter((_, gi) => gi !== groupIndex);
     return next.length > 0 ? next : [{ score: '', levels: [''] }];
   };
 
@@ -420,31 +427,25 @@ function ScoreGroupRows({
   return groups.map((group, gi) => (
     <View key={gi} style={[styles.scoreGroupRow, gi > 0 && styles.rowBorder]}>
       <View style={[styles.levelCol, levelStyle]}>
-        {group.levels.map((level, li) => (
-          <View key={li} style={[li > 0 ? styles.levelSplit : undefined, styles.levelRowWrap]}>
-            <LevelInput
-              value={level}
-              onChangeText={(t) => {
-                const levels = [...group.levels];
-                levels[li] = t;
-                onChangeGroup(gi, { ...group, levels });
-              }}
-            />
-            {canRemoveLevel ? (
-              <Pressable
-                style={({ pressed }) => [styles.levelRowRemoveBtn, pressed && { opacity: 0.6 }]}
-                onPress={() => onRemoveLevel?.(gi, li)}
-                hitSlop={6}
-              >
-                <Ionicons name="close-circle-outline" size={14} color={C.textSecondary} />
-              </Pressable>
-            ) : null}
-          </View>
-        ))}
+        <View style={styles.levelRowWrap}>
+          <LevelInput
+            value={group.levels[0] ?? ''}
+            onChangeText={(t) => onChangeGroup(gi, { ...group, levels: [t] })}
+          />
+          {canRemoveLevel ? (
+            <Pressable
+              style={({ pressed }) => [styles.levelRowRemoveBtn, pressed && { opacity: 0.6 }]}
+              onPress={() => onRemoveLevel?.(gi, 0)}
+              hitSlop={6}
+            >
+              <Ionicons name="close-circle-outline" size={14} color={C.textSecondary} />
+            </Pressable>
+          ) : null}
+        </View>
       </View>
       <ScoreInput
         value={group.score}
-        minHeight={ROW_H * group.levels.length}
+        minHeight={ROW_H}
         style={scoreStyle}
         onChangeText={(t) => onChangeGroup(gi, { ...group, score: t })}
       />

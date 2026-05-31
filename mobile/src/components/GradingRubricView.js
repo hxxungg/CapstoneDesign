@@ -32,13 +32,11 @@ function ScoreGroupReadOnly({ groups, levelFlex, scoreFlex }) {
   return groups.map((group, gi) => (
     <View key={gi} style={[styles.scoreGroupRow, gi > 0 && styles.rowBorder]}>
       <View style={[styles.levelCol, levelFlex != null && { flex: levelFlex }]}>
-        {group.levels.map((level, li) => (
-          <View key={li} style={[styles.levelCell, li > 0 && styles.levelSplit]}>
-            <Text style={styles.bodyText}>{level || '—'}</Text>
-          </View>
-        ))}
+        <View style={styles.levelCell}>
+          <Text style={styles.bodyText}>{group.levels[0] || '—'}</Text>
+        </View>
       </View>
-      <View style={[styles.scoreCell, scoreFlex != null && { flex: scoreFlex }, { minHeight: ROW_H * group.levels.length }]}>
+      <View style={[styles.scoreCell, scoreFlex != null && { flex: scoreFlex }, { minHeight: ROW_H }]}>
         <Text style={styles.scoreText}>{group.score || '—'}</Text>
       </View>
     </View>
