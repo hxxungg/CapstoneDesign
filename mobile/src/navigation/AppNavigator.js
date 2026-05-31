@@ -27,6 +27,7 @@ import StudentLogsScreen from '../screens/teacher/StudentLogsScreen';
 import AnalyticsScreen from '../screens/teacher/AnalyticsScreen';
 import StudentListScreen from '../screens/teacher/StudentListScreen';
 import StudentReportScreen from '../screens/teacher/StudentReportScreen';
+import StudentGradingScreen from '../screens/teacher/StudentGradingScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -128,6 +129,11 @@ function TeacherStack() {
       <Stack.Screen
         name="StudentReport"
         component={StudentReportScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="StudentGrading"
+        component={StudentGradingScreen}
         options={{ headerShown: false }}
       />
     </Stack.Navigator>

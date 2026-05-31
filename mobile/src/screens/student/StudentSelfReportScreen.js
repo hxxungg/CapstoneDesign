@@ -10,6 +10,7 @@ import { THEME, FONTS } from '../../config/api';
 import AppShell from '../../components/AppShell';
 import PieChart from '../../components/PieChart';
 import { buildStepDisplayList, SimilarityActivitySplitPanel } from '../../components/SimilarityActivityPanel';
+import { appAlert } from '../../utils/appAlert';
 
 const C = THEME;
 const F = FONTS;
@@ -93,10 +94,20 @@ export default function StudentSelfReportScreen({ navigation, route }) {
 
   const stepDisplayList = buildStepDisplayList(byStep, simByStep, { includeStepOrderInTitle: false });
   const showAnalysisPanel = stepDisplayList.length > 0 || aiLogs.length > 0 || urlLogs.length > 0;
+  const finalScore = data?.evaluation?.score;
+  const hasFinalScore = finalScore != null && finalScore !== '';
   const panelRef = useRef(null);
   const clearPanelHighlight = useCallback(() => {
     panelRef.current?.clearHighlight?.();
   }, []);
+
+  const handleShowScore = useCallback(() => {
+    if (hasFinalScore) {
+      appAlert('최종 점수', `${finalScore}점`, null, { type: 'info' });
+    } else {
+      appAlert('최종 점수', '아직 교사가 점수를 입력하지 않았습니다.', null, { type: 'info' });
+    }
+  }, [hasFinalScore, finalScore]);
 
   return (
     <AppShell navigation={navigation} currentScreen="home">
@@ -115,6 +126,15 @@ export default function StudentSelfReportScreen({ navigation, route }) {
               )}
             </View>
           </Pressable>
+          {!loading ? (
+            <Pressable
+              style={({ pressed }) => [s.scoreBtn, pressed && { opacity: 0.75 }]}
+              onPress={handleShowScore}
+            >
+              <Ionicons name="ribbon-outline" size={15} color={C.primary} />
+              <Text style={s.scoreBtnText}>점수 보기</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {loading ? (
@@ -227,6 +247,19 @@ export default function StudentSelfReportScreen({ navigation, route }) {
 
 const s = StyleSheet.create({
   header:      { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: THEME.border },
+  scoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: THEME.card,
+    borderWidth: 1,
+    borderColor: THEME.primary,
+    borderRadius: 10,
+    flexShrink: 0,
+  },
+  scoreBtnText: { fontFamily: FONTS.sansMedium, fontSize: 13, color: THEME.primary },
   backBtn:     { width: 32, height: 32, borderRadius: 8, backgroundColor: THEME.card, borderWidth: 1, borderColor: THEME.border, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontFamily: FONTS.sansBold, fontSize: 16, color: THEME.text },
   headerSub:   { fontFamily: FONTS.sans, fontSize: 12, color: THEME.textSecondary, marginTop: 2 },

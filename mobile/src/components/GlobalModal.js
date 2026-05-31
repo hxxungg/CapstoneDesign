@@ -1,14 +1,17 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
-  Modal, View, Text, TouchableOpacity, StyleSheet, useWindowDimensions,
+  Modal, View, Text, Pressable, StyleSheet, useWindowDimensions,
 } from 'react-native';
 import ModalManager from '../utils/ModalManager';
-import { THEME } from '../config/api';
+import { THEME, FONTS } from '../config/api';
+
+const C = THEME;
+const F = FONTS;
 
 /**
  * opts = { title, message, buttons, type }
  * buttons = [{ text, onPress, style }]  — style: 'cancel' | 'destructive' | default
- * type: 'info' | 'error' | 'success' | 'warning'
+ * type: 'info' | 'error' | 'success' | 'warning' (타입별 강조는 메시지 박스 색만)
  */
 export default function GlobalModal() {
   const { width } = useWindowDimensions();
@@ -34,16 +37,26 @@ export default function GlobalModal() {
     }
   };
 
-  const iconMap = {
-    error:   { emoji: '❌', color: THEME.danger,   bg: THEME.dangerLight },
-    success: { emoji: '✅', color: THEME.success,  bg: THEME.successLight },
-    warning: { emoji: '⚠️', color: THEME.warning,  bg: THEME.warningLight },
-    info:    { emoji: 'ℹ️',  color: THEME.primary,  bg: THEME.primaryLight },
+  const accentMap = {
+    error:   { bg: C.dangerLight,  border: C.danger + '30',  text: C.danger },
+    success: { bg: C.successLight, border: C.success + '30', text: C.success },
+    warning: { bg: C.warningLight, border: C.warning + '30', text: C.warning },
+    info:    { bg: C.primaryLight, border: C.primary + '30', text: C.primary },
   };
-  const icon = iconMap[opts.type] || iconMap.info;
+  const accent = accentMap[opts.type] || accentMap.info;
   const isSingle = opts.buttons.length === 1;
+  const cardWidth = Math.min(width - 48, 340);
+  const useHighlightBox = (msg) => {
+    const t = (msg || '').trim();
+    if (!t) return false;
+    if (/^\d+(\.\d+)?점$/.test(t)) return true;
+    return t.length <= 12 && !/[\s.]/.test(t) && !t.includes('습니다');
+  };
+  const highlightMessage = useHighlightBox(opts.message);
 
-  const cardWidth = Math.min(width * 0.88, 360);
+  const closeModal = () => {
+    if (isSingle) handleButton(opts.buttons[0]);
+  };
 
   return (
     <Modal
@@ -51,71 +64,65 @@ export default function GlobalModal() {
       transparent
       animationType="fade"
       statusBarTranslucent
-      onRequestClose={() => {}}
+      onRequestClose={closeModal}
     >
-      <View style={styles.overlay}>
-        {/* alignItems 없이 고정 width로 카드 렌더링 — overflow 버그 방지 */}
-        <View style={[styles.card, { width: cardWidth }]}>
+      <Pressable style={styles.overlay} onPress={closeModal}>
+        <Pressable style={[styles.modalBox, { width: cardWidth }]} onPress={() => {}}>
+          <Text style={styles.modalTitle}>{opts.title}</Text>
 
-          {/* 아이콘 */}
-          <View style={styles.iconRow}>
-            <View style={[styles.iconWrap, { backgroundColor: icon.bg }]}>
-              <Text style={styles.iconText}>{icon.emoji}</Text>
-            </View>
-          </View>
-
-          {/* 제목 */}
-          <Text style={[styles.title, { color: icon.color }]}>{opts.title}</Text>
-
-          {/* 메시지 */}
           {!!opts.message && (
-            <Text style={styles.message}>{opts.message}</Text>
+            highlightMessage ? (
+              <View style={[styles.messageBox, {
+                backgroundColor: accent.bg,
+                borderColor: accent.border,
+              }]}>
+                <Text style={[styles.messageBoxText, { color: accent.text }]}>
+                  {opts.message}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.modalSub}>{opts.message}</Text>
+            )
           )}
 
-          {/* 버튼 영역 */}
           {isSingle ? (
-            <TouchableOpacity
-              style={[styles.btnSingle, styles.btnPrimary]}
+            <Pressable
+              style={({ pressed }) => [styles.modalCloseBtn, pressed && { opacity: 0.7 }]}
               onPress={() => handleButton(opts.buttons[0])}
-              activeOpacity={0.8}
             >
-              <Text style={[styles.btnText, styles.btnTextPrimary]}>
-                {opts.buttons[0].text}
-              </Text>
-            </TouchableOpacity>
+              <Text style={styles.modalCloseTxt}>{opts.buttons[0].text}</Text>
+            </Pressable>
           ) : (
             <View style={styles.btnRow}>
               {opts.buttons.map((btn, idx) => {
                 const isCancel = btn.style === 'cancel';
                 const isDestructive = btn.style === 'destructive';
                 return (
-                  <TouchableOpacity
+                  <Pressable
                     key={idx}
-                    style={[
-                      styles.btnMulti,
-                      idx < opts.buttons.length - 1 && { marginRight: 10 },
+                    style={({ pressed }) => [
+                      styles.btn,
                       isCancel && styles.btnCancel,
                       isDestructive && styles.btnDestructive,
                       !isCancel && !isDestructive && styles.btnPrimary,
+                      pressed && { opacity: 0.7 },
                     ]}
                     onPress={() => handleButton(btn)}
-                    activeOpacity={0.8}
                   >
                     <Text style={[
                       styles.btnText,
                       isCancel && styles.btnTextCancel,
-                      isDestructive && styles.btnTextDestructive,
-                      !isCancel && !isDestructive && styles.btnTextPrimary,
+                      (isDestructive || (!isCancel && !isDestructive)) && styles.btnTextPrimary,
                     ]}>
                       {btn.text}
                     </Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 );
               })}
             </View>
           )}
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
@@ -123,73 +130,95 @@ export default function GlobalModal() {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(15,27,45,0.4)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
   },
-  card: {
-    backgroundColor: THEME.card,
-    borderRadius: 24,
-    paddingHorizontal: 24,
-    paddingTop: 28,
-    paddingBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
+  modalBox: {
+    padding: 24,
+    borderRadius: 16,
+    backgroundColor: C.background,
+    shadowColor: C.dark,
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 10,
+    shadowRadius: 20,
+    elevation: 12,
   },
-  /* 아이콘을 가운데 정렬하기 위한 행 */
-  iconRow: {
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  iconWrap: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  iconText: { fontSize: 34 },
-  title: {
-    fontSize: 19,
-    fontWeight: 'bold',
+  modalTitle: {
+    fontFamily: F.serifKo,
+    fontSize: 20,
+    color: C.text,
+    marginBottom: 4,
     textAlign: 'center',
-    marginBottom: 10,
   },
-  message: {
+  modalSub: {
+    fontFamily: F.sans,
+    fontSize: 13,
+    color: C.textSecondary,
+    marginBottom: 4,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  messageBox: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  messageBoxText: {
+    fontFamily: F.monoMed ?? F.mono,
+    fontSize: 22,
+    letterSpacing: 1,
+    textAlign: 'center',
+  },
+  modalCloseBtn: {
+    marginTop: 14,
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: C.card,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  modalCloseTxt: {
+    fontFamily: F.sansMedium,
     fontSize: 14,
-    color: THEME.text,
-    textAlign: 'center',
-    lineHeight: 21,
-    marginBottom: 20,
+    color: C.textSecondary,
   },
-  /* 단일 버튼: alignSelf 로 너비 제어 (width:'100%' 대신) */
-  btnSingle: {
-    alignSelf: 'stretch',
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  /* 복수 버튼 컨테이너 */
   btnRow: {
     flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
   },
-  /* 복수 버튼 개별 */
-  btnMulti: {
+  btn: {
     flex: 1,
-    borderRadius: 14,
-    paddingVertical: 14,
+    padding: 14,
+    borderRadius: 12,
     alignItems: 'center',
   },
-  /* 색상 변형 */
-  btnPrimary: { backgroundColor: THEME.primary },
-  btnCancel: { backgroundColor: THEME.background, borderWidth: 1, borderColor: THEME.border },
-  btnDestructive: { backgroundColor: THEME.danger },
-  btnText: { fontSize: 15, fontWeight: '700' },
-  btnTextPrimary: { color: '#fff' },
-  btnTextCancel: { color: THEME.textSecondary },
-  btnTextDestructive: { color: '#fff' },
+  btnCancel: {
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  btnPrimary: {
+    backgroundColor: C.dark,
+  },
+  btnDestructive: {
+    backgroundColor: C.danger,
+  },
+  btnText: {
+    fontFamily: F.sansMedium,
+    fontSize: 15,
+  },
+  btnTextCancel: {
+    color: C.textSecondary,
+  },
+  btnTextPrimary: {
+    color: '#fff',
+  },
 });

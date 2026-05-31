@@ -118,6 +118,8 @@ export const analyticsAPI = {
   /** 교사: 신규 assessments 시스템 — 참여별 AI·URL 로그 분석 */
   getParticipationAnalytics: (participationId) =>
     apiClient.get(`/analytics/participation/${participationId}`, { timeout: 180000 }),
+  saveParticipationGrade: (participationId, data) =>
+    apiClient.patch(`/analytics/participation/${participationId}/grade`, data),
   /** 교사: 수행평가 전체 AI 대화 분석 (의존도·키워드·시간대) */
   getAssessmentAiAnalysis: (assessmentId) =>
     apiClient.get(`/analytics/assessment/${assessmentId}/ai-analysis`),

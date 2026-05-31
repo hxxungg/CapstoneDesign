@@ -12,6 +12,42 @@ const {
   fallbackPromptType,
 } = require('../services/promptClassificationService');
 
+/** teacher_db.evaluations — step_id NULL = 최종 점수 */
+async function getFinalEvaluation(participationId) {
+  const [rows] = await pool.query(
+    `SELECT score, evaluated_at
+     FROM teacher_db.evaluations
+     WHERE participation_id = ? AND step_id IS NULL
+     ORDER BY evaluated_at DESC, id DESC
+     LIMIT 1`,
+    [participationId]
+  );
+  return rows[0] ?? null;
+}
+
+async function upsertFinalEvaluation(participationId, score) {
+  const [existing] = await pool.query(
+    `SELECT id FROM teacher_db.evaluations
+     WHERE participation_id = ? AND step_id IS NULL
+     LIMIT 1`,
+    [participationId]
+  );
+  if (existing.length > 0) {
+    await pool.query(
+      `UPDATE teacher_db.evaluations
+       SET score = ?, evaluated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [score, existing[0].id]
+    );
+    return;
+  }
+  await pool.query(
+    `INSERT INTO teacher_db.evaluations (participation_id, step_id, score)
+     VALUES (?, NULL, ?)`,
+    [participationId, score]
+  );
+}
+
 function detectAITool(url) {
   if (!url) return null;
   const u = url.toLowerCase();
@@ -596,8 +632,13 @@ router.get('/participation/:id', authenticateToken, async (req, res) => {
       })
       .filter(Boolean);
 
+    const finalEvaluation = await getFinalEvaluation(participationId);
+
     res.json({
       participation,
+      evaluation: finalEvaluation
+        ? { score: finalEvaluation.score, evaluated_at: finalEvaluation.evaluated_at }
+        : null,
       steps,
       summary: {
         total_url_visits:  urlLogs.length,
@@ -617,6 +658,62 @@ router.get('/participation/:id', authenticateToken, async (req, res) => {
       })),
       similarity_by_step: simByStep,
     });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '서버 오류가 발생했습니다.' });
+  }
+});
+
+router.patch('/participation/:id/grade', authenticateToken, requireTeacher, async (req, res) => {
+  const participationId = parseInt(req.params.id, 10);
+  const { final_score } = req.body;
+
+  if (isNaN(participationId)) {
+    return res.status(400).json({ error: '잘못된 ID입니다.' });
+  }
+  if (final_score == null || String(final_score).trim() === '') {
+    return res.status(400).json({ error: '최종 점수를 입력해주세요.' });
+  }
+
+  try {
+    const [teacherRows] = await pool.query(
+      'SELECT id FROM teacher_db.teachers WHERE user_id = ?',
+      [req.user.id]
+    );
+    if (teacherRows.length === 0) {
+      return res.status(403).json({ error: '권한이 없습니다.' });
+    }
+
+    const [pRows] = await pool.query(
+      `SELECT p.id, a.teacher_id
+       FROM student_db.participations p
+       JOIN teacher_db.assessments a ON p.assessment_id = a.id
+       WHERE p.id = ?`,
+      [participationId]
+    );
+    if (pRows.length === 0) {
+      return res.status(404).json({ error: '참여 기록을 찾을 수 없습니다.' });
+    }
+    if (Number(pRows[0].teacher_id) !== Number(teacherRows[0].id)) {
+      return res.status(403).json({ error: '권한이 없습니다.' });
+    }
+
+    const scoreNum = Number(String(final_score).trim());
+    if (!Number.isFinite(scoreNum)) {
+      return res.status(400).json({ error: '점수는 숫자로 입력해주세요.' });
+    }
+    const scoreInt = Math.round(scoreNum);
+
+    await upsertFinalEvaluation(participationId, scoreInt);
+
+    await pool.query(
+      `UPDATE student_db.participations
+       SET status = CASE WHEN status = 'submitted' THEN 'graded' ELSE status END
+       WHERE id = ?`,
+      [participationId]
+    );
+
+    res.json({ success: true, evaluation: { score: scoreInt } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: '서버 오류가 발생했습니다.' });

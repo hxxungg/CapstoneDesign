@@ -150,6 +150,20 @@ export default function StudentReportScreen({ navigation, route }) {
             </View>
             <Text style={s.pageSubTitle} numberOfLines={1}>{assessmentTitle}</Text>
           </Pressable>
+          {!loading && participation.assessment_id ? (
+            <Pressable
+              style={({ pressed }) => [s.gradeBtn, pressed && { opacity: 0.75 }]}
+              onPress={() => navigation.navigate('StudentGrading', {
+                participationId,
+                assessmentId: participation.assessment_id,
+                studentName,
+                assessmentTitle,
+              })}
+            >
+              <Ionicons name="create-outline" size={15} color={C.primary} />
+              <Text style={s.gradeBtnText}>평가하기</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {loading ? (
@@ -311,6 +325,19 @@ const s = StyleSheet.create({
   pageTag:      { fontFamily: F.mono, fontSize: 11, color: C.textSecondary, letterSpacing: 1.2, marginBottom: 1 },
   pageTitle:    { fontFamily: F.sansBold, fontSize: 17, color: C.text },
   pageSubTitle: { fontFamily: F.sans, fontSize: 12, color: C.textSecondary, marginTop: 2 },
+  gradeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.primary,
+    borderRadius: 10,
+    flexShrink: 0,
+  },
+  gradeBtnText: { fontFamily: F.sansMedium, fontSize: 13, color: C.primary },
   exitBadge:    { fontFamily: F.sansMedium, fontSize: 12, color: '#C62828', backgroundColor: '#FFEBEE', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
   pieGrid:      { flexDirection: 'row', flexWrap: 'wrap', gap: 20 },
   pieCell:      { flex: 1, minWidth: 200 },
