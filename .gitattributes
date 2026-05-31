@@ -1,0 +1,2 @@
+# JSON은 저장소·작업 복사 모두 LF로 통일 (Windows CRLF 경고 감소)
+*.json text eol=lf

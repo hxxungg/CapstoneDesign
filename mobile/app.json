@@ -2,6 +2,7 @@
   "expo": {
     "name": "수행평가 AI 관리",
     "slug": "performance-eval-app",
+    "owner": "hxxxungg",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -11,6 +12,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#3B82F6"
     },
+    "scheme": "performanceeval",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.performanceeval.app"
@@ -25,6 +27,10 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": []
+    "plugins": [
+      "expo-web-browser",
+      "expo-font",
+      "@react-native-community/datetimepicker"
+    ]
   }
 }

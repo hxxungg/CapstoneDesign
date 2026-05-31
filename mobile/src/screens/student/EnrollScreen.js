@@ -1,28 +1,58 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
+  ActivityIndicator, KeyboardAvoidingView, Platform,
+  Keyboard, Pressable,
 } from 'react-native';
-import { assignmentAPI } from '../../services/api';
+import { assignmentAPI, assessmentAPI } from '../../services/api';
 import { THEME } from '../../config/api';
+import { appAlert } from '../../utils/appAlert';
 
 export default function EnrollScreen({ navigation }) {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleEnroll = async () => {
-    if (!code.trim()) {
-      Alert.alert('입력 오류', '수행평가 코드를 입력해주세요.');
+    const trimmedCode = code.trim().toUpperCase();
+    if (!trimmedCode) {
+      appAlert('입력 오류', '수행평가 코드를 입력해주세요.', null, { type: 'warning' });
       return;
     }
 
     setLoading(true);
     try {
-      const result = await assignmentAPI.enroll(code.trim().toUpperCase());
+      // 신규 assessments 시스템 먼저 시도
+      const result = await assessmentAPI.join(trimmedCode);
       navigation.goBack();
-      Alert.alert('참여 완료', `"${result.assignment.title}" 수행평가에 참여했습니다.`);
+      setTimeout(() => {
+        appAlert('참여 완료', result.message || `수행평가에 참여했습니다.`, null, { type: 'success' });
+      }, 400);
     } catch (err) {
-      Alert.alert('참여 실패', err.message);
+      // 409: 이미 참여 중
+      if (err.status === 409) {
+        navigation.goBack();
+        setTimeout(() => {
+          appAlert('이미 참여 중', '이미 참여한 수행평가입니다.', null, { type: 'info' });
+        }, 400);
+        return;
+      }
+
+      // 404: 새 시스템에 코드 없음 → 구 assignments 시스템 시도
+      if (err.status === 404) {
+        try {
+          const oldResult = await assignmentAPI.enroll(trimmedCode);
+          navigation.goBack();
+          setTimeout(() => {
+            appAlert('참여 완료', `"${oldResult.assignment?.title}" 수행평가에 참여했습니다.`, null, { type: 'success' });
+          }, 400);
+          return;
+        } catch (oldErr) {
+          appAlert('참여 실패', '유효하지 않은 수행평가 코드입니다.', null, { type: 'error' });
+          return;
+        }
+      }
+
+      appAlert('참여 실패', err.message, null, { type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -30,14 +60,14 @@ export default function EnrollScreen({ navigation }) {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <View style={styles.content}>
+      <Pressable style={styles.content} onPress={Keyboard.dismiss}>
         <Text style={styles.icon}>🔑</Text>
         <Text style={styles.title}>수행평가 참여</Text>
-        <Text style={styles.desc}>교사에게 받은 수행평가 코드를 입력하세요.</Text>
+        <Text style={styles.desc}>교사에게 받은 수행평가 초대 코드를 입력하세요.</Text>
 
         <TextInput
           style={styles.input}
-          placeholder="예: ASNABCD1234"
+          placeholder="예: AB12CD34"
           placeholderTextColor={THEME.textSecondary}
           value={code}
           onChangeText={setCode}
@@ -53,14 +83,14 @@ export default function EnrollScreen({ navigation }) {
         >
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>참여하기</Text>}
         </TouchableOpacity>
-      </View>
+      </Pressable>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: THEME.background },
-  content: { flex: 1, padding: 32, justifyContent: 'center', alignItems: 'center' },
+  content: { flex: 1, padding: 32, justifyContent: 'center', alignItems: 'center', width: '100%' },
   icon: { fontSize: 64, marginBottom: 20 },
   title: { fontSize: 24, fontWeight: 'bold', color: THEME.text, marginBottom: 10 },
   desc: { fontSize: 15, color: THEME.textSecondary, textAlign: 'center', marginBottom: 32, lineHeight: 22 },

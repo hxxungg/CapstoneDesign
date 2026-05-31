@@ -47,6 +47,37 @@ export function AuthProvider({ children }) {
     return data;
   };
 
+  const persistSession = async (data) => {
+    await AsyncStorage.setItem('auth_token', data.token);
+    await AsyncStorage.setItem('auth_user', JSON.stringify(data.user));
+    setToken(data.token);
+    setUser(data.user);
+    return data;
+  };
+
+  /** 소셜 로그인 — 신규면 needsRegistration 반환 */
+  const socialLogin = async (payload) => {
+    try {
+      const data = await authAPI.socialLogin(payload);
+      return persistSession(data);
+    } catch (err) {
+      if (err.status === 422 && err.data?.needs_registration) {
+        return {
+          needsRegistration: true,
+          provider: err.data.provider,
+          social_session_token: err.data.social_session_token,
+          profile: err.data.profile,
+        };
+      }
+      throw err;
+    }
+  };
+
+  const socialRegister = async (payload) => {
+    const data = await authAPI.socialLogin(payload);
+    return persistSession(data);
+  };
+
   const logout = async () => {
     await AsyncStorage.removeItem('auth_token');
     await AsyncStorage.removeItem('auth_user');
@@ -55,7 +86,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, socialLogin, socialRegister, logout }}>
       {children}
     </AuthContext.Provider>
   );

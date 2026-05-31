@@ -1,18 +1,17 @@
+const dotenv = require('dotenv');
+dotenv.config();
+
 const express = require('express');
 const cors = require('cors');
-const dotenv = require('dotenv');
 const { initDatabase } = require('./src/database');
-
-dotenv.config();
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-initDatabase();
-
 app.use('/api/auth', require('./src/routes/auth'));
+app.use('/api/assessments', require('./src/routes/assessments'));
 app.use('/api/assignments', require('./src/routes/assignments'));
 app.use('/api/stages', require('./src/routes/stages'));
 app.use('/api/logs', require('./src/routes/logs'));
@@ -29,6 +28,14 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
-app.listen(PORT, HOST, () => {
-  console.log(`서버가 http://${HOST}:${PORT} 에서 실행 중입니다.`);
-});
+
+initDatabase()
+  .then(() => {
+    app.listen(PORT, HOST, () => {
+      console.log(`서버가 http://${HOST}:${PORT} 에서 실행 중입니다.`);
+    });
+  })
+  .catch((err) => {
+    console.error('DB 초기화 실패:', err);
+    process.exit(1);
+  });

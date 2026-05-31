@@ -1,72 +1,33 @@
-const low = require('lowdb');
-const FileSync = require('lowdb/adapters/FileSync');
-const bcrypt = require('bcryptjs');
-const path = require('path');
+const mysql = require('mysql2/promise');
 
-const adapter = new FileSync(path.join(__dirname, '..', 'data.json'));
-const db = low(adapter);
+const dbHost = process.env.DB_HOST || '127.0.0.1';
+const dbPort = parseInt(process.env.DB_PORT, 10) || 13306;
 
-function getDb() {
-  return db;
-}
+const pool = mysql.createPool({
+  host: dbHost,
+  port: dbPort,
+  user: process.env.DB_USER || 'capstone',
+  password: process.env.DB_PASSWORD,
+  waitForConnections: true,
+  connectionLimit: 10,
+  connectTimeout: 20000,
+  dateStrings: true,
+});
 
-function nextId(collection) {
-  const key = `_counters_${collection}`;
-  const current = db.get(key).value() || 0;
-  const next = current + 1;
-  db.set(key, next).write();
-  return next;
-}
-
-function initDatabase() {
-  db.defaults({
-    users: [],
-    assignments: [],
-    stages: [],
-    student_assignments: [],
-    student_stage_writings: [],
-    ai_logs: [],
-    exit_attempts: [],
-  }).write();
-
-  const teacherExists = db.get('users').find({ email: 'test1@test.com' }).value();
-
-  if (!teacherExists) {
-    db.set('_counters_users', 0)
-      .set('_counters_assignments', 0)
-      .set('_counters_stages', 0)
-      .set('_counters_student_assignments', 0)
-      .set('_counters_student_stage_writings', 0)
-      .set('_counters_ai_logs', 0)
-      .set('_counters_exit_attempts', 0)
-      .write();
-
-    const teacherPw = bcrypt.hashSync('1234', 10);
-    db.get('users').push({
-      id: nextId('users'),
-      name: '김교사',
-      email: 'test1@test.com',
-      password: teacherPw,
-      role: 'teacher',
-      teacher_code: 'TCH001',
-      created_at: new Date().toISOString(),
-    }).write();
-
-    const studentPw = bcrypt.hashSync('1234', 10);
-    db.get('users').push({
-      id: nextId('users'),
-      name: '홍길동',
-      email: 'test@test.com',
-      password: studentPw,
-      role: 'student',
-      teacher_code: 'TCH001',
-      created_at: new Date().toISOString(),
-    }).write();
-
-    console.log('기본 계정 생성 완료 (교사 test1@test.com / 1234, 학생 test@test.com / 1234)');
+async function initDatabase() {
+  try {
+    const conn = await pool.getConnection();
+    conn.release();
+    console.log('DB 연결 성공');
+  } catch (err) {
+    const hint =
+      err.code === 'ETIMEDOUT' || err.code === 'ECONNREFUSED'
+        ? '\n  → python scripts/db_tunnel.py 로 SSH 터널을 먼저 실행하세요.'
+        : '';
+    console.error(`DB 초기화 실패: ${err.message}${hint}`);
+    throw err;
   }
-
-  console.log('데이터베이스 초기화 완료 (data.json)');
 }
 
-module.exports = { getDb, initDatabase, nextId };
+module.exports = { pool, initDatabase };
+

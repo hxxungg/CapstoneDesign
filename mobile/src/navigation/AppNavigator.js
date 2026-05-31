@@ -4,22 +4,29 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { View, ActivityIndicator } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { THEME } from '../config/api';
+import ProfileHeaderButton from '../components/ProfileHeaderButton';
 
+import SplashScreen from '../screens/SplashScreen';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
+import SocialRegisterScreen from '../screens/SocialRegisterScreen';
 
 import AssignmentListScreen from '../screens/student/AssignmentListScreen';
 import StageListScreen from '../screens/student/StageListScreen';
 import BrowserScreen from '../screens/student/BrowserScreen';
 import WorkScreen from '../screens/student/WorkScreen';
 import EnrollScreen from '../screens/student/EnrollScreen';
+import StudentSelfReportScreen from '../screens/student/StudentSelfReportScreen';
 
 import TeacherDashboard from '../screens/teacher/TeacherDashboard';
 import CreateAssignmentScreen from '../screens/teacher/CreateAssignmentScreen';
+import GradingRubricScreen from '../screens/teacher/GradingRubricScreen';
 import AssignmentDetailScreen from '../screens/teacher/AssignmentDetailScreen';
 import CreateStageScreen from '../screens/teacher/CreateStageScreen';
 import StudentLogsScreen from '../screens/teacher/StudentLogsScreen';
 import AnalyticsScreen from '../screens/teacher/AnalyticsScreen';
+import StudentListScreen from '../screens/teacher/StudentListScreen';
+import StudentReportScreen from '../screens/teacher/StudentReportScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -31,19 +38,20 @@ function LoadingScreen() {
   );
 }
 
+const COMMON_HEADER_OPTIONS = {
+  headerStyle: { backgroundColor: THEME.dark },
+  headerTintColor: '#fff',
+  headerTitleStyle: { fontWeight: '600', fontSize: 16, letterSpacing: -0.2 },
+  headerTitleAlign: 'center',
+};
+
 function StudentStack() {
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: THEME.primary },
-        headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: 'bold' },
-      }}
-    >
+    <Stack.Navigator screenOptions={COMMON_HEADER_OPTIONS}>
       <Stack.Screen
         name="AssignmentList"
         component={AssignmentListScreen}
-        options={{ title: '내 수행평가' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="Enroll"
@@ -53,7 +61,7 @@ function StudentStack() {
       <Stack.Screen
         name="StageList"
         component={StageListScreen}
-        options={{ title: '단계 목록' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="Browser"
@@ -63,6 +71,11 @@ function StudentStack() {
       <Stack.Screen
         name="Work"
         component={WorkScreen}
+        options={{ headerShown: false, gestureEnabled: false }}
+      />
+      <Stack.Screen
+        name="StudentSelfReport"
+        component={StudentSelfReportScreen}
         options={{ headerShown: false }}
       />
     </Stack.Navigator>
@@ -71,27 +84,26 @@ function StudentStack() {
 
 function TeacherStack() {
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: THEME.primary },
-        headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: 'bold' },
-      }}
-    >
+    <Stack.Navigator screenOptions={COMMON_HEADER_OPTIONS}>
       <Stack.Screen
         name="TeacherDashboard"
         component={TeacherDashboard}
-        options={{ title: '교사 대시보드' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="CreateAssignment"
         component={CreateAssignmentScreen}
-        options={{ title: '수행평가 생성' }}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="GradingRubric"
+        component={GradingRubricScreen}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="AssignmentDetail"
         component={AssignmentDetailScreen}
-        options={{ title: '수행평가 상세' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="CreateStage"
@@ -101,12 +113,22 @@ function TeacherStack() {
       <Stack.Screen
         name="StudentLogs"
         component={StudentLogsScreen}
-        options={{ title: '학생 AI 사용 로그' }}
+        options={{ title: '종합 분석 리포트' }}
       />
       <Stack.Screen
         name="Analytics"
         component={AnalyticsScreen}
         options={{ title: '종합 분석' }}
+      />
+      <Stack.Screen
+        name="StudentList"
+        component={StudentListScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="StudentReport"
+        component={StudentReportScreen}
+        options={{ headerShown: false }}
       />
     </Stack.Navigator>
   );
@@ -122,8 +144,10 @@ export default function AppNavigator() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!user ? (
           <>
+            <Stack.Screen name="Splash" component={SplashScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
+            <Stack.Screen name="SocialRegister" component={SocialRegisterScreen} />
           </>
         ) : user.role === 'student' ? (
           <Stack.Screen name="StudentRoot" component={StudentStack} />

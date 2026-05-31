@@ -11,6 +11,7 @@ import { appAlert } from '../../utils/appAlert';
 export default function AnalyticsScreen({ navigation, route }) {
   const { assignmentId, title } = route.params;
   const [data, setData] = useState(null);
+  const [aiAnalysis, setAiAnalysis] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedStudent, setSelectedStudent] = useState(null);
 
@@ -20,8 +21,13 @@ export default function AnalyticsScreen({ navigation, route }) {
 
   const loadAnalytics = async () => {
     try {
-      const result = await analyticsAPI.getAssignmentAnalytics(assignmentId);
-      setData(result);
+      const [result, aiResult] = await Promise.allSettled([
+        analyticsAPI.getAssessmentClassAnalytics(assignmentId),
+        analyticsAPI.getAssessmentAiAnalysis(assignmentId),
+      ]);
+      if (result.status === 'fulfilled') setData(result.value);
+      else appAlert('오류', result.reason.message);
+      if (aiResult.status === 'fulfilled') setAiAnalysis(aiResult.value);
     } catch (err) {
       appAlert('오류', err.message);
     } finally {
@@ -115,7 +121,9 @@ export default function AnalyticsScreen({ navigation, route }) {
         {students.length === 0 ? (
           <Text style={styles.emptyText}>참여한 학생이 없습니다.</Text>
         ) : (
-          students.map(({ student, ai_usage, exit_attempts }) => (
+          students.map((item) => {
+            const { student, ai_usage, exit_attempts, participation_id: pId } = item;
+            return (
             <TouchableOpacity
               key={student.id}
               style={[styles.studentRow, selectedStudent === student.id && styles.studentRowSelected]}
@@ -125,6 +133,7 @@ export default function AnalyticsScreen({ navigation, route }) {
                   studentName: student.name,
                   assignmentId,
                   assignmentTitle: title,
+                  participationId: pId,
                 });
               }}
             >
@@ -141,7 +150,9 @@ export default function AnalyticsScreen({ navigation, route }) {
                   )}
                 </View>
                 <Text style={styles.studentProgress}>
-                  {student.status === 'completed' ? '✅ 완료' : `단계 ${student.current_stage_order} 진행중`}
+                  {(student.status === 'submitted' || student.status === 'graded' || student.status === 'completed')
+                    ? '✅ 완료'
+                    : `단계 ${student.current_stage_order} 진행중`}
                 </Text>
                 <View style={styles.usageRow}>
                   <Text style={styles.usageStat}>활동: {ai_usage.total_log_count}회</Text>
@@ -153,12 +164,124 @@ export default function AnalyticsScreen({ navigation, route }) {
               </View>
               <Text style={styles.arrowText}>›</Text>
             </TouchableOpacity>
-          ))
+            );
+          })
         )}
       </View>
 
+      {/* ── AI 대화 분석 ── */}
+      {aiAnalysis && (
+        <>
+          {/* 섹션 A: 학생별 AI 의존도 */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>AI 의존도 분포</Text>
+            <Text style={styles.sectionSub}>프롬프트 횟수 기준 — 적음 0~2회 · 보통 3~7회 · 많음 8회+</Text>
+
+            {/* 전체 요약 뱃지 */}
+            <View style={styles.depSummaryRow}>
+              {[
+                { key: 'low',    label: '적음',  color: THEME.success },
+                { key: 'medium', label: '보통',  color: THEME.warning },
+                { key: 'high',   label: '많음',  color: THEME.danger  },
+              ].map(({ key, label, color }) => (
+                <View key={key} style={[styles.depBadge, { borderColor: color }]}>
+                  <Text style={[styles.depBadgeCount, { color }]}>
+                    {aiAnalysis.class_summary.dependency_distribution[key] ?? 0}
+                  </Text>
+                  <Text style={styles.depBadgeLabel}>{label}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* 학생별 막대 */}
+            {aiAnalysis.per_student.length === 0 ? (
+              <Text style={styles.emptyText}>AI 프롬프트 기록이 없습니다.</Text>
+            ) : (
+              aiAnalysis.per_student
+                .slice()
+                .sort((a, b) => b.prompt_count - a.prompt_count)
+                .map((s) => {
+                  const maxCount = Math.max(
+                    ...aiAnalysis.per_student.map((x) => x.prompt_count), 1
+                  );
+                  const barColor =
+                    s.dependency_level === 'high' ? THEME.danger
+                    : s.dependency_level === 'medium' ? THEME.warning
+                    : THEME.success;
+                  return (
+                    <View key={s.student_id} style={styles.depRow}>
+                      <Text style={styles.depName} numberOfLines={1}>{s.name}</Text>
+                      <View style={styles.depBarTrack}>
+                        <View
+                          style={[
+                            styles.depBarFill,
+                            {
+                              width: `${(s.prompt_count / maxCount) * 100}%`,
+                              backgroundColor: barColor,
+                            },
+                          ]}
+                        />
+                      </View>
+                      <Text style={[styles.depCount, { color: barColor }]}>
+                        {s.prompt_count}회
+                      </Text>
+                    </View>
+                  );
+                })
+            )}
+          </View>
+
+          {/* 섹션 B: 상위 키워드 */}
+          {aiAnalysis.class_summary.top_keywords.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>상위 키워드</Text>
+              <Text style={styles.sectionSub}>학생 전체 프롬프트에서 추출한 빈출 단어</Text>
+              {renderBarBlock(
+                Object.fromEntries(aiAnalysis.class_summary.top_keywords),
+                THEME.secondary
+              )}
+            </View>
+          )}
+
+          {/* 섹션 C: 시간대별 사용 패턴 */}
+          {Object.keys(aiAnalysis.class_summary.hourly_distribution).length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>시간대별 AI 사용 패턴</Text>
+              <Text style={styles.sectionSub}>전체 학생의 AI 프롬프트 전송 시각 분포</Text>
+              {renderBarBlock(
+                Object.fromEntries(
+                  Object.entries(aiAnalysis.class_summary.hourly_distribution)
+                    .sort((a, b) => Number(a[0]) - Number(b[0]))
+                    .map(([h, cnt]) => [`${h}시`, cnt])
+                ),
+                THEME.primary
+              )}
+            </View>
+          )}
+        </>
+      )}
+
       <View style={{ height: 40 }} />
     </ScrollView>
+  );
+}
+
+function renderBarBlock(obj, color) {
+  const entries = Object.entries(obj || {});
+  if (!entries.length) return null;
+  const max = Math.max(...entries.map(([, v]) => v), 1);
+  return (
+    <View>
+      {entries.sort((a, b) => b[1] - a[1]).map(([label, val]) => (
+        <View key={label} style={styles.barRow}>
+          <Text style={styles.barLabel} numberOfLines={1}>{label}</Text>
+          <View style={styles.barTrack}>
+            <View style={[styles.barFill, { width: `${(val / max) * 100}%`, backgroundColor: color }]} />
+          </View>
+          <Text style={styles.barVal}>{val}</Text>
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -212,4 +335,24 @@ const styles = StyleSheet.create({
   usageStat: { fontSize: 11, color: THEME.primary, backgroundColor: THEME.primaryLight, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 },
   arrowText: { fontSize: 20, color: THEME.textSecondary },
   emptyText: { fontSize: 14, color: THEME.textSecondary, textAlign: 'center', paddingVertical: 16 },
+  sectionSub: { fontSize: 12, color: THEME.textSecondary, marginBottom: 12, lineHeight: 17 },
+  // AI 의존도
+  depSummaryRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  depBadge: {
+    flex: 1, alignItems: 'center', borderRadius: 12, borderWidth: 1.5,
+    paddingVertical: 10, backgroundColor: THEME.background,
+  },
+  depBadgeCount: { fontSize: 22, fontWeight: '800' },
+  depBadgeLabel: { fontSize: 11, color: THEME.textSecondary, marginTop: 2 },
+  depRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 6 },
+  depName: { width: 70, fontSize: 12, color: THEME.text },
+  depBarTrack: { flex: 1, height: 10, backgroundColor: THEME.border, borderRadius: 5, overflow: 'hidden' },
+  depBarFill: { height: '100%', borderRadius: 5 },
+  depCount: { width: 34, fontSize: 11, fontWeight: '700', textAlign: 'right' },
+  // 공통 바 차트
+  barRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },
+  barLabel: { width: 72, fontSize: 11, color: THEME.text },
+  barTrack: { flex: 1, height: 10, backgroundColor: THEME.border, borderRadius: 5, overflow: 'hidden' },
+  barFill: { height: '100%', borderRadius: 5 },
+  barVal: { width: 26, fontSize: 12, fontWeight: '700', color: THEME.text, textAlign: 'right' },
 });

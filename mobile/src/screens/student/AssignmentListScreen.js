@@ -1,152 +1,534 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet,
-  RefreshControl, Alert, ActivityIndicator,
+  View, Text, ScrollView, Pressable,
+  StyleSheet, RefreshControl, ActivityIndicator,
+  Modal, TextInput, Keyboard, Platform,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { assignmentAPI } from '../../services/api';
+import { assignmentAPI, assessmentAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { THEME } from '../../config/api';
+import { THEME, FONTS } from '../../config/api';
+import { appAlert } from '../../utils/appAlert';
+import AppShell from '../../components/AppShell';
 
+const C = THEME;
+const F = FONTS;
+
+// ── 날짜·시간 포맷 ───────────────────────────────────────────────────────────
+function formatDateTime(date = new Date()) {
+  const d = new Date(date);
+  const days  = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+  const h     = d.getHours();
+  const ampm  = h < 12 ? '오전' : '오후';
+  const h12   = h % 12 === 0 ? 12 : h % 12;
+  const min   = String(d.getMinutes()).padStart(2, '0');
+  const ymd   = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+  return `${ymd} · ${days[d.getDay()]} · ${ampm} ${h12}:${min}`;
+}
+
+// 완료 시간 포맷 (예: 2026.05.02 오후 2:30)
+function formatDoneTime(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d)) return '';
+  const h    = d.getHours();
+  const ampm = h < 12 ? '오전' : '오후';
+  const h12  = h % 12 === 0 ? 12 : h % 12;
+  const min  = String(d.getMinutes()).padStart(2, '0');
+  const ymd  = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+  return `${ymd} ${ampm} ${h12}:${min}`;
+}
+
+// ── 상태 뱃지 ────────────────────────────────────────────────────────────────
+function StatusBadge({ label, color }) {
+  return (
+    <View style={[bd.wrap, { backgroundColor: color + '18' }]}>
+      <Text style={[bd.text, { color }]}>{label}</Text>
+    </View>
+  );
+}
+const bd = StyleSheet.create({
+  wrap: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  text: { fontFamily: F.sansSemi, fontSize: 11.5 },
+});
+
+// ── 수행평가 카드 (디자인 파일 AssessmentCard 기반) ──────────────────────────
+function AssessmentCard({ item, onPress }) {
+  const isDone = item.status === 'submitted' || item.status === 'graded' || item.status === 'completed';
+  const statusColor = isDone ? C.success : C.primary;
+  const statusLabel =
+    item.status === 'submitted' ? '제출 완료' :
+    item.status === 'graded'    ? '평가 완료' :
+    item.status === 'completed' ? '완료' :
+    item.total_steps
+      ? `${item.current_step || 1} / ${item.total_steps} 단계`
+      : item.stage_count
+        ? `${item.current_stage_order || 1} / ${item.stage_count} 단계`
+        : '진행 중';
+
+  const totalSteps = item.total_steps || item.stage_count || 1;
+  const currentStep = item.current_step || item.current_stage_order || 0;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [ac.card, { opacity: pressed ? 0.85 : 1 }]}
+    >
+      {/* 상단 */}
+      <View style={ac.top}>
+        <StatusBadge label={statusLabel} color={statusColor} />
+        {item.invite_code ? (
+          <Text style={ac.code}>코드 {item.invite_code}</Text>
+        ) : item.subject ? (
+          <Text style={ac.code}>{item.subject}</Text>
+        ) : null}
+      </View>
+
+      {/* 제목 */}
+      <Text style={ac.title} numberOfLines={2}>{item.title}</Text>
+      {item.description ? (
+        <Text style={ac.desc} numberOfLines={2}>{item.description}</Text>
+      ) : null}
+
+      {/* 단계 도트 (디자인 파일 스타일) */}
+      <View style={ac.dots}>
+        {Array.from({ length: totalSteps }).map((_, i) => (
+          <View key={i} style={[ac.dot, { backgroundColor: i < currentStep ? C.text : C.border }]} />
+        ))}
+      </View>
+
+      {/* 하단 */}
+      <View style={ac.footer}>
+        {item.teacher_name ? (
+          <Text style={ac.teacher}>{item.teacher_name} 선생님</Text>
+        ) : (
+          <Text style={ac.teacher}>{currentStep} of {totalSteps} 단계</Text>
+        )}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Text style={[ac.action, { color: statusColor }]}>
+            {isDone ? '결과 보기' : currentStep === 0 ? '참여하기' : '이어서'}
+          </Text>
+          <Ionicons name="chevron-forward" size={14} color={statusColor} />
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+const ac = StyleSheet.create({
+  card: {
+    backgroundColor: C.card,
+    borderRadius: 14, padding: 18, marginBottom: 12,
+    borderWidth: 1, borderColor: C.border,
+    gap: 12,
+    shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1, shadowRadius: 6, elevation: 2,
+  },
+  top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  code: { fontFamily: F.mono, fontSize: 11, color: C.textFaint, letterSpacing: 0.5 },
+  title: {
+    fontFamily: F.serifKo, fontSize: 18,
+    color: C.text, letterSpacing: -0.2, lineHeight: 26,
+  },
+  desc: { fontFamily: F.sans, fontSize: 13, color: C.textSecondary, lineHeight: 18 },
+  dots: { flexDirection: 'row', gap: 4 },
+  dot:  { flex: 1, height: 3, borderRadius: 2 },
+  footer: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    borderTopWidth: 1, borderTopColor: C.borderSoft, paddingTop: 10,
+  },
+  teacher: { fontFamily: F.mono, fontSize: 11.5, color: C.textSecondary },
+  action:  { fontFamily: F.sansMedium, fontSize: 13 },
+});
+
+// ── 메인 화면 ────────────────────────────────────────────────────────────────
 export default function AssignmentListScreen({ navigation }) {
-  const { user, logout } = useAuth();
-  const [assignments, setAssignments] = useState([]);
+  const { user } = useAuth();
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [enrollOpen, setEnrollOpen] = useState(false);
+  const [enrollCode, setEnrollCode] = useState('');
+  const [enrollLoading, setEnrollLoading] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
-  const loadAssignments = async () => {
+  useEffect(() => {
+    if (!enrollOpen) {
+      setKeyboardHeight(0);
+      return undefined;
+    }
+
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [enrollOpen]);
+
+  const handleEnroll = async () => {
+    const trimmedCode = enrollCode.trim().toUpperCase();
+    if (!trimmedCode) {
+      appAlert('입력 오류', '수행평가 코드를 입력해주세요.', null, { type: 'warning' });
+      return;
+    }
+    setEnrollLoading(true);
     try {
-      const data = await assignmentAPI.getList();
-      setAssignments(data);
+      console.log('[Enroll] joining with code:', trimmedCode);
+      const result = await assessmentAPI.join(trimmedCode);
+      console.log('[Enroll] join result:', JSON.stringify(result));
+      setEnrollOpen(false);
+      setEnrollCode('');
+      loadAll();
+      // 참여 완료 → 바로 단계 화면으로 이동
+      console.log('[Enroll] navigating to Work with participation_id:', result.participation_id);
+      navigation.navigate('Work', {
+        participation_id: result.participation_id,
+      });
     } catch (err) {
-      Alert.alert('오류', err.message);
+      console.log('[Enroll] error:', err.status, err.message, JSON.stringify(err.data));
+      if (err.status === 409) {
+        // 이미 참여 중 → 해당 participation으로 바로 이동
+        const participationId = err.data?.participation_id;
+        setEnrollOpen(false);
+        setEnrollCode('');
+        loadAll();
+        if (participationId) {
+          navigation.navigate('Work', { participation_id: participationId });
+        } else {
+          appAlert('이미 참여 중', '이미 참여한 수행평가입니다. 목록에서 확인하세요.', null, { type: 'info' });
+        }
+        return;
+      }
+      if (err.status === 404) {
+        try {
+          const oldResult = await assignmentAPI.enroll(trimmedCode);
+          setEnrollOpen(false);
+          setEnrollCode('');
+          loadAll();
+          if (oldResult.assignment) {
+            navigation.navigate('StageList', { assignment: oldResult.assignment });
+          }
+          return;
+        } catch {
+          appAlert('참여 실패', '유효하지 않은 수행평가 코드입니다.', null, { type: 'error' });
+          return;
+        }
+      }
+      appAlert('참여 실패', err.message, null, { type: 'error' });
+    } finally {
+      setEnrollLoading(false);
+    }
+  };
+
+  const loadAll = async () => {
+    try {
+      const results = await Promise.allSettled([
+        assignmentAPI.getList(),
+        assessmentAPI.getMyParticipations(),
+      ]);
+      const oldList = results[0].status === 'fulfilled' ? results[0].value : [];
+      const newList = results[1].status === 'fulfilled' ? results[1].value : [];
+      const oldItems = (oldList || []).map(a => ({ ...a, _type: 'assignment' }));
+      const newItems = (newList || []).map(p => ({
+        id: p.id, _type: 'assessment',
+        participation_id: p.id, assessment_id: p.assessment_id,
+        title: p.assessment_title, description: p.assessment_description,
+        status: p.status, current_step: p.current_step, total_steps: p.total_steps,
+        invite_code: p.invite_code, created_at: p.created_at,
+      }));
+      const merged = [...newItems, ...oldItems].sort(
+        (a, b) => new Date(b.created_at) - new Date(a.created_at)
+      );
+      setItems(merged);
+    } catch (err) {
+      appAlert('오류', err.message, null, { type: 'error' });
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      loadAssignments();
-    }, [])
-  );
+  useFocusEffect(useCallback(() => { loadAll(); }, []));
 
-  const getStatusLabel = (status, currentStage, stageCount) => {
-    if (status === 'completed') return { label: '완료', color: THEME.success };
-    return { label: `${currentStage}/${stageCount} 단계`, color: THEME.primary };
+  const handlePress = (item) => {
+    if (item._type === 'assessment') {
+      const isDone = item.status === 'submitted' || item.status === 'completed' || item.status === 'graded';
+      if (isDone) {
+        // 완료된 수행평가 → 자기 분석 리포트
+        navigation.navigate('StudentSelfReport', {
+          participationId: item.participation_id,
+          assessmentTitle: item.title,
+        });
+      } else {
+        navigation.navigate('Work', { participation_id: item.participation_id });
+      }
+    } else {
+      navigation.navigate('StageList', { assignment: item });
+    }
   };
 
-  const renderItem = ({ item }) => {
-    const statusInfo = getStatusLabel(item.status, item.current_stage_order, item.stage_count);
-    return (
-      <TouchableOpacity
-        style={styles.card}
-        onPress={() => navigation.navigate('StageList', { assignment: item })}
-        activeOpacity={0.85}
-      >
-        <View style={styles.cardHeader}>
-          <View style={styles.cardTitleRow}>
-            {item.subject && <Text style={styles.subject}>{item.subject}</Text>}
-            <View style={[styles.statusBadge, { backgroundColor: statusInfo.color + '20' }]}>
-              <Text style={[styles.statusText, { color: statusInfo.color }]}>{statusInfo.label}</Text>
-            </View>
-          </View>
-          <Text style={styles.cardTitle}>{item.title}</Text>
-          {item.description && <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>}
-        </View>
-
-        <View style={styles.cardFooter}>
-          <Text style={styles.teacherName}>👩‍🏫 {item.teacher_name}</Text>
-          <View style={styles.progressBar}>
-            <View
-              style={[
-                styles.progressFill,
-                {
-                  width: `${Math.min(((item.current_stage_order - 1) / Math.max(item.stage_count, 1)) * 100, 100)}%`,
-                  backgroundColor: item.status === 'completed' ? THEME.success : THEME.primary,
-                }
-              ]}
-            />
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
+  const inProgress = items.filter(i => i.status !== 'submitted' && i.status !== 'graded' && i.status !== 'completed');
+  const done       = items.filter(i => i.status === 'submitted' || i.status === 'graded' || i.status === 'completed');
 
   return (
-    <View style={styles.container}>
-      <View style={styles.welcomeBox}>
-        <Text style={styles.welcomeText}>안녕하세요, <Text style={styles.welcomeName}>{user?.name}</Text>님!</Text>
-        <TouchableOpacity onPress={logout}>
-          <Text style={styles.logoutText}>로그아웃</Text>
-        </TouchableOpacity>
-      </View>
-
-      {loading ? (
-        <ActivityIndicator size="large" color={THEME.primary} style={{ marginTop: 60 }} />
-      ) : (
-        <FlatList
-          data={assignments}
-          renderItem={renderItem}
-          keyExtractor={item => String(item.id)}
-          contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadAssignments(); }} tintColor={THEME.primary} />}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>📚</Text>
-              <Text style={styles.emptyTitle}>참여 중인 수행평가가 없습니다</Text>
-              <Text style={styles.emptyDesc}>교사에게 수행평가 코드를 받아 참여하세요.</Text>
-            </View>
-          }
-          ListFooterComponent={<View style={{ height: 20 }} />}
-        />
-      )}
-
-      <TouchableOpacity
-        style={styles.enrollButton}
-        onPress={() => navigation.navigate('Enroll')}
+    <AppShell navigation={navigation} currentScreen="home" onEnroll={() => { setEnrollCode(''); setEnrollOpen(true); }}>
+    <View style={{ flex: 1, backgroundColor: C.background }}>
+      <ScrollView
+        contentContainerStyle={s.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => { setRefreshing(true); loadAll(); }}
+            tintColor={C.primary} colors={[C.primary]}
+          />
+        }
+        showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.enrollButtonText}>+ 수행평가 참여하기</Text>
-      </TouchableOpacity>
+        {/* ── 인사말 ─────────────────────────────────────────── */}
+        <View style={s.greeting}>
+          <Text style={s.greetingDate}>{formatDateTime()}</Text>
+          <Text style={s.greetingDesc}>
+            {loading
+              ? '수행평가를 불러오는 중...'
+              : inProgress.length > 0
+                ? `진행 중인 수행평가가 ${inProgress.length}건 있어요.`
+                : '현재 진행 중인 수행평가가 없어요.'
+            }
+          </Text>
+        </View>
+
+        {loading ? (
+          <View style={s.loadingBox}>
+            <ActivityIndicator size="large" color={C.primary} />
+          </View>
+        ) : (
+          <>
+            {/* ── 진행 중 ─────────────────────────────────────── */}
+            {inProgress.length > 0 && (
+              <View style={s.section}>
+                <View style={s.sectionHead}>
+                  <Text style={s.sectionTitle}>참여 중인 수행평가</Text>
+                  <Text style={s.sectionCount}>{inProgress.length}건</Text>
+                </View>
+                {inProgress.map(item => (
+                  <AssessmentCard key={`${item._type}-${item.id}`} item={item} onPress={() => handlePress(item)} />
+                ))}
+              </View>
+            )}
+
+            {/* ── 완료 ────────────────────────────────────────── */}
+            {done.length > 0 && (
+              <View style={s.section}>
+                <View style={s.sectionHead}>
+                  <Text style={s.sectionTitle}>완료된 수행평가</Text>
+                  <Text style={s.sectionCount}>{done.length}건</Text>
+                </View>
+                <View style={s.pastList}>
+                  {done.map((item, i) => (
+                    <Pressable
+                      key={`${item._type}-${item.id}`}
+                      onPress={() => handlePress(item)}
+                      style={({ pressed }) => [
+                        s.pastRow,
+                        i > 0 && s.pastBorder,
+                        { backgroundColor: pressed ? C.cardLo : 'transparent' },
+                      ]}
+                    >
+                      {/* 날짜 (날짜만, 시간 제외) */}
+                      <Text style={s.pastDate} numberOfLines={2}>
+                        {(item.updated_at || item.created_at)
+                          ? (() => { const d = new Date(item.updated_at || item.created_at); return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`; })()
+                          : ''}
+                      </Text>
+
+                      {/* 과목 + 제목 */}
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.pastSubject} numberOfLines={1}>
+                          {item.subject || '수행평가'}
+                        </Text>
+                        <Text style={s.pastTitle} numberOfLines={2}>{item.title}</Text>
+                      </View>
+
+                      {/* 상태 + 화살표 */}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <StatusBadge
+                          label={item.status === 'graded' ? '평가 완료' : '제출 완료'}
+                          color={C.success}
+                        />
+                        <Ionicons name="chevron-forward" size={16} color={C.textFaint} />
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* ── 빈 상태 ─────────────────────────────────────── */}
+            {items.length === 0 && (
+              <View style={s.empty}>
+                <View style={s.emptyIcon}>
+                  <Ionicons name="book-outline" size={32} color={C.textSecondary} />
+                </View>
+                <Text style={s.emptyTitle}>참여 중인 수행평가가 없습니다</Text>
+                <Text style={s.emptyDesc}>교사에게 수행평가 코드를 받아 참여하세요.</Text>
+              </View>
+            )}
+          </>
+        )}
+
+        <View style={{ height: 100 }} />
+      </ScrollView>
+
+      {/* ── 초대코드 입력 모달 ──────────────────────────────── */}
+      <Modal
+        visible={enrollOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEnrollOpen(false)}
+        statusBarTranslucent
+      >
+        <Pressable
+          style={[
+            em.overlay,
+            keyboardHeight > 0
+              ? { justifyContent: 'flex-end', paddingBottom: keyboardHeight + 24 }
+              : { justifyContent: 'flex-start', paddingTop: 72 },
+          ]}
+          onPress={() => setEnrollOpen(false)}
+        >
+          <Pressable style={em.card} onPress={() => {}}>
+            <Text style={em.title}>수행평가 참여</Text>
+            <Text style={em.body}>교사에게 받은 초대 코드를 입력하세요.</Text>
+            <TextInput
+              style={em.input}
+              value={enrollCode}
+              onChangeText={setEnrollCode}
+              placeholder="예: AB12CD34"
+              placeholderTextColor={C.textFaint || C.textSecondary}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              maxLength={15}
+              autoFocus={enrollOpen}
+              onSubmitEditing={handleEnroll}
+            />
+            <View style={em.btnRow}>
+              <Pressable
+                style={({ pressed }) => [em.btn, em.btnCancel, pressed && { opacity: 0.7 }]}
+                onPress={() => setEnrollOpen(false)}
+                disabled={enrollLoading}
+              >
+                <Text style={em.btnCancelText}>취소</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [em.btn, em.btnPrimary, (pressed || enrollLoading) && { opacity: 0.7 }]}
+                onPress={handleEnroll}
+                disabled={enrollLoading}
+              >
+                {enrollLoading
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={em.btnConfirmText}>참여하기</Text>
+                }
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
+    </AppShell>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: THEME.background },
-  welcomeBox: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: THEME.card, paddingHorizontal: 20, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: THEME.border,
+const s = StyleSheet.create({
+  content: { paddingBottom: 60 },
+
+  // 인사말
+  greeting: {
+    paddingHorizontal: 24, paddingTop: 28, paddingBottom: 32,
+    gap: 0,
   },
-  welcomeText: { fontSize: 15, color: THEME.text },
-  welcomeName: { fontWeight: 'bold', color: THEME.primary },
-  logoutText: { fontSize: 13, color: THEME.textSecondary },
-  list: { padding: 16 },
+  greetingDate: {
+    fontFamily: F.mono, fontSize: 11.5, color: C.textSecondary,
+    letterSpacing: 1.5, marginBottom: 10,
+  },
+  greetingName: {
+    fontFamily: F.serifKo, fontSize: 32, color: C.text,
+    letterSpacing: -0.5, lineHeight: 42, marginBottom: 10,
+  },
+  greetingDesc: {
+    fontFamily: F.sans, fontSize: 14.5, color: C.textSoft, lineHeight: 22,
+  },
+
+  loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 80 },
+
+  // 섹션
+  section: { paddingHorizontal: 16, marginBottom: 12 },
+  sectionHead: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline',
+    marginBottom: 14, paddingHorizontal: 2,
+  },
+  sectionTitle: { fontFamily: F.sansSemi, fontSize: 16, color: C.text },
+  sectionCount: { fontFamily: F.sans, fontSize: 12, color: C.textSecondary },
+
+  // 완료 목록
+  pastList: {
+    backgroundColor: C.card, borderWidth: 1, borderColor: C.border,
+    borderRadius: 14, overflow: 'hidden',
+  },
+  pastRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 14, paddingHorizontal: 16,
+  },
+  pastBorder: { borderTopWidth: 1, borderTopColor: C.borderSoft },
+  pastDate:    { width: 80, fontFamily: F.mono, fontSize: 11, color: C.textSecondary, lineHeight: 16, marginRight: 12, flexShrink: 0 },
+  pastSubject: { fontFamily: F.sans, fontSize: 11, color: C.textSecondary, marginBottom: 3 },
+  pastTitle:   { fontFamily: F.serifKo, fontSize: 15, color: C.text, lineHeight: 21 },
+
+  // 빈 상태
+  empty: { alignItems: 'center', paddingTop: 72, paddingHorizontal: 24 },
+  emptyIcon: {
+    width: 72, height: 72, borderRadius: 20,
+    backgroundColor: C.card, borderWidth: 1, borderColor: C.border,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 18,
+  },
+  emptyTitle: { fontFamily: F.sansSemi, fontSize: 17, color: C.text, marginBottom: 8 },
+  emptyDesc: { fontFamily: F.sans, fontSize: 13.5, color: C.textSecondary, textAlign: 'center', lineHeight: 20 },
+
+});
+
+const em = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15,27,45,0.4)',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
   card: {
-    backgroundColor: THEME.card, borderRadius: 16, marginBottom: 14,
-    padding: 18, shadowColor: THEME.shadow, shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1, shadowRadius: 8, elevation: 3,
+    width: 340, padding: 28, borderRadius: 16,
+    backgroundColor: C.background, gap: 16,
+    shadowColor: C.dark, shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15, shadowRadius: 20, elevation: 12,
   },
-  cardHeader: { marginBottom: 12 },
-  cardTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  subject: { fontSize: 12, color: THEME.textSecondary, fontWeight: '600' },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  statusText: { fontSize: 12, fontWeight: '700' },
-  cardTitle: { fontSize: 18, fontWeight: 'bold', color: THEME.text, marginBottom: 4 },
-  cardDesc: { fontSize: 13, color: THEME.textSecondary, lineHeight: 18 },
-  cardFooter: { gap: 8 },
-  teacherName: { fontSize: 13, color: THEME.textSecondary },
-  progressBar: { height: 6, backgroundColor: THEME.border, borderRadius: 3, overflow: 'hidden' },
-  progressFill: { height: '100%', borderRadius: 3 },
-  emptyContainer: { alignItems: 'center', paddingTop: 80 },
-  emptyIcon: { fontSize: 56, marginBottom: 16 },
-  emptyTitle: { fontSize: 18, fontWeight: 'bold', color: THEME.text, marginBottom: 8 },
-  emptyDesc: { fontSize: 14, color: THEME.textSecondary, textAlign: 'center' },
-  enrollButton: {
-    margin: 16, backgroundColor: THEME.primary, borderRadius: 14,
-    padding: 16, alignItems: 'center',
+  title: { fontFamily: F.serifKo, fontSize: 22, color: C.text },
+  body:  { fontFamily: F.sans, fontSize: 14, color: C.textSoft, lineHeight: 21 },
+  input: {
+    height: 52, paddingHorizontal: 16,
+    backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 12,
+    fontFamily: F.mono, fontSize: 18, color: C.text,
+    textAlign: 'center', letterSpacing: 2,
   },
-  enrollButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  btnRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  btn: { flex: 1, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  btnCancel:  { backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
+  btnPrimary: { backgroundColor: C.dark },
+  btnCancelText:  { fontFamily: F.sansMedium, fontSize: 15, color: C.textSecondary },
+  btnConfirmText: { fontFamily: F.sansMedium, fontSize: 15, color: '#fff' },
 });

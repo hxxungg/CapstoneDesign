@@ -4,7 +4,7 @@ import { API_BASE_URL } from '../config/api';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 30000,
 });
 
 apiClient.interceptors.request.use(async (config) => {
@@ -18,8 +18,12 @@ apiClient.interceptors.request.use(async (config) => {
 apiClient.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    const message = error.response?.data?.error || '서버 연결에 실패했습니다.';
-    return Promise.reject(new Error(message));
+    const data = error.response?.data;
+    const message = data?.error || '서버 연결에 실패했습니다.';
+    const err = new Error(message);
+    err.status = error.response?.status;
+    err.data = data;
+    return Promise.reject(err);
   }
 );
 
@@ -27,8 +31,11 @@ apiClient.interceptors.response.use(
 export const authAPI = {
   login: (email, password) => apiClient.post('/auth/login', { email, password }),
   register: (data) => apiClient.post('/auth/register', data),
+  socialLogin: (data) => apiClient.post('/auth/social', data),
   getMe: () => apiClient.get('/auth/me'),
   getStudents: () => apiClient.get('/auth/students'),
+  changePassword: (data) => apiClient.put('/auth/password', data),
+  deleteAccount: () => apiClient.delete('/auth/account'),
 };
 
 // 수행평가
@@ -57,17 +64,63 @@ export const stageAPI = {
 
 // 로그
 export const logAPI = {
-  record: (data) => apiClient.post('/logs', data),
+  /** URL 방문 기록 (신규 assessments 시스템) */
+  recordUrl: (data) => apiClient.post('/logs/url', data),
+  /** 동의 후 URL 로그 일괄 저장 */
+  recordUrlBulk: (data) => apiClient.post('/logs/url/bulk', data),
+  /** AI 프롬프트 기록 (신규 assessments 시스템) */
+  recordAi: (data) => apiClient.post('/logs/ai', data),
+  /** 동의 후 AI 로그 일괄 저장 */
+  recordAiBulk: (data) => apiClient.post('/logs/ai/bulk', data),
+  /** AI 응답 추가 업데이트 */
+  updateAiResponse: (id, data) => apiClient.patch(`/logs/ai/${id}/response`, data),
+  /** 이탈 시도 기록 (신규) */
+  recordExit: (data) => apiClient.post('/logs/exit', data),
+  /** 이탈 시도 기록 (하위 호환) */
   recordExitAttempt: (data) => apiClient.post('/logs/exit-attempt', data),
-  getStudentLogs: (studentId, assignmentId) =>
-    apiClient.get(`/logs/student/${studentId}/assignment/${assignmentId}`),
+  /** 교사: 참여별 로그 전체 조회 */
+  getParticipationLogs: (participationId) =>
+    apiClient.get(`/logs/participation/${participationId}`),
+};
+
+// 수행평가 (assessments — teacher_db.assessments)
+export const assessmentAPI = {
+  getMyInviteCode: () => apiClient.get('/assessments/invite-codes'),
+  getList: () => apiClient.get('/assessments'),
+  getDetail: (id) => apiClient.get(`/assessments/${id}`),
+  create: (data) => apiClient.post('/assessments', data),
+  update: (id, data) => apiClient.put(`/assessments/${id}`, data),
+  remove: (id) => apiClient.delete(`/assessments/${id}`),
+  removeStep: (assessmentId, stepId) => apiClient.delete(`/assessments/${assessmentId}/steps/${stepId}`),
+  /** 학생: invite_code로 수행평가 참여 → participation 레코드 생성 */
+  join: (invite_code) => apiClient.post('/assessments/join', { invite_code }),
+  /** 학생: 내 참여 목록 조회 */
+  getMyParticipations: () => apiClient.get('/assessments/my-participations'),
+  /** 학생: 참여 상세(단계 목록 포함) 조회 */
+  getParticipationDetail: (participationId) =>
+    apiClient.get(`/assessments/participation/${participationId}`),
+  /** 학생: 단계 제출 + 다음 단계 진행 */
+  submitStep: (participationId, data) =>
+    apiClient.post(`/assessments/participation/${participationId}/submit`, data),
+  /** 학생: 이전 단계 제출 내용 목록 조회 */
+  getPreviousSubmissions: (participationId) =>
+    apiClient.get(`/assessments/participation/${participationId}/submissions`),
 };
 
 // 분석
 export const analyticsAPI = {
   getAssignmentAnalytics: (id) => apiClient.get(`/analytics/assignment/${id}`),
+  /** 교사: 신규 assessments 시스템 — 수행평가 클래스 전체 분석 */
+  getAssessmentClassAnalytics: (id) => apiClient.get(`/analytics/assessment/${id}`),
+  /** 교사: 학생별 상세 + 종합 리포트(comprehensive_report) — 구 assignments 시스템 */
   getStudentAnalytics: (assignmentId, studentId) =>
     apiClient.get(`/analytics/assignment/${assignmentId}/student/${studentId}`),
+  /** 교사: 신규 assessments 시스템 — 참여별 AI·URL 로그 분석 */
+  getParticipationAnalytics: (participationId) =>
+    apiClient.get(`/analytics/participation/${participationId}`, { timeout: 180000 }),
+  /** 교사: 수행평가 전체 AI 대화 분석 (의존도·키워드·시간대) */
+  getAssessmentAiAnalysis: (assessmentId) =>
+    apiClient.get(`/analytics/assessment/${assessmentId}/ai-analysis`),
 };
 
 export default apiClient;

@@ -48,21 +48,51 @@ export const API_BASE_URL = resolveApiBaseUrl();
 /** 인앱 브라우저 기본 시작 페이지 (일반 웹 탐색) */
 export const INAPP_BROWSER_HOME = 'https://www.google.com';
 
+/**
+ * 폰트 패밀리 상수 (디자인 시스템 기준)
+ * - sans*    : Pretendard (로컬 번들)
+ * - serif*   : Newsreader (@expo-google-fonts/newsreader)
+ * - mono*    : JetBrains Mono (@expo-google-fonts/jetbrains-mono)
+ *
+ * RN 주의: fontWeight는 fontFamily 이름으로 지정, letterSpacing은 px 단위만 가능
+ */
+// theme.ts F 토큰과 동일
+export const FONTS = {
+  sans:           'Pretendard-Regular',
+  sansMedium:     'Pretendard-Medium',
+  sansSemi:       'Pretendard-SemiBold',
+  sansBold:       'Pretendard-Bold',
+  serif:          'Pretendard-Regular',
+  serifMed:       'Pretendard-Medium',
+  serifItalic:    'Pretendard-Regular',
+  serifMedItalic: 'Pretendard-Medium',
+  mono:           'Pretendard-Regular',
+  monoMed:        'Pretendard-Medium',
+  serifKo:        'Pretendard-Regular',
+  serifKoBold:    'Pretendard-Bold',
+};
+
 export const THEME = {
-  primary: '#3B82F6',
-  primaryDark: '#1D4ED8',
-  primaryLight: '#EFF6FF',
-  secondary: '#8B5CF6',
-  success: '#10B981',
-  successLight: '#ECFDF5',
-  danger: '#EF4444',
-  dangerLight: '#FEF2F2',
-  warning: '#F59E0B',
-  warningLight: '#FFFBEB',
-  background: '#F1F5F9',
-  card: '#FFFFFF',
-  text: '#1E293B',
-  textSecondary: '#64748B',
-  border: '#E2E8F0',
-  shadow: '#00000015',
+  // sumi design system
+  primary:      '#2A5FE0',   // refined blue — 주요 인터랙션
+  primaryDark:  '#1E45B3',
+  primaryLight: '#E4ECFC',   // accentSoft
+  dark:         '#3B82F6',   // blue — 헤더/사이드바
+  secondary:    '#B58A3E',   // gold — AI/배지 강조
+  success:      '#3B7A57',
+  successLight: '#E2EEE6',
+  danger:       '#A9402F',
+  dangerLight:  '#FDF0EE',
+  warning:      '#B5713A',
+  warningLight: '#F4E6D6',
+  background:   '#F7F4EC',   // warm cream paper
+  card:         '#FCFAF4',   // elevated cream card
+  cardLo:       '#EDE7D8',   // recessed surface
+  text:         '#0F1B2D',   // ink
+  textSoft:     '#3B4658',   // inkSoft
+  textSecondary:'#6E7585',   // inkMute
+  textFaint:    '#A4A496',   // inkFaint
+  border:       '#E1D9C6',   // warm line
+  borderSoft:   '#EFE9DB',   // lineSoft
+  shadow:       'rgba(15,27,45,0.08)',
 };

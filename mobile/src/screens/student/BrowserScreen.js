@@ -14,9 +14,12 @@ import { logAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { THEME, INAPP_BROWSER_HOME } from '../../config/api';
 import ExitWarningModal from '../../components/ExitWarningModal';
+import { WEBVIEW_LOG_SCRIPT } from '../../utils/webviewInjection';
 
 export default function BrowserScreen({ navigation, route }) {
-  const { stage, assignment } = route.params;
+  // participation_id / step_id: 신규 assessments 시스템
+  // stage / assignment: 구 assignments 시스템 (하위 호환)
+  const { stage, assignment, participation_id, step_id } = route.params;
   const { user } = useAuth();
 
   const [currentUrl, setCurrentUrl] = useState(INAPP_BROWSER_HOME);
@@ -26,26 +29,97 @@ export default function BrowserScreen({ navigation, route }) {
   const [canGoBack, setCanGoBack] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
   const [exitAttemptCount, setExitAttemptCount] = useState(0);
-  const webViewRef = useRef(null);
-  const pageStartTimeRef = useRef(Date.now());
-  const appStateRef = useRef(AppState.currentState);
-  const lastLoggedUrlRef = useRef(null);
 
-  const logPageVisit = async (url, title, duration = 0) => {
-    if (!url || url === lastLoggedUrlRef.current) return;
-    lastLoggedUrlRef.current = url;
+  const webViewRef        = useRef(null);
+  const pageStartTimeRef  = useRef(Date.now());
+  const visitedAtRef      = useRef(new Date().toISOString());
+  const appStateRef       = useRef(AppState.currentState);
+  const lastLoggedUrlRef  = useRef(null);
+  const pendingAiLogIdRef = useRef(null);
+
+  // ── 신규: URL 방문 로그 ──────────────────────────────────────────
+  const logUrl = async (url, title, visitedAt, completeAt) => {
+    if (!participation_id || !url) return;
     try {
-      await logAPI.record({
-        assignment_id: assignment.id,
-        stage_id: stage.id,
-        stage_order: stage.order_num,
-        action_type: 'page_visit',
+      await logAPI.recordUrl({
+        participation_id,
+        step_id: step_id || null,
         url,
         page_title: title || '',
-        duration_seconds: Math.floor(duration / 1000),
+        visited_at: visitedAt,
+        complete_at: completeAt,
       });
     } catch (err) {
-      console.log('로그 기록 실패:', err.message);
+      console.log('URL 로그 실패:', err.message);
+    }
+  };
+
+  // ── 신규: AI 프롬프트 로그 ───────────────────────────────────────
+  const logAiPrompt = async (prompt, url) => {
+    if (!participation_id || !prompt) return null;
+    try {
+      const result = await logAPI.recordAi({
+        participation_id,
+        step_id: step_id || null,
+        prompt,
+      });
+      return result?.id || null;
+    } catch (err) {
+      console.log('AI 로그 실패:', err.message);
+      return null;
+    }
+  };
+
+  // ── 신규: AI 응답 업데이트 ───────────────────────────────────────
+  const updateAiResponse = async (logId, response) => {
+    if (!logId || !response) return;
+    try {
+      await logAPI.updateAiResponse(logId, { response });
+    } catch (err) {
+      console.log('AI 응답 업데이트 실패:', err.message);
+    }
+  };
+
+  // ── WebView → RN 메시지 수신 ─────────────────────────────────────
+  const handleWebViewMessage = async (data) => {
+    let msg;
+    try { msg = typeof data === 'string' ? JSON.parse(data) : data; }
+    catch (e) { return; }
+
+    switch (msg.type) {
+      case 'page_load': {
+        // 이전 URL 체류 완료 처리
+        if (lastLoggedUrlRef.current && lastLoggedUrlRef.current !== msg.url) {
+          await logUrl(
+            lastLoggedUrlRef.current,
+            pageTitle,
+            visitedAtRef.current,
+            new Date().toISOString()
+          );
+        }
+        visitedAtRef.current   = msg.visited_at || new Date().toISOString();
+        lastLoggedUrlRef.current = msg.url;
+        break;
+      }
+      case 'ai_prompt': {
+        const logId = await logAiPrompt(msg.prompt, msg.url);
+        if (logId) {
+          pendingAiLogIdRef.current = logId;
+          // WebView 측에 id 주입 → 응답 캡처 시 사용
+          webViewRef.current?.injectJavaScript(
+            `window._setPendingAiLogId(${logId}); true;`
+          );
+        }
+        break;
+      }
+      case 'ai_response': {
+        const id = msg.log_id || pendingAiLogIdRef.current;
+        await updateAiResponse(id, msg.response);
+        pendingAiLogIdRef.current = null;
+        break;
+      }
+      default:
+        break;
     }
   };
 
@@ -53,8 +127,9 @@ export default function BrowserScreen({ navigation, route }) {
     setExitAttemptCount(prev => prev + 1);
     setShowExitModal(true);
     try {
-      await logAPI.recordExitAttempt({
-        assignment_id: assignment.id,
+      await logAPI.recordExit({
+        participation_id: participation_id || null,
+        assignment_id: assignment?.id || null,
         attempt_type: type,
       });
     } catch (err) {
@@ -82,8 +157,8 @@ export default function BrowserScreen({ navigation, route }) {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (appStateRef.current === 'active' && nextState === 'background') {
-        const duration = Date.now() - pageStartTimeRef.current;
-        logPageVisit(currentUrl, pageTitle, duration);
+        // 현재 페이지 체류 완료 로그
+        logUrl(currentUrl, pageTitle, visitedAtRef.current, new Date().toISOString());
         handleExitAttempt('background');
       }
       appStateRef.current = nextState;
@@ -95,14 +170,15 @@ export default function BrowserScreen({ navigation, route }) {
     setCanGoBack(navState.canGoBack);
 
     if (navState.url && navState.url !== currentUrl) {
-      const duration = Date.now() - pageStartTimeRef.current;
-      await logPageVisit(currentUrl, pageTitle, duration);
+      // 이전 URL 체류 완료 → 로그 전송
+      await logUrl(currentUrl, pageTitle, visitedAtRef.current, new Date().toISOString());
 
       setCurrentUrl(navState.url);
       setAddressDraft(navState.url);
       setPageTitle(navState.title || '');
-      pageStartTimeRef.current = Date.now();
+      visitedAtRef.current    = new Date().toISOString();
       lastLoggedUrlRef.current = null;
+      pageStartTimeRef.current = Date.now();
     }
   };
 
@@ -110,9 +186,6 @@ export default function BrowserScreen({ navigation, route }) {
     const { nativeEvent } = syntheticEvent;
     setLoading(false);
     setPageTitle(nativeEvent.title || '');
-
-    const duration = Date.now() - pageStartTimeRef.current;
-    logPageVisit(nativeEvent.url, nativeEvent.title, duration);
   };
 
   const handleShouldStartLoad = (request) => {
@@ -137,9 +210,13 @@ export default function BrowserScreen({ navigation, route }) {
     setCurrentUrl(u);
     setAddressDraft(u);
     setLoading(true);
+    visitedAtRef.current    = new Date().toISOString();
     lastLoggedUrlRef.current = null;
     pageStartTimeRef.current = Date.now();
   };
+
+  const stageLabel = stage ? `단계 ${stage.order_num || stage.step_order}` : '';
+  const stageTitle = stage?.title || '';
 
   return (
     <View style={styles.container}>
@@ -152,8 +229,8 @@ export default function BrowserScreen({ navigation, route }) {
       {/* 상단 헤더 */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.stageLabel}>단계 {stage.order_num}</Text>
-          <Text style={styles.stageTitle} numberOfLines={1}>{stage.title}</Text>
+          {stageLabel ? <Text style={styles.stageLabel}>{stageLabel}</Text> : null}
+          <Text style={styles.stageTitle} numberOfLines={1}>{stageTitle}</Text>
         </View>
         <View style={styles.headerRight}>
           <View style={styles.aiAllowedBadge}>
@@ -169,7 +246,7 @@ export default function BrowserScreen({ navigation, route }) {
           value={addressDraft}
           onChangeText={setAddressDraft}
           onSubmitEditing={() => normalizeAndNavigate(addressDraft)}
-          placeholder="검색어 (https://… 직접 입력 가능)"
+          placeholder="검색어 또는 https://… 직접 입력"
           placeholderTextColor="#666"
           autoCapitalize="none"
           autoCorrect={false}
@@ -206,6 +283,8 @@ export default function BrowserScreen({ navigation, route }) {
           onLoadEnd={handleLoadEnd}
           onLoadStart={() => setLoading(true)}
           onShouldStartLoadWithRequest={handleShouldStartLoad}
+          injectedJavaScript={WEBVIEW_LOG_SCRIPT}
+          onMessage={(e) => handleWebViewMessage(e.nativeEvent.data)}
           javaScriptEnabled={true}
           domStorageEnabled={true}
           startInLoadingState={true}
@@ -219,8 +298,7 @@ export default function BrowserScreen({ navigation, route }) {
         />
       )}
 
-      {/* AI 지침 (있을 경우) */}
-      {stage.ai_guidance && (
+      {stage?.ai_guidance && (
         <View style={styles.guidanceBanner}>
           <Text style={styles.guidanceBannerText}>📌 {stage.ai_guidance}</Text>
         </View>
