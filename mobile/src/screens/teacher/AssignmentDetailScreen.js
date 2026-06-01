@@ -86,7 +86,7 @@ export default function AssignmentDetailScreen({ navigation, route }) {
           <View style={styles.codeBox}>
             <Text style={styles.codeLabel}>초대 코드</Text>
             <Text style={styles.codeValue}>{assessment?.invite_code}</Text>
-            <Text style={styles.codeHint}>학생들에게 이 코드를 알려주세요</Text>
+            <Text style={styles.codeHint}>학생들에게 이 코드를 공유할 수 있습니다</Text>
           </View>
 
           <Text style={styles.title}>{assessment?.title}</Text>
@@ -115,7 +115,7 @@ export default function AssignmentDetailScreen({ navigation, route }) {
           </View>
 
           {steps.length === 0 ? (
-            <Text style={styles.emptyText}>단계를 추가해주세요.</Text>
+            <Text style={styles.emptyText}>단계를 추가해야 합니다.</Text>
           ) : (
             steps.map((step) => {
               const aiStyle = getTeacherAiModeStyle(THEME, step);

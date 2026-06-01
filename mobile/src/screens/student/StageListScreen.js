@@ -218,7 +218,7 @@ export default function StageListScreen({ navigation, route }) {
 
               {status === 'locked' && (
                 <View style={styles.lockedOverlay}>
-                  <Text style={styles.lockedText}>🔒 이전 단계를 완료하세요</Text>
+                  <Text style={styles.lockedText}>🔒 이전 단계를 완료해야 합니다</Text>
                 </View>
               )}
             </View>

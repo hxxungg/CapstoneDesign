@@ -7,6 +7,7 @@ const {
   buildStepScoringPlan,
   isCriteriaMet,
 } = require('../utils/rubricScoring');
+const { deleteAssessmentCascade } = require('../services/assessmentCleanup');
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://101.79.18.104:8001';
 
@@ -783,26 +784,31 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
   }
 });
 
-// 수행평가 삭제 (steps 연쇄 삭제)
+// 수행평가 삭제 (참여·제출·로그·단계 포함 전체 삭제)
 router.delete('/:id', authenticateToken, requireTeacher, async (req, res) => {
   const assessmentId = parseInt(req.params.id, 10);
   if (isNaN(assessmentId)) return res.status(400).json({ error: '잘못된 ID입니다.' });
 
+  const conn = await pool.getConnection();
   try {
     const teacherId = await getTeacherId(req.user.id);
-    const [rows] = await pool.query(
+    const [rows] = await conn.query(
       'SELECT id FROM teacher_db.assessments WHERE id = ? AND teacher_id = ?',
       [assessmentId, teacherId]
     );
     if (rows.length === 0) return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
 
-    await pool.query('DELETE FROM teacher_db.assessment_steps WHERE assessment_id = ?', [assessmentId]);
-    await pool.query('DELETE FROM teacher_db.assessments WHERE id = ?', [assessmentId]);
+    await conn.beginTransaction();
+    await deleteAssessmentCascade(conn, assessmentId);
+    await conn.commit();
 
     res.json({ message: '수행평가가 삭제되었습니다.' });
   } catch (err) {
+    await conn.rollback();
     console.error(err);
     res.status(500).json({ error: '서버 오류가 발생했습니다.' });
+  } finally {
+    conn.release();
   }
 });
 

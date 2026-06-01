@@ -5,41 +5,20 @@ import {
   ActivityIndicator, ScrollView, useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useAuth } from '../context/AuthContext';
 import { useGoogleAuth } from '../hooks/useGoogleAuth';
 import { useKakaoAuth } from '../hooks/useKakaoAuth';
 import { THEME, FONTS } from '../config/api';
+import { NATIVE_SOCIAL_ENABLED, WEB_SOCIAL_ENABLED } from '../config/features';
 import { appAlert } from '../utils/appAlert';
+import { VALIDATION } from '../utils/uiCopy';
+import BrandMark from '../components/BrandMark';
 
 const C = THEME;
 const F = FONTS;
 const KAKAO_YELLOW = '#FEE500';
 const KAKAO_BROWN  = '#1A1A1A';
-
-// ── BrandMark ───────────────────────────────────────────────────────────────
-function BrandMark({ size = 56, variant = 'navy' }) {
-  const bg = variant === 'navy' ? C.dark : C.card;
-  const fg = variant === 'navy' ? '#fff' : C.dark;
-  return (
-    <View style={[bm.wrap, {
-      width: size, height: size, borderRadius: size * 0.22,
-      backgroundColor: bg,
-      borderWidth: variant === 'paper' ? 1 : 0,
-      borderColor: variant === 'paper' ? C.border : 'transparent',
-    }]}>
-      <Text style={[bm.text, { fontSize: size * 0.32, lineHeight: size * 0.36, color: fg }]}>AI</Text>
-      <View style={[bm.dot, {
-        right: size * 0.18, bottom: size * 0.18,
-        width: size * 0.08, height: size * 0.08, borderRadius: size * 0.04,
-      }]} />
-    </View>
-  );
-}
-const bm = StyleSheet.create({
-  wrap: { alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' },
-  text: { fontFamily: F.sansBold, letterSpacing: -1, includeFontPadding: false },
-  dot:  { position: 'absolute', backgroundColor: C.primary },
-});
 
 // ── AuthShell (디자인 파일 AuthShell.tsx 기반) ──────────────────────────────
 function AuthShell({ title, subtitle, children, footer }) {
@@ -53,8 +32,8 @@ function AuthShell({ title, subtitle, children, footer }) {
         {/* 네이비 브랜드 헤더 */}
         <View style={sh.phoneHeader}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <BrandMark size={36} variant="navy" />
-            <Text style={sh.phoneHeaderName}>AI나침반</Text>
+            <BrandMark size={36} />
+            <Text style={sh.phoneHeaderName}>AI 나침반</Text>
           </View>
         </View>
         {/* 크림 폼 영역 */}
@@ -66,7 +45,7 @@ function AuthShell({ title, subtitle, children, footer }) {
         >
           <View style={sh.formBox}>
             <View style={{ gap: 4, marginBottom: 28 }}>
-              <Text style={sh.formTitle}>{title}</Text>
+              {title ? <Text style={sh.formTitle}>{title}</Text> : null}
               {subtitle ? <Text style={sh.formSub}>{subtitle}</Text> : null}
             </View>
             <View style={{ gap: 20 }}>
@@ -89,20 +68,20 @@ function AuthShell({ title, subtitle, children, footer }) {
       {/* Left — brand panel */}
       <View style={sh.leftPanel}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <BrandMark size={36} variant="navy" />
-          <Text style={sh.leftBrandName}>AI나침반</Text>
+          <BrandMark size={36} />
+          <Text style={sh.leftBrandName}>AI 나침반</Text>
         </View>
 
         <View style={{ flex: 1, justifyContent: 'center', maxWidth: 360 }}>
           <Text style={sh.tagline}>AI 활용, 과정이 중요합니다.</Text>
           <Text style={sh.taglineBold}>AI 나침반</Text>
           <Text style={sh.taglineSub}>
-            생성형 AI를 안전하고 교육적으로 활용하도록.{'\n'}
+            생성형 AI를 안전하고 교육적으로 활용하도록{'\n'}
             수행평가 설계·진행·평가 전 과정에서 그 방향을 잡아드립니다.
           </Text>
         </View>
 
-        <Text style={sh.leftFooter}>© 2026 AI나침반</Text>
+        <Text style={sh.leftFooter}>© 2026 AI 나침반</Text>
       </View>
 
       {/* Right — form */}
@@ -113,7 +92,7 @@ function AuthShell({ title, subtitle, children, footer }) {
       >
         <View style={{ width: '100%', maxWidth: 380, gap: 28 }}>
           <View>
-            <Text style={sh.formTitle}>{title}</Text>
+            {title ? <Text style={sh.formTitle}>{title}</Text> : null}
             {subtitle ? <Text style={sh.formSub}>{subtitle}</Text> : null}
           </View>
           <View style={{ gap: 20 }}>{children}</View>
@@ -148,7 +127,7 @@ const sh = StyleSheet.create({
     marginBottom: 8,
   },
   formSub: {
-    fontFamily: F.sans, fontSize: 14, color: C.textSoft, lineHeight: 21,
+    fontFamily: F.sans, fontSize: 16, color: C.textSoft, lineHeight: 24,
   },
 
   // 태블릿 왼쪽 패널
@@ -275,9 +254,13 @@ export default function LoginScreen({ navigation }) {
   const [loading,  setLoading]  = useState(false);
   const [socialLoading, setSocialLoading] = useState(null);
   const busy = loading || socialLoading !== null;
+  const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+  const showWebSocial = Platform.OS === 'web' && WEB_SOCIAL_ENABLED;
+  const showNativeSocial = Platform.OS !== 'web' && NATIVE_SOCIAL_ENABLED && !isExpoGo;
+  const showSocialLogin = showWebSocial || showNativeSocial;
 
   useEffect(() => {
-    if (Platform.OS !== 'web') return;
+    if (!showWebSocial) return;
     const googleCode = getCode();
     const kakaoCode  = getKakaoCode();
     const handleCode = (provider, code) => {
@@ -300,7 +283,7 @@ export default function LoginScreen({ navigation }) {
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      appAlert('입력 오류', '이메일과 비밀번호를 입력해주세요.', null, { type: 'warning' });
+      appAlert('입력 오류', VALIDATION.emailPassword, null, { type: 'warning' });
       return;
     }
     setLoading(true);
@@ -318,7 +301,9 @@ export default function LoginScreen({ navigation }) {
       if (provider === 'google') {
         payload = t.type === 'code' ? { provider, code: t.code } : { provider, id_token: t.id_token };
       } else {
-        payload = t?.type === 'code' ? { provider, code: t.code } : { provider, access_token: t };
+        payload = t?.type === 'code'
+          ? { provider, code: t.code }
+          : { provider, access_token: t.access_token };
       }
       const r = await socialLogin(payload);
       if (r?.needsRegistration) {
@@ -339,11 +324,12 @@ export default function LoginScreen({ navigation }) {
 
   return (
     <AuthShell
-      title="다시 만나서 반가워요."
-      subtitle="이메일로 로그인하거나, 소셜 계정으로 빠르게 시작하세요."
+      subtitle={showSocialLogin
+        ? '이메일 또는 소셜 계정으로 로그인할 수 있습니다.'
+        : '이메일로 로그인할 수 있습니다.'}
       footer={
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={{ fontFamily: F.sans, fontSize: 13, color: C.textSoft }}>아직 계정이 없으신가요?</Text>
+          <Text style={{ fontFamily: F.sans, fontSize: 13, color: C.textSoft }}>아직 계정이 없습니다.</Text>
           <TouchableOpacity onPress={() => navigation.navigate('Register')} disabled={busy}>
             <Text style={{ fontFamily: F.sansMedium, fontSize: 13.5, color: C.primary }}>회원가입 →</Text>
           </TouchableOpacity>
@@ -369,6 +355,8 @@ export default function LoginScreen({ navigation }) {
         </Btn>
       </View>
 
+      {showSocialLogin && (
+        <>
       {/* 소셜 구분선 */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <View style={{ flex: 1, height: 1, backgroundColor: C.border }} />
@@ -380,7 +368,7 @@ export default function LoginScreen({ navigation }) {
       <View style={{ gap: 10 }}>
         <Pressable
           onPress={() => {
-            if (!googleReady) { appAlert('설정 필요', 'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID를 설정해주세요.', null, { type: 'warning' }); return; }
+            if (!googleReady) { appAlert('설정 필요', 'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID를 mobile/.env에 설정해야 합니다.', null, { type: 'warning' }); return; }
             handleSocial('google', signInWithGoogle);
           }}
           disabled={busy}
@@ -397,7 +385,17 @@ export default function LoginScreen({ navigation }) {
 
         <Pressable
           onPress={() => {
-            if (!kakaoReady) { appAlert('설정 필요', 'EXPO_PUBLIC_KAKAO_REST_API_KEY를 설정해주세요.', null, { type: 'warning' }); return; }
+            if (!kakaoReady) {
+              appAlert(
+                '설정 필요',
+                showWebSocial
+                  ? 'EXPO_PUBLIC_KAKAO_REST_API_KEY를 mobile/.env에 설정해야 합니다.'
+                  : 'EXPO_PUBLIC_KAKAO_REST_API_KEY와 EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY를 mobile/.env에 설정해야 합니다.',
+                null,
+                { type: 'warning' }
+              );
+              return;
+            }
             handleSocial('kakao', signInWithKakao);
           }}
           disabled={busy}
@@ -412,6 +410,8 @@ export default function LoginScreen({ navigation }) {
           }
         </Pressable>
       </View>
+        </>
+      )}
     </AuthShell>
   );
 }

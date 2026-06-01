@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, Pressable, StyleSheet,
   ActivityIndicator, RefreshControl,
@@ -47,6 +47,12 @@ export default function StudentListScreen({ navigation, route }) {
 
   const students = data?.students ?? [];
   const summary  = data?.summary ?? {};
+  const sortedStudents = useMemo(
+    () => [...students].sort((a, b) =>
+      (a.student?.name ?? '').localeCompare(b.student?.name ?? '', 'ko')
+    ),
+    [students]
+  );
 
   return (
     <AppShell navigation={navigation} currentScreen="home">
@@ -110,8 +116,8 @@ export default function StudentListScreen({ navigation, route }) {
                 <View style={s.emptyIcon}>
                   <Ionicons name="people-outline" size={32} color={C.textSecondary} />
                 </View>
-                <Text style={s.emptyTitle}>아직 참여한 학생이 없어요</Text>
-                <Text style={s.emptyDesc}>학생들에게 초대 코드를 공유해 보세요.</Text>
+                <Text style={s.emptyTitle}>아직 참여한 학생이 없습니다</Text>
+                <Text style={s.emptyDesc}>학생들에게 초대 코드를 공유할 수 있습니다.</Text>
               </View>
             ) : (
               <View style={s.section}>
@@ -120,7 +126,7 @@ export default function StudentListScreen({ navigation, route }) {
                   <Text style={s.sectionCount}>{students.length}명</Text>
                 </View>
                 <View style={s.list}>
-                  {students.map((item, i) => {
+                  {sortedStudents.map((item, i) => {
                     const st = item.student;
                     const statusInfo = STATUS_MAP[st.status] ?? { label: st.status, color: C.textSecondary };
                     const aiCount   = item.ai_usage?.total_log_count ?? 0;
@@ -149,9 +155,9 @@ export default function StudentListScreen({ navigation, route }) {
                         <View style={{ flex: 1 }}>
                           <Text style={s.studentName}>{st.name ?? '(이름 없음)'}</Text>
                           <Text style={s.studentMeta}>
-                            {st.status === 'submitted'
-                              ? '수행평가 완료'
-                              : `${st.current_stage_order ?? 1}단계 진행 중`}
+                            {st.status === 'in_progress'
+                              ? `${st.current_stage_order ?? 1}단계 진행 중`
+                              : '수행평가 완료'}
                             {aiCount > 0 ? `  ·  AI 활동 ${aiCount}회` : ''}
                           </Text>
                         </View>

@@ -1,36 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, Pressable, Modal, TextInput,
   TouchableOpacity, StyleSheet, useWindowDimensions,
   ActivityIndicator, Keyboard, ScrollView,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { authAPI } from '../services/api';
 import { THEME, FONTS } from '../config/api';
 import { appAlert } from '../utils/appAlert';
+import { VALIDATION } from '../utils/uiCopy';
 import EnrollCodeModal from './EnrollCodeModal';
+import PolicyModal from './PolicyModal';
+import { LEGAL_POLICIES, getVisiblePolicyKeys } from '../config/legalPolicies';
+import BrandMark from './BrandMark';
 
 const C = THEME;
 const F = FONTS;
-
-// ── BrandMark ───────────────────────────────────────────────────────────────
-function BrandMark({ size = 36 }) {
-  return (
-    <View style={[bm.wrap, { width: size, height: size, borderRadius: size * 0.22 }]}>
-      <Text style={[bm.text, { fontSize: size * 0.32, lineHeight: size * 0.36 }]}>AI</Text>
-      <View style={[bm.dot, {
-        right: size * 0.18, bottom: size * 0.18,
-        width: size * 0.08, height: size * 0.08, borderRadius: size * 0.04,
-      }]} />
-    </View>
-  );
-}
-const bm = StyleSheet.create({
-  wrap: { backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  text: { color: '#fff', fontFamily: F.sansBold, letterSpacing: -1, includeFontPadding: false },
-  dot:  { position: 'absolute', backgroundColor: C.primary },
-});
 
 // ── ConfirmDialog (디자인 파일 스타일) ───────────────────────────────────────
 function ConfirmDialog({ visible, title, body, confirmLabel, danger, onConfirm, onCancel, loading }) {
@@ -92,19 +79,41 @@ const cd = StyleSheet.create({
 
 // ── 설정 모달 (비밀번호 변경 + 회원탈퇴) ────────────────────────────────────
 function SettingsModal({ visible, onClose }) {
-  const { logout } = useAuth();
-  const [view, setView] = useState('main'); // 'main' | 'password' | 'deleteConfirm'
+  const { logout, user } = useAuth();
+  const [view, setView] = useState('main'); // 'main' | 'policies' | 'password' | 'deleteConfirm'
+  const [policyModal, setPolicyModal] = useState(null);
+  const [marketingAgreed, setMarketingAgreed] = useState(false);
   const [currentPw, setCurrentPw]   = useState('');
   const [newPw, setNewPw]           = useState('');
   const [confirmPw, setConfirmPw]   = useState('');
   const [pwLoading, setPwLoading]   = useState(false);
   const [delLoading, setDelLoading] = useState(false);
 
-  const close = () => { setView('main'); onClose(); };
+  useEffect(() => {
+    if (!visible) return;
+    if (user?.marketing_agreed != null) {
+      setMarketingAgreed(!!user.marketing_agreed);
+      return;
+    }
+    authAPI.getMe()
+      .then((me) => setMarketingAgreed(!!me.marketing_agreed))
+      .catch(() => setMarketingAgreed(false));
+  }, [visible, user?.marketing_agreed]);
+
+  const visiblePolicyKeys = useMemo(
+    () => getVisiblePolicyKeys(marketingAgreed),
+    [marketingAgreed]
+  );
+
+  const close = () => {
+    setView('main');
+    setPolicyModal(null);
+    onClose();
+  };
 
   const handleChangePw = async () => {
     if (!currentPw || !newPw || !confirmPw) {
-      appAlert('입력 오류', '모든 항목을 입력해주세요.', null, { type: 'warning' }); return;
+      appAlert('입력 오류', VALIDATION.allFields, null, { type: 'warning' }); return;
     }
     if (newPw.length < 6) {
       appAlert('입력 오류', '새 비밀번호는 6자 이상이어야 합니다.', null, { type: 'warning' }); return;
@@ -136,6 +145,7 @@ function SettingsModal({ visible, onClose }) {
   };
 
   return (
+    <>
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close} statusBarTranslucent>
       <Pressable style={sm.overlay} onPress={close}>
         <Pressable style={sm.card} onPress={Keyboard.dismiss}>
@@ -143,6 +153,13 @@ function SettingsModal({ visible, onClose }) {
           {view === 'main' && (
             <>
               <Text style={sm.title}>설정</Text>
+
+              <Pressable style={sm.menuItem} onPress={() => setView('policies')}>
+                <Text style={sm.menuItemText}>📄  약관 및 개인정보</Text>
+                <Text style={sm.menuChev}>›</Text>
+              </Pressable>
+
+              <View style={sm.divider} />
 
               <Pressable style={sm.menuItem} onPress={() => setView('password')}>
                 <Text style={sm.menuItemText}>🔒  비밀번호 변경</Text>
@@ -156,6 +173,27 @@ function SettingsModal({ visible, onClose }) {
                 <Text style={[sm.menuChev, { color: C.danger }]}>›</Text>
               </Pressable>
 
+              <Pressable style={sm.closeBtn} onPress={close}>
+                <Text style={sm.closeBtnText}>닫기</Text>
+              </Pressable>
+            </>
+          )}
+
+          {view === 'policies' && (
+            <>
+              <Pressable style={sm.backRow} onPress={() => setView('main')}>
+                <Text style={sm.backText}>‹ 설정</Text>
+              </Pressable>
+              <Text style={sm.title}>약관 및 개인정보</Text>
+              {visiblePolicyKeys.map((key, i) => (
+                <React.Fragment key={key}>
+                  {i > 0 ? <View style={sm.divider} /> : null}
+                  <Pressable style={sm.menuItem} onPress={() => setPolicyModal(key)}>
+                    <Text style={sm.menuItemText}>{LEGAL_POLICIES[key].title}</Text>
+                    <Text style={sm.menuChev}>›</Text>
+                  </Pressable>
+                </React.Fragment>
+              ))}
               <Pressable style={sm.closeBtn} onPress={close}>
                 <Text style={sm.closeBtnText}>닫기</Text>
               </Pressable>
@@ -211,6 +249,12 @@ function SettingsModal({ visible, onClose }) {
         </Pressable>
       </Pressable>
     </Modal>
+    <PolicyModal
+      visible={!!policyModal}
+      type={policyModal}
+      onClose={() => setPolicyModal(null)}
+    />
+    </>
   );
 }
 const sm = StyleSheet.create({
@@ -229,6 +273,8 @@ const sm = StyleSheet.create({
   menuItem:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14 },
   menuItemText: { fontFamily: F.sansMedium, fontSize: 15, color: C.text },
   menuChev:  { fontFamily: F.sans, fontSize: 20, color: C.textSecondary },
+  backRow:   { marginBottom: 4 },
+  backText:  { fontFamily: F.sansMedium, fontSize: 14, color: C.textSecondary },
   divider:   { height: 1, backgroundColor: C.border },
   fieldLabel:{ fontFamily: F.sansMedium, fontSize: 12.5, color: C.textSoft, marginTop: 4 },
   input: {
@@ -252,7 +298,16 @@ const NAV_TEACHER = [
   { id: 'invite', label: '초대 코드 확인' },
 ];
 
-export default function AppShell({ children, navigation, currentScreen = 'home', onEnroll, onInviteCode, onEnrolled }) {
+export default function AppShell({
+  children,
+  navigation,
+  currentScreen = 'home',
+  onEnroll,
+  onInviteCode,
+  onEnrolled,
+  guardAssessmentExit = false,
+  onAssessmentExitAttempt,
+}) {
   const { user, logout } = useAuth();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -264,12 +319,22 @@ export default function AppShell({ children, navigation, currentScreen = 'home',
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [enrollOpen, setEnrollOpen] = useState(false);
 
-  const openEnroll = () => {
-    if (onEnroll) {
-      onEnroll();
+  const runGuarded = (actionType, proceed) => {
+    if (guardAssessmentExit && typeof onAssessmentExitAttempt === 'function') {
+      onAssessmentExitAttempt(actionType);
       return;
     }
-    setEnrollOpen(true);
+    proceed();
+  };
+
+  const openEnroll = () => {
+    runGuarded('sidebar_enroll', () => {
+      if (onEnroll) {
+        onEnroll();
+        return;
+      }
+      setEnrollOpen(true);
+    });
   };
 
   const handleNav = (id) => {
@@ -300,6 +365,28 @@ export default function AppShell({ children, navigation, currentScreen = 'home',
   if (!isWide) {
     return (
       <View style={{ flex: 1, backgroundColor: C.background, paddingTop: insets.top }}>
+        <View style={s.mobileHeader}>
+          <View style={s.mobileHeaderLeft}>
+            <BrandMark size={28} />
+            <Text style={s.mobileBrandName} numberOfLines={1}>{userName || 'AI 나침반'}</Text>
+          </View>
+          <View style={s.mobileHeaderActions}>
+            <Pressable
+              onPress={() => runGuarded('sidebar_settings', () => setSettingsOpen(true))}
+              style={({ pressed }) => [s.mobileIconBtn, pressed && { opacity: 0.7 }]}
+              hitSlop={8}
+            >
+              <Ionicons name="settings-outline" size={20} color="#fff" />
+            </Pressable>
+            <Pressable
+              onPress={() => runGuarded('sidebar_logout', () => setLogoutOpen(true))}
+              style={({ pressed }) => [s.mobileIconBtn, pressed && { opacity: 0.7 }]}
+              hitSlop={8}
+            >
+              <Ionicons name="log-out-outline" size={20} color="#fff" />
+            </Pressable>
+          </View>
+        </View>
         {children}
         {/* 모달은 폰에서도 동작 */}
         <ConfirmDialog
@@ -332,7 +419,7 @@ export default function AppShell({ children, navigation, currentScreen = 'home',
         {/* 브랜드 */}
         <View style={s.brand}>
           <BrandMark size={36} />
-          <Text style={s.brandName}>AI나침반</Text>
+          <Text style={s.brandName}>AI 나침반</Text>
         </View>
 
         {/* 네비게이션 */}
@@ -373,7 +460,7 @@ export default function AppShell({ children, navigation, currentScreen = 'home',
 
         {/* 설정 */}
         <Pressable
-          onPress={() => setSettingsOpen(true)}
+          onPress={() => runGuarded('sidebar_settings', () => setSettingsOpen(true))}
           style={({ pressed }) => [s.sideBtn, pressed && { backgroundColor: 'rgba(255,255,255,0.06)' }]}
         >
           <Text style={s.sideBtnText}>⚙  설정</Text>
@@ -381,13 +468,13 @@ export default function AppShell({ children, navigation, currentScreen = 'home',
 
         {/* 로그아웃 */}
         <Pressable
-          onPress={() => setLogoutOpen(true)}
+          onPress={() => runGuarded('sidebar_logout', () => setLogoutOpen(true))}
           style={({ pressed }) => [s.sideBtn, pressed && { backgroundColor: 'rgba(255,255,255,0.06)' }]}
         >
           <Text style={s.sideBtnText}>↩  로그아웃</Text>
         </Pressable>
 
-        <Text style={s.sidebarFooter}>© 2026 AI나침반</Text>
+        <Text style={s.sidebarFooter}>© 2026 AI 나침반</Text>
       </View>
 
       {/* 콘텐츠 */}
@@ -420,6 +507,27 @@ export default function AppShell({ children, navigation, currentScreen = 'home',
 
 const s = StyleSheet.create({
   shell: { flex: 1, flexDirection: 'row', backgroundColor: C.background },
+
+  mobileHeader: {
+    height: 52,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: C.dark,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  mobileHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
+  mobileBrandName: { fontFamily: F.sansMedium, fontSize: 15, color: '#fff', flexShrink: 1 },
+  mobileHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  mobileIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   sidebar: {
     width: 232, backgroundColor: C.dark,

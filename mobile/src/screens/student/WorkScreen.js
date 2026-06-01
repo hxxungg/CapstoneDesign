@@ -3,9 +3,11 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   PanResponder, Dimensions, Platform, ActivityIndicator,
   BackHandler, AppState, Linking, TextInput, Keyboard, Pressable, Modal,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { appAlert } from '../../utils/appAlert';
+import { VALIDATION } from '../../utils/uiCopy';
 import { useFocusEffect } from '@react-navigation/native';
 import { assignmentAPI, assessmentAPI, logAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -16,9 +18,11 @@ import {
   getStudentAiBadgeColor,
 } from '../../config/defaultPerformanceStages';
 import ExitWarningModal from '../../components/ExitWarningModal';
+import AppShell from '../../components/AppShell';
 import { WEBVIEW_LOG_SCRIPT } from '../../utils/webviewInjection';
 import { normalizeAiText } from '../../utils/normalizeAiText';
-import AppShell from '../../components/AppShell';
+import useVisualKeyboardHeight from '../../hooks/useVisualKeyboardHeight';
+import useVisualViewportPin from '../../hooks/useVisualViewportPin';
 
 const C = THEME;
 const F = FONTS;
@@ -72,6 +76,7 @@ export default function WorkScreen({ navigation, route }) {
   } = route.params || {};
   const isNewSystem = !!participation_id;
   const { user } = useAuth();
+  const keyboardHeight = useVisualKeyboardHeight();
 
   const [assignment, setAssignment] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -126,7 +131,18 @@ export default function WorkScreen({ navigation, route }) {
   const localUrlLogsRef = useRef([]); // { step_id, url, search_query, visited_at, complete_at }
   const appStateRef         = useRef(AppState.currentState);
   const saveWritingTimerRef = useRef(null);
+  const writingScrollRef = useRef(null);
+  const writingInputRef = useRef(null);
+  const writingDockRef = useRef(null);
+  const leftColumnRef = useRef(null);
+  const writingYRef = useRef(0);
+  const writingActiveRef = useRef(false);
   const writingTextRef = useRef('');
+  useVisualViewportPin(writingDockRef, leftColumnRef, {
+    dockId: 'work-writing-dock',
+    anchorId: 'work-left-column',
+    isActiveRef: writingActiveRef,
+  });
   const panelDragStartRef = useRef({ x: PANEL_INITIAL_LEFT, y: PANEL_INITIAL_TOP });
   const panelResizeStartRef = useRef({ width: PANEL_INITIAL_WIDTH, height: PANEL_INITIAL_HEIGHT });
   const miniDragStartRef = useRef({ x: PANEL_INITIAL_LEFT, y: PANEL_INITIAL_TOP });
@@ -134,6 +150,29 @@ export default function WorkScreen({ navigation, route }) {
   const panelPositionRef = useRef({ x: PANEL_INITIAL_LEFT, y: PANEL_INITIAL_TOP });
   const panelSizeRef = useRef({ width: PANEL_INITIAL_WIDTH, height: PANEL_INITIAL_HEIGHT });
   writingTextRef.current = writingText;
+
+  const scrollWritingIntoView = useCallback(() => {
+    const delay = Platform.OS === 'ios' ? 320 : 200;
+    setTimeout(() => {
+      writingScrollRef.current?.scrollTo({
+        y: Math.max(0, writingYRef.current - 8),
+        animated: true,
+      });
+    }, delay);
+  }, []);
+
+  const dismissWritingKeyboard = useCallback(() => {
+    writingActiveRef.current = false;
+    Keyboard.dismiss();
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
+    if (keyboardHeight <= 0) return undefined;
+    scrollWritingIntoView();
+    return undefined;
+  }, [keyboardHeight, scrollWritingIntoView]);
+
   panelPositionRef.current = panelPosition;
   panelSizeRef.current = panelSize;
 
@@ -501,7 +540,7 @@ export default function WorkScreen({ navigation, route }) {
 
     if (!writingTextRef.current || !writingTextRef.current.trim()) {
       showResult(
-        '내용을 입력해주세요',
+        VALIDATION.workContent,
         '이 단계의 내용을 작성한 후 다음 단계로 이동할 수 있습니다.',
         'warn'
       );
@@ -764,7 +803,12 @@ export default function WorkScreen({ navigation, route }) {
   };
 
   return (
-    <AppShell navigation={navigation} currentScreen="home">
+    <AppShell
+      navigation={navigation}
+      currentScreen="home"
+      guardAssessmentExit={!isCompleted}
+      onAssessmentExitAttempt={handleExitAttempt}
+    >
     <View style={styles.container}>
       <ExitWarningModal
         visible={showExitModal}
@@ -896,8 +940,22 @@ export default function WorkScreen({ navigation, route }) {
         </Modal>
       )}
 
+      {/* ── 왼쪽 작업열 + 오른쪽 브라우저 — 작성창만 visualViewport/키보드 높이만큼 위로 ── */}
+      <View style={[styles.bodyRow, aiAllowed && styles.splitContainer]}>
+        <KeyboardAvoidingView
+          ref={leftColumnRef}
+          nativeID="work-left-column"
+          style={[
+            styles.leftWorkColumn,
+            { flex: aiAllowed ? splitRatio : 1 },
+          ]}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          enabled={Platform.OS !== 'web'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+        >
+        <View style={styles.leftWorkInner}>
       {/* ── 헤더 (expo/AssessmentScreen.tsx 디자인 파일 1:1) ── */}
-      <View style={nh.wrap}>
+      <Pressable style={[nh.wrap, styles.headerNoShrink]} onPress={dismissWritingKeyboard}>
         {/* 상단 행: 뒤로가기 | 메타+제목 | 마감배지 | 눈 | 제출 */}
         <View style={nh.topRow}>
           <Pressable
@@ -909,14 +967,11 @@ export default function WorkScreen({ navigation, route }) {
           </Pressable>
 
           <View style={nh.titleWrap}>
-            <Text style={nh.meta} numberOfLines={1} ellipsizeMode="tail">
-              {[
-                assignment?.subject,
-                writingSaveStatus === 'saving' ? '저장 중…'
-                  : writingSaveStatus === 'saved' ? '자동 저장 됨'
-                  : '자동 저장 됨',
-              ].filter(Boolean).join(' · ')}
-            </Text>
+            {assignment?.subject ? (
+              <Text style={nh.meta} numberOfLines={1} ellipsizeMode="tail">
+                {assignment.subject}
+              </Text>
+            ) : null}
             <Text style={nh.title} numberOfLines={1} ellipsizeMode="tail">
               {assignment?.title}
             </Text>
@@ -956,7 +1011,10 @@ export default function WorkScreen({ navigation, route }) {
               <Pressable
                 key={stage.id ?? order}
                 style={[nh.tab, isViewed && nh.tabActive]}
-                onPress={() => setViewedStageOrder(order)}
+                onPress={() => {
+                  dismissWritingKeyboard();
+                  setViewedStageOrder(order);
+                }}
               >
                 {/* 숫자/체크 배지 */}
                 <View style={[
@@ -987,11 +1045,17 @@ export default function WorkScreen({ navigation, route }) {
             );
           })}
         </ScrollView>
-      </View>
+      </Pressable>
 
       {/* ── 과거 단계 읽기 전용 뷰 ── */}
       {isViewingPast && (
-        <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }} style={{ flex: 1, backgroundColor: C.background }}>
+        <ScrollView
+          contentContainerStyle={{ padding: 16, gap: 12, flexGrow: 1 }}
+          style={{ flex: 1, backgroundColor: C.background }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        >
+          <Pressable onPress={dismissWritingKeyboard} style={{ flexGrow: 1, gap: 12 }}>
           {(() => {
             const sub = previousSubmissions.find(s => (s.step_order || 0) === viewOrder);
             return sub ? (
@@ -1009,29 +1073,41 @@ export default function WorkScreen({ navigation, route }) {
               </View>
             );
           })()}
+          </Pressable>
         </ScrollView>
       )}
 
       {/* ── 미래 단계 잠김 ── */}
       {isViewingFuture && (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: C.background }}>
+        <Pressable
+          style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: C.background }}
+          onPress={dismissWritingKeyboard}
+        >
           <Ionicons name="lock-closed-outline" size={36} color={C.textSecondary} style={{ marginBottom: 12 }} />
           <Text style={{ fontFamily: F.sansSemi, fontSize: 15, color: C.text, marginBottom: 6 }}>아직 잠긴 단계입니다</Text>
           <Text style={{ fontFamily: F.sans, fontSize: 13, color: C.textSecondary, textAlign: 'center' }}>
             이전 단계를 완료해야 진행할 수 있습니다.
           </Text>
-        </View>
+        </Pressable>
       )}
 
-      {/* ── 현재 단계 작업 영역 ── */}
+      {/* ── 현재 단계 작업 영역 (수행 내용 → 작성 공간 순서, 키보드 시 위로 이동) ── */}
       {!isViewingPast && !isViewingFuture && (
-      <View style={aiAllowed ? styles.splitContainer : styles.fullContent}>
-        {/* ── 수행평가 패널 ── */}
-        <View style={[styles.taskPanel, { flex: aiAllowed ? splitRatio : 1 }]}>
-          <ScrollView
-            contentContainerStyle={styles.taskScroll}
-            keyboardShouldPersistTaps="handled"
-          >
+          <View style={styles.taskBody}>
+            <ScrollView
+              ref={writingScrollRef}
+              style={styles.taskScrollView}
+              contentContainerStyle={[
+                styles.taskScroll,
+                Platform.OS !== 'web' && keyboardHeight > 0 && {
+                  paddingBottom: keyboardHeight + 24,
+                },
+              ]}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+              showsVerticalScrollIndicator={false}
+            >
+            <Pressable onPress={dismissWritingKeyboard} style={styles.taskScrollInner}>
             {currentStage?.description ? (
               <View style={styles.infoBox}>
                 <Text style={styles.infoBoxLabel}>📋 수행 내용</Text>
@@ -1039,7 +1115,7 @@ export default function WorkScreen({ navigation, route }) {
               </View>
             ) : (
               <View style={styles.infoBox}>
-                <Text style={styles.infoBoxText}>이 단계의 수행평가를 진행하세요.</Text>
+                <Text style={styles.infoBoxText}>이 단계의 수행평가를 진행할 수 있습니다.</Text>
               </View>
             )}
 
@@ -1050,43 +1126,34 @@ export default function WorkScreen({ navigation, route }) {
               </View>
             ) : null}
 
+            {/* 작성 공간 — 평소엔 수행 내용 바로 아래, 키보드 시에만 위로 고정 */}
+            <View
+              ref={writingDockRef}
+              nativeID="work-writing-dock"
+              onLayout={(e) => { writingYRef.current = e.nativeEvent.layout.y; }}
+            >
             <View style={styles.writingBox}>
               <View style={styles.writingHeader}>
                 <Text style={styles.infoBoxLabel}>✏️ 작성 공간</Text>
-              <View style={styles.writingHeaderRight}>
-                {(isNewSystem ? previousStageWritings.length > 0 : currentStageOrder > 1) && (
-                  <TouchableOpacity
-                    style={styles.prevViewBtn}
-                    onPress={() => {
-                      setShowPreviousWritingsModal(true);
-                      setIsPreviousPanelMinimized(false);
-                      setSelectedPreviousStage(null);
-                    }}
-                  >
-                    <Text style={styles.prevViewBtnText}>이전 내용 보기</Text>
-                  </TouchableOpacity>
-                )}
-                <Text style={styles.writingSaveHint}>
-                  {writingSaveStatus === 'saving'
-                    ? '저장 중…'
-                    : writingSaveStatus === 'saved'
-                      ? '저장됨'
-                      : writingSaveStatus === 'error'
-                        ? '저장 오류'
-                        : '입력 시 자동 저장'}
-                </Text>
-              </View>
               </View>
               <Text style={styles.writingHint}>
                 단계마다 내용이 따로 저장됩니다. 다음 단계로 넘어가기 전에 자동으로 한 번 더 저장됩니다.
               </Text>
               <TextInput
+                ref={writingInputRef}
                 style={styles.writingInput}
                 multiline
                 textAlignVertical="top"
-                placeholder="이 단계에서 조사·정리·성찰 등 작성할 내용을 입력하세요."
+                placeholder="조사·정리·성찰 등 작성할 내용"
                 placeholderTextColor={THEME.textSecondary}
                 value={writingText}
+                editable={!isCompleted}
+                showSoftInputOnFocus
+                {...(Platform.OS === 'web' ? { inputMode: 'text' } : {})}
+                onFocus={() => {
+                  writingActiveRef.current = true;
+                  scrollWritingIntoView();
+                }}
                 onChangeText={(t) => {
                   setWritingText(t);
                   if (assignment && currentStage) {
@@ -1094,6 +1161,7 @@ export default function WorkScreen({ navigation, route }) {
                   }
                 }}
                 onBlur={() => {
+                  writingActiveRef.current = false;
                   if (!assignment || !currentStage) return;
                   if (saveWritingTimerRef.current) {
                     clearTimeout(saveWritingTimerRef.current);
@@ -1102,6 +1170,7 @@ export default function WorkScreen({ navigation, route }) {
                   persistStageWriting(assignment.id, currentStage.id, writingTextRef.current);
                 }}
               />
+            </View>
             </View>
 
             {!aiAllowed && (
@@ -1117,10 +1186,15 @@ export default function WorkScreen({ navigation, route }) {
                 <Text style={styles.completedText}>🎉 모든 단계 완료!</Text>
               </View>
             )}
-          </ScrollView>
-        </View>
+            </Pressable>
+            </ScrollView>
+          </View>
+      )}{/* end 현재 단계 작업 영역 */}
 
-        {/* ── 분할선 + AI 브라우저 패널 (AI 허용 시만 표시) ── */}
+        </View>
+        </KeyboardAvoidingView>
+
+        {/* ── 분할선 + AI 브라우저 패널 (AI 허용 시만 표시, 키보드 영향 없음) ── */}
         {aiAllowed && (
           <>
             <View style={styles.divider} {...panResponder.panHandlers}>
@@ -1274,8 +1348,7 @@ export default function WorkScreen({ navigation, route }) {
             </View>
           </>
         )}
-      </View>
-      )}{/* end 현재 단계 작업 영역 */}
+      </View>{/* end bodyRow */}
 
       {showPreviousWritingsModal && (
         <View pointerEvents="box-none" style={styles.floatingPanelHost}>
@@ -1438,10 +1511,19 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: THEME.background },
   loadingText: { marginTop: 12, color: THEME.textSecondary, fontSize: 14 },
 
+  bodyRow: { flex: 1, minHeight: 0 },
+  leftWorkColumn: {
+    minHeight: 0,
+    backgroundColor: THEME.background,
+  },
+  leftWorkInner: { flex: 1, minHeight: 0 },
+  headerNoShrink: { flexShrink: 0 },
   splitContainer: { flex: 1, flexDirection: 'row' },
   fullContent: { flex: 1 },
-  taskPanel: { backgroundColor: THEME.background },
-  taskScroll: { padding: 14, gap: 10 },
+  taskBody: { flex: 1, minHeight: 0, flexShrink: 1 },
+  taskScrollView: { flex: 1, minHeight: 0 },
+  taskScroll: { padding: 14, paddingBottom: 8, flexGrow: 1 },
+  taskScrollInner: { gap: 10 },
   infoBox: {
     backgroundColor: THEME.card, borderRadius: 12, padding: 14,
     borderWidth: 1, borderColor: THEME.border,
@@ -1463,30 +1545,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   writingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: 6,
   },
-  writingHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  prevViewBtn: {
-    backgroundColor: THEME.primaryLight,
-    borderWidth: 1,
-    borderColor: THEME.primary,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  prevViewBtnText: {
-    color: THEME.primary,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  writingSaveHint: { fontSize: 11, color: THEME.textSecondary, fontWeight: '600' },
   writingHint: { fontSize: 12, color: THEME.textSecondary, marginBottom: 10, lineHeight: 17 },
   writingInput: {
     minHeight: 160,

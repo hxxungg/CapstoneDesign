@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { assessmentAPI, analyticsAPI } from '../../services/api';
 import { THEME, FONTS } from '../../config/api';
 import { appAlert } from '../../utils/appAlert';
+import { VALIDATION } from '../../utils/uiCopy';
 import AppShell from '../../components/AppShell';
 import GradingRubricView from '../../components/GradingRubricView';
 import { createDefaultRubricState } from '../../components/GradingRubricTable';
@@ -50,7 +51,7 @@ export default function StudentGradingScreen({ navigation, route }) {
   const handleSave = async () => {
     const trimmed = finalScore.trim();
     if (!trimmed) {
-      appAlert('입력 오류', '최종 점수를 입력해주세요.');
+      appAlert('입력 오류', VALIDATION.finalScore);
       return;
     }
     setSaving(true);

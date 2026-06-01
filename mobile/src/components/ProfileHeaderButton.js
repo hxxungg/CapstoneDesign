@@ -16,6 +16,7 @@ import { useAuth } from '../context/AuthContext';
 import { authAPI } from '../services/api';
 import { THEME } from '../config/api';
 import { appAlert } from '../utils/appAlert';
+import { VALIDATION } from '../utils/uiCopy';
 
 // 공통 확인 모달 (로그아웃 / 회원탈퇴 / 기타)
 function ConfirmModal({ visible, onClose, icon, iconBg, title, message, confirmText, confirmColor, onConfirm, loading }) {
@@ -75,7 +76,7 @@ export default function ProfileHeaderButton() {
 
   const handleChangePassword = async () => {
     if (!currentPw || !newPw || !confirmPw) {
-      appAlert('입력 오류', '모든 항목을 입력해주세요.', null, { type: 'warning' });
+      appAlert('입력 오류', VALIDATION.allFields, null, { type: 'warning' });
       return;
     }
     if (newPw.length < 6) {

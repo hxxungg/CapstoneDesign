@@ -1,6 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { Platform } from 'react-native';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authAPI } from '../services/api';
+import { NATIVE_SOCIAL_ENABLED } from '../config/features';
+
+const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
 const AuthContext = createContext(null);
 
@@ -79,6 +84,16 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
+    if (Platform.OS !== 'web' && !isExpoGo && NATIVE_SOCIAL_ENABLED) {
+      try {
+        const { GoogleSignin } = require('@react-native-google-signin/google-signin');
+        await GoogleSignin.signOut();
+      } catch (_) {}
+      try {
+        const { logout: kakaoLogout } = require('@react-native-seoul/kakao-login');
+        await kakaoLogout();
+      } catch (_) {}
+    }
     await AsyncStorage.removeItem('auth_token');
     await AsyncStorage.removeItem('auth_user');
     setToken(null);

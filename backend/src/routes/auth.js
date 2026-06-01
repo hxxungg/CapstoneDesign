@@ -6,6 +6,7 @@ const { pool } = require('../database');
 const { authenticateToken, JWT_SECRET } = require('../middleware/auth');
 const { verifySocialToken } = require('../services/socialProviders');
 const { createUserWithRole, linkSocialAccount } = require('../services/userRegistration');
+const { deleteAssessmentCascade, deleteParticipationLogs } = require('../services/assessmentCleanup');
 
 function signUserToken(user) {
   return jwt.sign(
@@ -29,6 +30,7 @@ function formatUser(row) {
     subject: row.subject || null,
     grade: extractNum(row.grade),
     class_num: extractNum(row.class_num),
+    marketing_agreed: !!row.marketing_agreed,
   };
 }
 
@@ -78,7 +80,11 @@ router.post('/register', async (req, res) => {
 
     await conn.commit();
 
-    const user = formatUser({ ...created, id: created.userId });
+    const user = formatUser({
+      ...created,
+      id: created.userId,
+      marketing_agreed: marketing_agreed ? 1 : 0,
+    });
     res.status(201).json({ token: signUserToken(user), user });
   } catch (err) {
     await conn.rollback();
@@ -130,11 +136,13 @@ router.post('/social', async (req, res) => {
               tc.subject,
               st.grade,
               COALESCE(tc.class_num, st.class_num) AS class_num,
-              oa.id AS oauth_id
+              oa.id AS oauth_id,
+              c.marketing_agreed
        FROM capstonedesign.user_oauth_connections oa
        JOIN capstonedesign.users u ON u.id = oa.user_id
        LEFT JOIN teacher_db.teachers tc ON tc.user_id = u.id
        LEFT JOIN student_db.students st ON st.user_id = u.id
+       LEFT JOIN capstonedesign.user_consents c ON c.user_id = u.id
        WHERE oa.provider = ? AND oa.oauth_user_id = ? AND oa.revoked_at IS NULL`,
       [provider, profile.providerUserId]
     );
@@ -223,7 +231,11 @@ router.post('/social', async (req, res) => {
 
     await conn.commit();
 
-    const user = formatUser({ ...created, id: created.userId });
+    const user = formatUser({
+      ...created,
+      id: created.userId,
+      marketing_agreed: marketing_agreed ? 1 : 0,
+    });
     res.status(201).json({ token: signUserToken(user), user });
   } catch (err) {
     await conn.rollback();
@@ -255,11 +267,13 @@ router.post('/login', async (req, res) => {
               tc.subject,
               st.grade,
               COALESCE(tc.class_num, st.class_num) AS class_num,
-              uc.password_hash
+              uc.password_hash,
+              c.marketing_agreed
        FROM capstonedesign.users u
        JOIN capstonedesign.user_credentials uc ON uc.user_id = u.id
        LEFT JOIN teacher_db.teachers tc ON tc.user_id = u.id
        LEFT JOIN student_db.students st ON st.user_id = u.id
+       LEFT JOIN capstonedesign.user_consents c ON c.user_id = u.id
        WHERE u.email = ?`,
       [email]
     );
@@ -342,26 +356,9 @@ router.delete('/account', authenticateToken, async (req, res) => {
       const assessmentIds = assessments.map(a => a.id);
 
       if (assessmentIds.length > 0) {
-        const ids = assessmentIds.join(',');
-        // 2. 참여한 학생들의 제출 데이터 삭제
-        const [parts] = await conn.query(`SELECT id FROM student_db.participations WHERE assessment_id IN (${ids})`);
-        const partIds = parts.map(p => p.id);
-        if (partIds.length > 0) {
-          const pids = partIds.join(',');
-          const [subs] = await conn.query(`SELECT id FROM log_db.submissions WHERE participation_id IN (${pids})`);
-          const subIds = subs.map(s => s.id);
-          if (subIds.length > 0) {
-            await conn.query(`DELETE FROM log_db.submissions_step WHERE submission_id IN (${subIds.join(',')})`);
-          }
-          await conn.query(`DELETE FROM log_db.submissions WHERE participation_id IN (${pids})`);
-          await conn.query(`DELETE FROM log_db.ai_logs WHERE participation_id IN (${pids})`);
-          await conn.query(`DELETE FROM log_db.url_logs WHERE participation_id IN (${pids})`);
-          await conn.query(`DELETE FROM student_db.participations WHERE assessment_id IN (${ids})`);
+        for (const assessmentId of assessmentIds) {
+          await deleteAssessmentCascade(conn, assessmentId);
         }
-        // 3. 단계 삭제
-        await conn.query(`DELETE FROM teacher_db.assessment_steps WHERE assessment_id IN (${ids})`);
-        // 4. 수행평가 삭제
-        await conn.query('DELETE FROM teacher_db.assessments WHERE teacher_id = ?', [userId]);
       }
       // 5. 교사 레코드 삭제
       await conn.query('DELETE FROM teacher_db.teachers WHERE user_id = ?', [userId]);
@@ -374,15 +371,7 @@ router.delete('/account', authenticateToken, async (req, res) => {
         const [parts] = await conn.query('SELECT id FROM student_db.participations WHERE student_id = ?', [studentId]);
         const partIds = parts.map(p => p.id);
         if (partIds.length > 0) {
-          const pids = partIds.join(',');
-          const [subs] = await conn.query(`SELECT id FROM log_db.submissions WHERE participation_id IN (${pids})`);
-          const subIds = subs.map(s => s.id);
-          if (subIds.length > 0) {
-            await conn.query(`DELETE FROM log_db.submissions_step WHERE submission_id IN (${subIds.join(',')})`);
-          }
-          await conn.query(`DELETE FROM log_db.submissions WHERE participation_id IN (${pids})`);
-          await conn.query(`DELETE FROM log_db.ai_logs WHERE participation_id IN (${pids})`);
-          await conn.query(`DELETE FROM log_db.url_logs WHERE participation_id IN (${pids})`);
+          await deleteParticipationLogs(conn, partIds);
           await conn.query('DELETE FROM student_db.participations WHERE student_id = ?', [studentId]);
         }
         await conn.query('DELETE FROM student_db.students WHERE user_id = ?', [userId]);
@@ -411,11 +400,21 @@ router.delete('/account', authenticateToken, async (req, res) => {
 router.get('/me', authenticateToken, async (req, res) => {
   try {
     const [rows] = await pool.query(
-      'SELECT id, name, email, role, is_active, created_at FROM capstonedesign.users WHERE id = ?',
+      `SELECT u.id, u.name, u.email, u.role, u.is_active, u.created_at,
+              COALESCE(tc.school, st.school) AS school,
+              tc.subject,
+              st.grade,
+              COALESCE(tc.class_num, st.class_num) AS class_num,
+              c.marketing_agreed
+       FROM capstonedesign.users u
+       LEFT JOIN teacher_db.teachers tc ON tc.user_id = u.id
+       LEFT JOIN student_db.students st ON st.user_id = u.id
+       LEFT JOIN capstonedesign.user_consents c ON c.user_id = u.id
+       WHERE u.id = ?`,
       [req.user.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: '사용자를 찾을 수 없습니다.' });
-    res.json(rows[0]);
+    res.json(formatUser(rows[0]));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: '서버 오류가 발생했습니다.' });

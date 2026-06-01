@@ -15,6 +15,7 @@ import {
   getDefaultStagesForNewAssignment,
 } from '../../config/defaultPerformanceStages';
 import { appAlert } from '../../utils/appAlert';
+import { VALIDATION } from '../../utils/uiCopy';
 import AppShell from '../../components/AppShell';
 
 const C = THEME;
@@ -378,7 +379,7 @@ function StageEditModal({ visible, stage, onSave, onDelete, onClose }) {
             style={se.input}
             value={title}
             onChangeText={setTitle}
-            placeholder="단계 제목을 입력하세요"
+            placeholder="단계 제목"
             placeholderTextColor={C.textFaint}
           />
 
@@ -457,7 +458,7 @@ function AiModeModal({ visible, currentMode, onSelect, onClose }) {
       <Pressable style={am.overlay} onPress={onClose}>
         <Pressable style={am.card} onPress={() => {}}>
           <Text style={am.title}>AI 허용 기준</Text>
-          <Text style={am.body}>이 단계에서 학생의 AI 사용을 어떻게 설정할까요?</Text>
+          <Text style={am.body}>이 단계에서 학생의 AI 사용 방식을 선택할 수 있습니다.</Text>
           <View style={am.optionList}>
             {AI_OPTIONS.map((opt) => {
               const active = currentMode === opt.key;
@@ -613,12 +614,12 @@ export default function CreateAssignmentScreen({ navigation, route }) {
 
   const handleCreate = async () => {
     if (!title.trim()) {
-      appAlert('입력 오류', '수행평가 제목을 입력해주세요.');
+      appAlert('입력 오류', VALIDATION.assessmentTitle);
       return;
     }
     const emptyIdx = stages.findIndex(s => !s.title.trim());
     if (emptyIdx !== -1) {
-      appAlert('입력 오류', `${emptyIdx + 1}번째 단계의 제목을 입력해주세요.`);
+      appAlert('입력 오류', VALIDATION.stepTitle(emptyIdx + 1));
       return;
     }
     const payload = {
@@ -816,7 +817,7 @@ export default function CreateAssignmentScreen({ navigation, route }) {
               <Text style={s.label}>평가 설명</Text>
               <TextInput
                 style={[s.input, s.textArea]}
-                placeholder="학생에게 보일 안내문을 작성합니다. 분량, 형식, 평가 기준을 명확히 적어주세요."
+                placeholder="학생에게 보일 안내문을 작성합니다."
                 placeholderTextColor={C.textFaint}
                 value={description}
                 onChangeText={setDescription}
@@ -834,7 +835,7 @@ export default function CreateAssignmentScreen({ navigation, route }) {
               <Text style={s.sectionCount}>{stages.length}단계</Text>
             </View>
             <Text style={s.sectionDesc}>
-              학생이 거칠 사고의 단계를 직접 디자인합니다. 각 단계마다 AI 사용 가능 여부를 정할 수 있어요.
+              학생이 거칠 사고의 단계를 직접 디자인합니다. 각 단계마다 AI 사용 가능 여부를 정할 수 있습니다.
             </Text>
 
             <View style={{ gap: 10 }}>
@@ -902,16 +903,16 @@ export default function CreateAssignmentScreen({ navigation, route }) {
           <Pressable style={se.card} onPress={() => {}}>
             {isEdit ? (
               <>
-                <Text style={se.title}>수행평가가 수정됐어요.</Text>
+                <Text style={se.title}>수행평가가 수정되었습니다.</Text>
                 <Text style={[se.label, { marginTop: 0, fontSize: 14, lineHeight: 22, color: C.textSoft }]}>
                   변경 사항이 저장되었습니다.
                 </Text>
               </>
             ) : (
               <>
-                <Text style={se.title}>수행평가가 생성됐어요.</Text>
+                <Text style={se.title}>수행평가가 생성되었습니다.</Text>
                 <Text style={[se.label, { marginTop: 0, fontSize: 14, lineHeight: 22, color: C.textSoft }]}>
-                  학생들에게 아래 초대 코드를 알려주세요.
+                  학생들에게 아래 초대 코드를 공유할 수 있습니다.
                 </Text>
                 {/* 초대 코드 강조 표시 */}
                 <View style={{

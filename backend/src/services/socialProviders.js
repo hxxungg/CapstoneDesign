@@ -39,8 +39,16 @@ async function exchangeGoogleCode(code, redirectUri) {
   return data.id_token;
 }
 
+function getAllowedGoogleClientIds() {
+  return [
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_ANDROID_CLIENT_ID,
+    process.env.GOOGLE_IOS_CLIENT_ID,
+  ].filter(Boolean);
+}
+
 async function verifyGoogleIdToken(idToken) {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const allowedClientIds = getAllowedGoogleClientIds();
   const res = await fetch(
     `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`
   );
@@ -48,7 +56,7 @@ async function verifyGoogleIdToken(idToken) {
     throw Object.assign(new Error('유효하지 않은 Google 토큰입니다.'), { status: 401 });
   }
   const data = await res.json();
-  if (clientId && data.aud !== clientId) {
+  if (allowedClientIds.length > 0 && !allowedClientIds.includes(data.aud)) {
     throw Object.assign(new Error('Google 클라이언트 ID가 일치하지 않습니다.'), { status: 401 });
   }
   if (!data.sub) {

@@ -136,8 +136,8 @@ export default function TeacherDashboard({ navigation, route }) {
               {loading
                 ? '수행평가를 불러오는 중...'
                 : active.length > 0
-                  ? `진행 중인 수행평가가 ${active.length}건 있어요.`
-                  : '현재 진행 중인 수행평가가 없어요.'
+                  ? `진행 중인 수행평가가 ${active.length}건 있습니다.`
+                  : '현재 진행 중인 수행평가가 없습니다.'
               }
             </Text>
           </View>
@@ -173,7 +173,7 @@ export default function TeacherDashboard({ navigation, route }) {
                 <Ionicons name="document-text-outline" size={32} color={C.textSecondary} />
               </View>
               <Text style={s.emptyTitle}>생성된 수행평가가 없습니다</Text>
-              <Text style={s.emptyDesc}>왼쪽 탭의 평가 생성을 눌러 수행평가를 만드세요.</Text>
+              <Text style={s.emptyDesc}>왼쪽 탭의 평가 생성에서 수행평가를 만들 수 있습니다.</Text>
             </View>
           ) : (
             <View style={s.section}>

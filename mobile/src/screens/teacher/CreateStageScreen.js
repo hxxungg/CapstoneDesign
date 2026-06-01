@@ -10,6 +10,7 @@ import {
   DEFAULT_CONDITIONAL_GUIDANCE,
 } from '../../config/defaultPerformanceStages';
 import { appAlert } from '../../utils/appAlert';
+import { VALIDATION } from '../../utils/uiCopy';
 
 const AI_MODE_OPTIONS = [
   { key: AI_MODE.DISALLOWED, label: '비허용', sub: 'AI·웹 없음' },
@@ -36,7 +37,7 @@ export default function CreateStageScreen({ navigation, route }) {
 
   const handleCreate = async () => {
     if (!title.trim()) {
-      appAlert('입력 오류', '단계 제목을 입력해주세요.');
+      appAlert('입력 오류', VALIDATION.stageTitle);
       return;
     }
 
@@ -76,7 +77,7 @@ export default function CreateStageScreen({ navigation, route }) {
           <Text style={styles.label}>단계 설명</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
-            placeholder="이 단계에서 학생이 해야 할 내용을 입력하세요"
+            placeholder="학생이 이 단계에서 수행할 내용"
             placeholderTextColor={THEME.textSecondary}
             value={description}
             onChangeText={setDescription}
@@ -105,7 +106,7 @@ export default function CreateStageScreen({ navigation, route }) {
               <Text style={styles.label}>AI 활용 지침</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
-                placeholder="예: AI를 참고 자료로만 활용하고 답을 그대로 복사하지 마세요."
+                placeholder="예: AI를 참고 자료로만 활용하고 답을 그대로 복사하지 않습니다."
                 placeholderTextColor={THEME.textSecondary}
                 value={guidance}
                 onChangeText={setGuidance}

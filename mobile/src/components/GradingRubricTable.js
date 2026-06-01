@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { THEME, FONTS } from '../config/api';
 
@@ -9,6 +9,51 @@ const F = FONTS;
 const HDR = '#D9EAD3';
 const BORDER = '#9AA89A';
 const ROW_H = 44;
+/** 채점기준표 상단 메타 영역 — 좌측 라벨열 고정 비율 (웹 flex 어긋남 방지) */
+const LABEL_COL_FLEX = 1.2;
+const CONTENT_COL_FLEX = 4.8;
+const LABEL_COL_BASIS = '20%';
+/** 평가 요소 블록 — 우측 표 열 비율 (simple / subBlocks 공통) */
+const RUBRIC_SUB_ELEMENT_FLEX = 1.1;
+const RUBRIC_LEVEL_FLEX = 3.2;
+const RUBRIC_SCORE_FLEX = 0.9;
+const RUBRIC_REMOVE_COL_W = 28;
+const RUBRIC_METRIC_INNER_TOTAL = RUBRIC_LEVEL_FLEX + RUBRIC_SCORE_FLEX;
+
+function rubricFlexCol(flexUnit) {
+  return { flex: flexUnit, flexBasis: 0, minWidth: 0 };
+}
+
+/** inner(수행 수준·배점) — 웹에서 flex 대신 % 고정 (헤더·본문 동일) */
+function rubricInnerColStyle(flexUnit) {
+  if (Platform.OS === 'web') {
+    const pct = `${(flexUnit / RUBRIC_METRIC_INNER_TOTAL) * 100}%`;
+    return { width: pct, flexGrow: 0, flexShrink: 0, minWidth: 0 };
+  }
+  return rubricFlexCol(flexUnit);
+}
+
+function RubricRemoveCol({ header, minHeight, onPress }) {
+  return (
+    <View
+      style={[
+        styles.rubricRemoveCol,
+        header && styles.rubricRemoveHeaderPad,
+        { minHeight },
+      ]}
+    >
+      {!header && onPress ? (
+        <Pressable
+          style={({ pressed }) => [styles.rubricRemoveBtn, pressed && { opacity: 0.6 }]}
+          onPress={onPress}
+          hitSlop={6}
+        >
+          <Ionicons name="close-circle-outline" size={14} color={C.textSecondary} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
 
 export const EVAL_METHOD_ROWS = [
   ['논술', '구술·발표', '토의·토론', '프로젝트'],
@@ -295,6 +340,7 @@ function Cell({ children, style, header, flex, minHeight = 36, center, noPadding
       style={[
         styles.cell,
         header && styles.cellHeader,
+        flex != null && styles.cellFlex,
         flex != null && { flex },
         { minHeight },
         center && styles.cellCenter,
@@ -306,6 +352,41 @@ function Cell({ children, style, header, flex, minHeight = 36, center, noPadding
       {typeof children === 'string' || typeof children === 'number'
         ? <Text style={[styles.cellText, header && styles.cellHeaderText]}>{children}</Text>
         : children}
+    </View>
+  );
+}
+
+/** 상단 메타 표 — 좌측 라벨열 (폭 고정) */
+function LabelCol({ children, header, body, minHeight = 36, style }) {
+  return (
+    <View
+      style={[
+        styles.labelCol,
+        header && styles.labelColHeader,
+        body && styles.labelColBody,
+        { minHeight },
+        style,
+      ]}
+    >
+      {typeof children === 'string' || typeof children === 'number'
+        ? <Text style={[styles.cellText, header && styles.cellHeaderText]}>{children}</Text>
+        : children}
+    </View>
+  );
+}
+
+/** 상단 메타 표 — 우측 내용열 */
+function ContentArea({ children, row, minHeight, style }) {
+  return (
+    <View
+      style={[
+        styles.contentArea,
+        row && styles.contentAreaRow,
+        minHeight != null && { minHeight },
+        style,
+      ]}
+    >
+      {children}
     </View>
   );
 }
@@ -417,40 +498,132 @@ function EvalMethodItem({ label, checked, isDefault, onToggle, onRemove, onRenam
 function ScoreGroupRows({
   groups,
   onChangeGroup,
-  levelFlex,
-  scoreFlex,
-  onRemoveLevel,
   canRemoveLevel,
+  onRemoveLevel,
+  showSubElement = false,
+  subElementForRow,
+  subElementMinHeightForRow,
+  rowBorderForIndex,
 }) {
-  const levelStyle = levelFlex != null ? { flex: levelFlex } : undefined;
-  const scoreStyle = scoreFlex != null ? { flex: scoreFlex } : undefined;
   return groups.map((group, gi) => (
-    <View key={gi} style={[styles.scoreGroupRow, gi > 0 && styles.rowBorder]}>
-      <View style={[styles.levelCol, levelStyle]}>
-        <View style={styles.levelRowWrap}>
-          <LevelInput
-            value={group.levels[0] ?? ''}
-            onChangeText={(t) => onChangeGroup(gi, { ...group, levels: [t] })}
-          />
-          {canRemoveLevel ? (
-            <Pressable
-              style={({ pressed }) => [styles.levelRowRemoveBtn, pressed && { opacity: 0.6 }]}
-              onPress={() => onRemoveLevel?.(gi, 0)}
-              hitSlop={6}
-            >
-              <Ionicons name="close-circle-outline" size={14} color={C.textSecondary} />
-            </Pressable>
-          ) : null}
-        </View>
-      </View>
-      <ScoreInput
-        value={group.score}
-        minHeight={ROW_H}
-        style={scoreStyle}
-        onChangeText={(t) => onChangeGroup(gi, { ...group, score: t })}
-      />
-    </View>
+    <RubricMetricRow
+      key={gi}
+      canRemoveLevel={canRemoveLevel}
+      showSubElement={showSubElement}
+      subElement={subElementForRow?.(gi)}
+      subElementMinHeight={subElementMinHeightForRow?.(gi)}
+      level={
+        <TextInput
+          style={[styles.input, styles.inputMultiline]}
+          value={group.levels[0] ?? ''}
+          onChangeText={(t) => onChangeGroup(gi, { ...group, levels: [t] })}
+          placeholder="수행 수준 입력"
+          placeholderTextColor={C.textFaint}
+          multiline
+          textAlignVertical="top"
+        />
+      }
+      score={
+        <TextInput
+          style={[styles.input, styles.inputCenter, styles.scoreInput, styles.rubricScoreInput]}
+          value={group.score}
+          onChangeText={(t) => onChangeGroup(gi, { ...group, score: t })}
+          placeholder="점"
+          placeholderTextColor={C.textFaint}
+          keyboardType="numeric"
+          textAlignVertical="center"
+        />
+      }
+      onRemove={() => onRemoveLevel?.(gi, 0)}
+      rowBorder={rowBorderForIndex?.(gi)}
+    />
   ));
+}
+
+/** 평가 요소 표 — 수행 수준·배점은 inner flex, x는 고정 열 (헤더·본문 세로선 동일) */
+function RubricMetricRow({
+  header,
+  canRemoveLevel,
+  showSubElement = false,
+  subElement,
+  subElementMinHeight,
+  level,
+  score,
+  onRemove,
+  rowBorder,
+  minHeight = header ? 40 : ROW_H,
+}) {
+  const body = !header;
+
+  return (
+    <View style={[styles.row, styles.rubricMetricRow, rowBorder && styles.rowBorder]}>
+      {showSubElement ? (
+        <Cell
+          header={header}
+          flex={RUBRIC_SUB_ELEMENT_FLEX}
+          minHeight={subElementMinHeight ?? minHeight}
+          noPadding={body && subElement != null}
+        >
+          {subElement}
+        </Cell>
+      ) : null}
+      <View style={[styles.row, styles.rubricMetricInner, { flex: 1, minWidth: 0, minHeight }]}>
+        <Cell
+          header={header}
+          flex={Platform.OS === 'web' ? undefined : RUBRIC_LEVEL_FLEX}
+          style={rubricInnerColStyle(RUBRIC_LEVEL_FLEX)}
+          minHeight={minHeight}
+          noPadding={body}
+        >
+          {level}
+        </Cell>
+        <Cell
+          header={header}
+          flex={Platform.OS === 'web' ? undefined : RUBRIC_SCORE_FLEX}
+          style={[rubricInnerColStyle(RUBRIC_SCORE_FLEX), body && styles.rubricScoreCellBody]}
+          minHeight={minHeight}
+          center={header}
+          noPadding={body}
+          noRightBorder
+        >
+          {score}
+        </Cell>
+      </View>
+      {canRemoveLevel ? (
+        <RubricRemoveCol header={header} minHeight={minHeight} onPress={onRemove} />
+      ) : null}
+    </View>
+  );
+}
+
+function RubricAddLevelRow({ showSubElement, canRemoveLevel, onPress, label = '수행 수준 추가' }) {
+  return (
+    <View style={[styles.row, styles.rubricMetricRow]}>
+      {showSubElement ? (
+        <View
+          style={[
+            styles.subElementCol,
+            styles.rubricAddLevelSubSpacer,
+            rubricFlexCol(RUBRIC_SUB_ELEMENT_FLEX),
+          ]}
+        />
+      ) : null}
+      <Pressable
+        style={({ pressed }) => [
+          styles.addLevelRow,
+          styles.rubricAddLevelMain,
+          styles.rubricMetricInner,
+          { flex: 1, minWidth: 0 },
+          pressed && { opacity: 0.75 },
+        ]}
+        onPress={onPress}
+      >
+        <Ionicons name="add-circle-outline" size={14} color={C.primary} />
+        <Text style={styles.addLevelText}>{label}</Text>
+      </Pressable>
+      {canRemoveLevel ? <View style={styles.rubricAddLevelRemoveSpacer} /> : null}
+    </View>
+  );
 }
 
 function RubricBlock({
@@ -514,30 +687,42 @@ function RubricBlock({
     </View>
   );
 
+  const elementColPanel = (
+    <View style={styles.rubricElementCol}>
+      <View style={styles.rubricElementHeader}>
+        <Text style={[styles.cellText, styles.cellHeaderText]}>평가 요소</Text>
+      </View>
+      <View style={[styles.rubricElementBody, { minHeight: totalRows * ROW_H }]}>
+        <TextInput
+          style={[styles.input, styles.inputMultiline, styles.elementInput]}
+          value={block.element}
+          onChangeText={setElement}
+          placeholder="평가 요소 입력"
+          placeholderTextColor={C.textFaint}
+          multiline
+          textAlignVertical="top"
+        />
+      </View>
+    </View>
+  );
+
   if (block.subBlocks) {
     return (
       <View style={styles.rubricBlockWrap}>
         {blockToolbar}
         <View style={styles.rubricBlock}>
-          <View style={[styles.elementCol, { borderRightWidth: 1, borderRightColor: BORDER }]}>
-            <Cell header minHeight={40}>평가 요소</Cell>
-            <View style={{ flex: 1, minHeight: totalRows * ROW_H, borderTopWidth: 1, borderTopColor: BORDER }}>
-              <TextInput
-                style={[styles.input, styles.inputMultiline, styles.elementInput]}
-                value={block.element}
-                onChangeText={setElement}
-                placeholder="평가 요소 입력"
-                placeholderTextColor={C.textFaint}
-                multiline
-                textAlignVertical="top"
-              />
-            </View>
-          </View>
-          <View style={styles.rightCol}>
-            <View style={styles.row}>
-              <Cell header flex={1.1} minHeight={40}>세부 요소</Cell>
-              <Cell header flex={3.2} minHeight={40}>수행 수준</Cell>
-              <Cell header flex={0.9} minHeight={40} center noRightBorder>배점</Cell>
+          {elementColPanel}
+          <View style={styles.contentArea}>
+            <View style={styles.subBlockWrap}>
+              <Cell header flex={RUBRIC_SUB_ELEMENT_FLEX} minHeight={40}>세부 요소</Cell>
+              <View style={styles.subGroupsCol}>
+                <RubricMetricRow
+                  header
+                  canRemoveLevel={canRemoveLevel}
+                  level="수행 수준"
+                  score="배점"
+                />
+              </View>
             </View>
             {block.subBlocks.map((sub, si) => {
               const subRows = sub.scoreGroups.reduce((s, g) => s + g.levels.length, 0);
@@ -572,9 +757,8 @@ function RubricBlock({
                     <View style={styles.subGroupsCol}>
                       <ScoreGroupRows
                         groups={sub.scoreGroups}
-                        levelFlex={3.2}
-                        scoreFlex={0.9}
                         canRemoveLevel={canRemoveLevel}
+                        rowBorderForIndex={(gi) => gi > 0}
                         onRemoveLevel={(gi, li) => handleRemoveLevel(gi, li, si)}
                         onChangeGroup={(gi, group) => {
                           const subBlocks = block.subBlocks.map((sb, idx) => {
@@ -587,13 +771,10 @@ function RubricBlock({
                           patchSubBlocks(subBlocks);
                         }}
                       />
-                      <Pressable
-                        style={({ pressed }) => [styles.addLevelRow, pressed && { opacity: 0.75 }]}
+                      <RubricAddLevelRow
+                        canRemoveLevel={canRemoveLevel}
                         onPress={() => handleAddScoreGroup(si)}
-                      >
-                        <Ionicons name="add-circle-outline" size={14} color={C.primary} />
-                        <Text style={styles.addLevelText}>수행 수준 추가</Text>
-                      </Pressable>
+                      />
                     </View>
                   </View>
                 </View>
@@ -616,41 +797,25 @@ function RubricBlock({
     <View style={styles.rubricBlockWrap}>
       {blockToolbar}
       <View style={styles.rubricBlock}>
-        <View style={[styles.elementCol, { borderRightWidth: 1, borderRightColor: BORDER }]}>
-          <Cell header minHeight={40}>평가 요소</Cell>
-          <View style={{ flex: 1, minHeight: totalRows * ROW_H, borderTopWidth: 1, borderTopColor: BORDER }}>
-            <TextInput
-              style={[styles.input, styles.inputMultiline, styles.elementInput]}
-              value={block.element}
-              onChangeText={setElement}
-              placeholder="평가 요소 입력"
-              placeholderTextColor={C.textFaint}
-              multiline
-              textAlignVertical="top"
-            />
-          </View>
-        </View>
-        <View style={styles.rightCol}>
-          <View style={styles.row}>
-            <Cell header flex={4} minHeight={40}>수행 수준</Cell>
-            <Cell header flex={1} minHeight={40} center noRightBorder>배점</Cell>
-          </View>
+        {elementColPanel}
+        <View style={styles.contentArea}>
+          <RubricMetricRow
+            header
+            canRemoveLevel={canRemoveLevel}
+            level="수행 수준"
+            score="배점"
+          />
           <ScoreGroupRows
             groups={block.scoreGroups}
             canRemoveLevel={canRemoveLevel}
+            rowBorderForIndex={(gi) => gi > 0}
             onRemoveLevel={(gi, li) => handleRemoveLevel(gi, li)}
             onChangeGroup={(gi, group) => {
               const scoreGroups = block.scoreGroups.map((g, idx) => (idx === gi ? group : g));
               patchScoreGroups(scoreGroups);
             }}
           />
-          <Pressable
-            style={({ pressed }) => [styles.addLevelRow, pressed && { opacity: 0.75 }]}
-            onPress={() => handleAddScoreGroup()}
-          >
-            <Ionicons name="add-circle-outline" size={14} color={C.primary} />
-            <Text style={styles.addLevelText}>수행 수준 추가</Text>
-          </Pressable>
+          <RubricAddLevelRow canRemoveLevel={canRemoveLevel} onPress={() => handleAddScoreGroup()} />
         </View>
       </View>
     </View>
@@ -746,35 +911,39 @@ export default function GradingRubricTable({ value, onChange }) {
         채점기준표
       </Cell>
 
-      <View style={styles.row}>
-        <Cell header flex={1.2} minHeight={40}>평가 영역명</Cell>
-        <Cell flex={1.6} minHeight={40} noPadding>
-          <TextInput style={styles.input} value={data.areaName} onChangeText={(t) => patch({ areaName: t })} placeholder="영역명" placeholderTextColor={C.textFaint} />
-        </Cell>
-        <Cell header flex={1} minHeight={40}>영역만점</Cell>
-        <Cell flex={0.8} minHeight={40} noPadding>
-          <TextInput style={[styles.input, styles.inputCenter]} value={data.areaMaxScore} onChangeText={(t) => patch({ areaMaxScore: t })} placeholder="점" placeholderTextColor={C.textFaint} keyboardType="numeric" />
-        </Cell>
-        <Cell header flex={0.7} minHeight={40}>학기</Cell>
-        <Cell flex={0.7} minHeight={40} noPadding noRightBorder>
-          <TextInput style={[styles.input, styles.inputCenter]} value={data.semester} onChangeText={(t) => patch({ semester: t })} placeholder="1학기" placeholderTextColor={C.textFaint} />
-        </Cell>
+      <View style={[styles.row, styles.rowBorder]}>
+        <LabelCol header minHeight={40}>평가 영역명</LabelCol>
+        <ContentArea row minHeight={40}>
+          <Cell flex={1.6} minHeight={40} noPadding>
+            <TextInput style={styles.input} value={data.areaName} onChangeText={(t) => patch({ areaName: t })} placeholder="영역명" placeholderTextColor={C.textFaint} />
+          </Cell>
+          <Cell header flex={1} minHeight={40} center>영역만점</Cell>
+          <Cell flex={0.8} minHeight={40} noPadding>
+            <TextInput style={[styles.input, styles.inputCenter]} value={data.areaMaxScore} onChangeText={(t) => patch({ areaMaxScore: t })} placeholder="점" placeholderTextColor={C.textFaint} keyboardType="numeric" />
+          </Cell>
+          <Cell header flex={0.7} minHeight={40} center>학기</Cell>
+          <Cell flex={0.7} minHeight={40} noPadding noRightBorder>
+            <TextInput style={[styles.input, styles.inputCenter]} value={data.semester} onChangeText={(t) => patch({ semester: t })} placeholder="1학기" placeholderTextColor={C.textFaint} />
+          </Cell>
+        </ContentArea>
       </View>
 
-      <View style={styles.row}>
-        <Cell header flex={1.2} minHeight={56}>수행과제</Cell>
-        <Cell flex={4.8} minHeight={56} noPadding noRightBorder>
-          <TextInput style={[styles.input, styles.inputMultiline]} value={data.taskDescription} onChangeText={(t) => patch({ taskDescription: t })} placeholder="수행과제 내용 입력" placeholderTextColor={C.textFaint} multiline textAlignVertical="top" />
-        </Cell>
+      <View style={[styles.row, styles.rowBorder]}>
+        <LabelCol header minHeight={56}>수행과제</LabelCol>
+        <ContentArea minHeight={56}>
+          <TextInput style={[styles.input, styles.inputMultiline, styles.inputFillCell]} value={data.taskDescription} onChangeText={(t) => patch({ taskDescription: t })} placeholder="수행과제 내용 입력" placeholderTextColor={C.textFaint} multiline textAlignVertical="top" />
+        </ContentArea>
       </View>
 
-      <View>
-        <View style={[styles.row, styles.rowBorder]}>
-          <Cell header flex={2} minHeight={40}>성취기준</Cell>
-          <Cell header flex={3} minHeight={40} noRightBorder>성취기준별 성취수준</Cell>
+      <View style={styles.rowBorder}>
+        <View style={styles.row}>
+          <LabelCol header minHeight={40}>성취기준</LabelCol>
+          <View style={[styles.contentArea, styles.contentAreaHeader, styles.labelColHeader, { minHeight: 40 }]}>
+            <Text style={[styles.cellText, styles.cellHeaderText, styles.contentAreaHeaderText]}>성취기준별 성취수준</Text>
+          </View>
         </View>
         <View style={[styles.row, styles.rowBorder]}>
-          <Cell flex={2} minHeight={levelKeys.length * ROW_H + 40} noPadding>
+          <LabelCol body minHeight={levelKeys.length * ROW_H + 40} style={styles.labelColInput}>
             <TextInput
               style={[
                 styles.input,
@@ -784,19 +953,19 @@ export default function GradingRubricTable({ value, onChange }) {
               ]}
               value={data.achievementStandard ?? ''}
               onChangeText={(t) => patch({ achievementStandard: t })}
-              placeholder="예) [9기가02-09] 성취기준 내용 입력"
+              placeholder="성취기준 내용 입력"
               placeholderTextColor={C.textFaint}
               multiline
               textAlignVertical="top"
             />
-          </Cell>
-          <View style={{ flex: 3 }}>
+          </LabelCol>
+          <ContentArea>
             {levelKeys.map((lv, i) => (
-              <View key={`${lv}-${i}`} style={[styles.row, i > 0 && styles.rowBorder]}>
-                <Cell flex={0.35} center minHeight={ROW_H} noPadding>
+              <View key={`${lv}-${i}`} style={[styles.row, styles.achievementLevelRow, i > 0 && styles.rowBorder]}>
+                <Cell flex={0.22} center minHeight={ROW_H} noPadding>
                   <LevelLabelInput label={lv} onRename={(next) => renameAchievementLevel(lv, next)} />
                 </Cell>
-                <Cell flex={1} minHeight={ROW_H} noPadding>
+                <Cell flex={1} minHeight={ROW_H} noPadding noRightBorder={!levelKeys.length || levelKeys.length <= 1}>
                   <TextInput
                     style={[styles.input, styles.inputMultiline]}
                     value={data.achievementLevels[lv] ?? ''}
@@ -825,13 +994,13 @@ export default function GradingRubricTable({ value, onChange }) {
               <Ionicons name="add-circle-outline" size={16} color={C.primary} />
               <Text style={styles.addLevelText}>성취수준 추가</Text>
             </Pressable>
-          </View>
+          </ContentArea>
         </View>
       </View>
 
-      <View style={styles.row}>
-        <Cell header flex={0.8} minHeight={100} center>{'평가\n방법'}</Cell>
-        <View style={{ flex: 4.2 }}>
+      <View style={[styles.row, styles.rowBorder]}>
+        <LabelCol header style={styles.labelColStretch}>{'평가\n방법'}</LabelCol>
+        <ContentArea>
           <View style={styles.methodRow}>
             {methodKeys.map((label) => (
               <EvalMethodItem
@@ -852,7 +1021,7 @@ export default function GradingRubricTable({ value, onChange }) {
             <Ionicons name="add-circle-outline" size={16} color={C.primary} />
             <Text style={styles.addLevelText}>평가 방법 추가</Text>
           </Pressable>
-        </View>
+        </ContentArea>
       </View>
 
       {data.blocks.map((block, bi) => (
@@ -876,17 +1045,17 @@ export default function GradingRubricTable({ value, onChange }) {
         <Text style={styles.addLevelText}>평가 요소 추가</Text>
       </Pressable>
 
-      <View style={styles.row}>
-        <Cell header flex={1.2} minHeight={40}>기본점수</Cell>
-        <Cell flex={4.8} minHeight={40} noPadding noRightBorder>
-          <TextInput style={styles.input} value={data.baseScore} onChangeText={(t) => patch({ baseScore: t })} placeholder="기본점수 입력" placeholderTextColor={C.textFaint} keyboardType="numeric" />
-        </Cell>
+      <View style={[styles.row, styles.rowBorder]}>
+        <LabelCol header minHeight={40}>기본점수</LabelCol>
+        <ContentArea minHeight={40}>
+          <TextInput style={[styles.input, styles.inputFillCell]} value={data.baseScore} onChangeText={(t) => patch({ baseScore: t })} placeholder="기본점수 입력" placeholderTextColor={C.textFaint} keyboardType="numeric" />
+        </ContentArea>
       </View>
       <View style={[styles.row, styles.rowBorder]}>
-        <Cell header flex={1.2} minHeight={40}>{'장기 미인정\n결석자'}</Cell>
-        <Cell flex={4.8} minHeight={40} noPadding noRightBorder>
-          <TextInput style={styles.input} value={data.absentScore} onChangeText={(t) => patch({ absentScore: t })} placeholder="점수 입력" placeholderTextColor={C.textFaint} keyboardType="numeric" />
-        </Cell>
+        <LabelCol header minHeight={40}>{'장기 미인정\n결석자'}</LabelCol>
+        <ContentArea minHeight={40}>
+          <TextInput style={[styles.input, styles.inputFillCell]} value={data.absentScore} onChangeText={(t) => patch({ absentScore: t })} placeholder="점수 입력" placeholderTextColor={C.textFaint} keyboardType="numeric" />
+        </ContentArea>
       </View>
     </View>
   );
@@ -897,26 +1066,100 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: BORDER,
     backgroundColor: '#fff',
+    width: '100%',
+    overflow: 'hidden',
   },
   titleRow: { borderBottomWidth: 1, borderBottomColor: BORDER },
-  row: { flexDirection: 'row' },
+  row: { flexDirection: 'row', alignItems: 'stretch' },
+  rowInner: { alignSelf: 'stretch' },
   rowBorder: { borderTopWidth: 1, borderTopColor: BORDER },
-  cell: {
+  cellFlex: { flexBasis: 0, minWidth: 0 },
+  labelCol: {
+    flexBasis: LABEL_COL_BASIS,
+    flexGrow: 0,
+    flexShrink: 0,
+    width: LABEL_COL_BASIS,
+    maxWidth: LABEL_COL_BASIS,
+    alignSelf: 'stretch',
     borderRightWidth: 1,
     borderRightColor: BORDER,
     paddingHorizontal: 8,
     paddingVertical: 6,
     justifyContent: 'center',
   },
+  labelColHeader: { backgroundColor: HDR },
+  labelColBody: { backgroundColor: '#fff' },
+  labelColInput: { paddingHorizontal: 0, paddingVertical: 0 },
+  labelColStretch: { justifyContent: 'center' },
+  contentArea: {
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    backgroundColor: '#fff',
+  },
+  contentAreaRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  contentAreaHeader: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRightWidth: 0,
+  },
+  contentAreaHeaderText: { textAlign: 'center' },
+  achievementLevelRow: { width: '100%', alignSelf: 'stretch' },
+  contentCol: {
+    flex: CONTENT_COL_FLEX,
+    flexBasis: 0,
+    minWidth: 0,
+    alignSelf: 'stretch',
+    borderRightWidth: 1,
+    borderRightColor: BORDER,
+    backgroundColor: '#fff',
+  },
+  contentColNoRightBorder: {
+    borderRightWidth: 0,
+  },
+  cell: {
+    borderRightWidth: 1,
+    borderRightColor: BORDER,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
   cellNoRightBorder: { borderRightWidth: 0 },
-  cellNoPadding: { paddingHorizontal: 0, paddingVertical: 0 },
+  cellNoPadding: { paddingHorizontal: 0, paddingVertical: 0, alignSelf: 'stretch' },
   cellHeader: { backgroundColor: HDR },
   cellCenter: { alignItems: 'center' },
   cellText: { fontFamily: F.sans, fontSize: 12, color: C.text, lineHeight: 18 },
   cellHeaderText: { fontFamily: F.sansMedium, fontSize: 12, color: C.text },
 
   rubricBlockWrap: { borderTopWidth: 1, borderTopColor: BORDER },
-  rubricBlock: { flexDirection: 'row' },
+  rubricBlock: { flexDirection: 'row', alignItems: 'stretch' },
+  rubricElementCol: {
+    flexBasis: LABEL_COL_BASIS,
+    width: LABEL_COL_BASIS,
+    maxWidth: LABEL_COL_BASIS,
+    flexGrow: 0,
+    flexShrink: 0,
+    alignSelf: 'stretch',
+    borderRightWidth: 1,
+    borderRightColor: BORDER,
+  },
+  rubricElementHeader: {
+    backgroundColor: HDR,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+    minHeight: 40,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    justifyContent: 'center',
+  },
+  rubricElementBody: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
   blockToolbar: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
@@ -960,13 +1203,63 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'stretch',
   },
-  levelRowRemoveBtn: {
-    width: 26,
+  rubricMetricRow: {
+    width: '100%',
+    alignSelf: 'stretch',
+  },
+  rubricMetricInner: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    minWidth: 0,
+  },
+  rubricScoreCellBody: {
+    backgroundColor: '#fafafa',
+  },
+  rubricScoreInput: {
+    backgroundColor: '#fafafa',
+    minHeight: ROW_H - 4,
+  },
+  rubricAddLevelSubSpacer: {
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+  rubricAddLevelMain: {
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+    borderRightWidth: 0,
+  },
+  rubricAddLevelRemoveSpacer: {
+    width: RUBRIC_REMOVE_COL_W,
+    minWidth: RUBRIC_REMOVE_COL_W,
+    maxWidth: RUBRIC_REMOVE_COL_W,
+    flexGrow: 0,
+    flexShrink: 0,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+    backgroundColor: '#fafafa',
+  },
+  rubricRemoveCol: {
+    width: RUBRIC_REMOVE_COL_W,
+    minWidth: RUBRIC_REMOVE_COL_W,
+    maxWidth: RUBRIC_REMOVE_COL_W,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  rubricRemoveBtn: {
+    flex: 1,
+    alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',
     borderLeftWidth: 1,
     borderLeftColor: BORDER,
     backgroundColor: '#fff',
+  },
+  rubricRemoveHeaderPad: {
+    backgroundColor: HDR,
+    borderLeftWidth: 1,
+    borderLeftColor: BORDER,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
   },
   addBlockRow: {
     flexDirection: 'row',
@@ -980,19 +1273,24 @@ const styles = StyleSheet.create({
   },
   elementCol: { flex: 2.2 },
   rightCol: { flex: 5 },
-  scoreGroupRow: { flexDirection: 'row', alignItems: 'stretch' },
-  subBlockWrap: { flexDirection: 'row', alignItems: 'stretch' },
-  subGroupsCol: { flex: 4.1 },
+  subBlockWrap: { flexDirection: 'row', alignItems: 'stretch', width: '100%' },
+  subGroupsCol: {
+    flex: RUBRIC_LEVEL_FLEX + RUBRIC_SCORE_FLEX,
+    flexBasis: 0,
+    minWidth: 0,
+    alignSelf: 'stretch',
+  },
   subElementCol: {
-    flex: 1.1,
+    flex: RUBRIC_SUB_ELEMENT_FLEX,
+    flexBasis: 0,
+    minWidth: 0,
     borderRightWidth: 1,
     borderRightColor: BORDER,
     backgroundColor: '#fff',
   },
-  levelCol: {
-    flex: 4,
-    borderRightWidth: 1,
-    borderRightColor: BORDER,
+  rubricSubHeaderCell: {
+    minHeight: 40,
+    justifyContent: 'center',
   },
   levelCell: { flex: 1, justifyContent: 'center' },
   levelSplit: { borderTopWidth: 1, borderTopColor: BORDER },
@@ -1008,6 +1306,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     width: '100%',
+    alignSelf: 'stretch',
     minHeight: 36,
     paddingHorizontal: 8,
     paddingVertical: 6,
@@ -1016,6 +1315,9 @@ const styles = StyleSheet.create({
     color: C.text,
     backgroundColor: '#fff',
   },
+  inputFillCell: {
+    minHeight: '100%',
+  },
   inputMultiline: { minHeight: ROW_H - 4, paddingTop: 8 },
   levelLabelInput: {
     minHeight: ROW_H - 8,
@@ -1023,11 +1325,14 @@ const styles = StyleSheet.create({
     fontFamily: F.sansMedium,
   },
   levelRemoveBtn: {
-    width: 28,
+    width: RUBRIC_REMOVE_COL_W,
+    flexGrow: 0,
+    flexShrink: 0,
     alignItems: 'center',
     justifyContent: 'center',
     borderLeftWidth: 1,
     borderLeftColor: BORDER,
+    backgroundColor: '#fff',
   },
   addLevelRow: {
     flexDirection: 'row',
@@ -1048,7 +1353,8 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   inputCenter: { textAlign: 'center' },
-  elementInput: { minHeight: 120, padding: 8 },
+  textCenter: { textAlign: 'center' },
+  elementInput: { flex: 1, minHeight: 80, padding: 8 },
 
   methodRow: {
     flexDirection: 'row',

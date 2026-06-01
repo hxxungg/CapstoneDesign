@@ -2,26 +2,7 @@ import React, { useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { THEME, FONTS } from '../config/api';
-
-// BrandMark — "AI" + 파란 점 (디자인 파일 BrandMark.tsx 기반, "su" → "AI" 교체)
-function BrandMark({ size = 56 }) {
-  return (
-    <View style={[bm.wrap, {
-      width: size, height: size, borderRadius: size * 0.22,
-    }]}>
-      <Text style={[bm.text, { fontSize: size * 0.32, lineHeight: size * 0.36 }]}>AI</Text>
-      <View style={[bm.dot, {
-        right: size * 0.18, bottom: size * 0.18,
-        width: size * 0.08, height: size * 0.08, borderRadius: size * 0.04,
-      }]} />
-    </View>
-  );
-}
-const bm = StyleSheet.create({
-  wrap: { backgroundColor: THEME.dark, alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  text: { color: '#fff', fontFamily: FONTS.sansBold, letterSpacing: -1, includeFontPadding: false },
-  dot:  { position: 'absolute', backgroundColor: THEME.primary },
-});
+import BrandMark from '../components/BrandMark';
 
 export default function SplashScreen({ navigation }) {
   useEffect(() => {
@@ -47,7 +28,7 @@ export default function SplashScreen({ navigation }) {
         <BrandMark size={104} />
 
         <View style={s.titleWrap}>
-          <Text style={s.appName}>AI나침반</Text>
+          <Text style={s.appName}>AI 나침반</Text>
           <Text style={s.appSub}>생성형 AI의 교육적 활용을 위한{'\n'}과정 중심 평가 시스템</Text>
         </View>
 

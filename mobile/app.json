@@ -15,22 +15,44 @@
     "scheme": "performanceeval",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.performanceeval.app"
+      "bundleIdentifier": "com.performanceeval.app",
+      "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.228923106472-u69vdjq3c76d9qb91cs68rjki4i8vuvo"
+            ]
+          }
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#3B82F6"
       },
-      "package": "com.performanceeval.app"
+      "package": "com.performanceeval.app",
+      "softwareKeyboardLayoutMode": "resize",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": false,
+          "data": [
+            {
+              "scheme": "com.googleusercontent.apps.228923106472-aud5j64ks87vc4t93ictp95u8d8s7s",
+              "path": "/oauth2redirect"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "expo-web-browser",
-      "expo-font",
-      "@react-native-community/datetimepicker"
-    ]
+    "plugins": []
   }
 }

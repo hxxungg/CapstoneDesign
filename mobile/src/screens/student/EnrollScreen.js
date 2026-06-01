@@ -7,6 +7,7 @@ import {
 import { assignmentAPI, assessmentAPI } from '../../services/api';
 import { THEME } from '../../config/api';
 import { appAlert } from '../../utils/appAlert';
+import { VALIDATION } from '../../utils/uiCopy';
 
 export default function EnrollScreen({ navigation }) {
   const [code, setCode] = useState('');
@@ -15,7 +16,7 @@ export default function EnrollScreen({ navigation }) {
   const handleEnroll = async () => {
     const trimmedCode = code.trim().toUpperCase();
     if (!trimmedCode) {
-      appAlert('입력 오류', '수행평가 코드를 입력해주세요.', null, { type: 'warning' });
+      appAlert('입력 오류', VALIDATION.assessmentCode, null, { type: 'warning' });
       return;
     }
 
@@ -63,7 +64,7 @@ export default function EnrollScreen({ navigation }) {
       <Pressable style={styles.content} onPress={Keyboard.dismiss}>
         <Text style={styles.icon}>🔑</Text>
         <Text style={styles.title}>수행평가 참여</Text>
-        <Text style={styles.desc}>교사에게 받은 수행평가 초대 코드를 입력하세요.</Text>
+        <Text style={styles.desc}>교사에게 받은 수행평가 초대 코드를 입력하면 참여할 수 있습니다.</Text>
 
         <TextInput
           style={styles.input}

@@ -6,6 +6,7 @@ import {
 import { assignmentAPI, assessmentAPI } from '../services/api';
 import { THEME, FONTS } from '../config/api';
 import { appAlert } from '../utils/appAlert';
+import { VALIDATION } from '../utils/uiCopy';
 
 const C = THEME;
 const F = FONTS;
@@ -46,7 +47,7 @@ export default function EnrollCodeModal({ visible, onClose, navigation, onJoined
   const handleEnroll = async () => {
     const trimmedCode = code.trim().toUpperCase();
     if (!trimmedCode) {
-      appAlert('입력 오류', '수행평가 코드를 입력해주세요.', null, { type: 'warning' });
+      appAlert('입력 오류', VALIDATION.assessmentCode, null, { type: 'warning' });
       return;
     }
     setLoading(true);
@@ -63,7 +64,7 @@ export default function EnrollCodeModal({ visible, onClose, navigation, onJoined
         if (participationId) {
           navigation.navigate('Work', { participation_id: participationId });
         } else {
-          appAlert('이미 참여 중', '이미 참여한 수행평가입니다. 목록에서 확인하세요.', null, { type: 'info' });
+          appAlert('이미 참여 중', '이미 참여한 수행평가입니다. 목록에서 확인할 수 있습니다.', null, { type: 'info' });
         }
         return;
       }
@@ -106,7 +107,7 @@ export default function EnrollCodeModal({ visible, onClose, navigation, onJoined
       >
         <Pressable style={s.card} onPress={() => {}}>
           <Text style={s.title}>수행평가 참여</Text>
-          <Text style={s.body}>교사에게 받은 초대 코드를 입력하세요.</Text>
+          <Text style={s.body}>교사에게 받은 초대 코드를 입력하면 참여할 수 있습니다.</Text>
           <TextInput
             style={s.input}
             value={code}

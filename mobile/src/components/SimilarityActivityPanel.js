@@ -4,20 +4,18 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { THEME, FONTS } from '../config/api';
+import { getPromptTypeLabel } from '../config/promptLabels';
 
 const C = THEME;
 const F = FONTS;
-
-const PROMPT_TYPE_LABEL = {
-  summary: '요약', compare: '비교', predict: '예측',
-  evaluate: '평가', generate: '생성', info: '정보 탐색',
-};
 
 const ORIGINALITY_COLOR = {
   red: '#FFCDD2',
   yellow: '#FFF9C4',
   green: '#E8F5E9',
 };
+const CRITICAL_USE_COLOR = '#7B1FA2';
+const CRITICAL_USE_BG = '#F3E5F5';
 
 /** by_step + similarity_by_step → 화면에 그릴 단계 목록 */
 export function buildStepDisplayList(byStep, simByStep, { includeStepOrderInTitle = true } = {}) {
@@ -237,6 +235,7 @@ function TimelineList({
   onViewResponse,
   withDate = false,
   aiItemRefs,
+  onAiItemLayout,
 }) {
   if (timeline.length === 0) {
     return (
@@ -262,6 +261,12 @@ function TimelineList({
         ref={(ref) => {
           if (!isUrl && item.data?.id != null && aiItemRefs) {
             aiItemRefs.current[item.data.id] = ref;
+            aiItemRefs.current[String(item.data.id)] = ref;
+          }
+        }}
+        onLayout={(e) => {
+          if (!isUrl && item.data?.id != null && onAiItemLayout) {
+            onAiItemLayout(item.data.id, e.nativeEvent.layout.y);
           }
         }}
       >
@@ -327,7 +332,7 @@ function TimelineList({
                   {item.data.prompt_type && (
                     <View style={styles.tlMiniTag}>
                       <Text style={[styles.tlMiniTagTxt, boldStyle]}>
-                        {PROMPT_TYPE_LABEL[item.data.prompt_type] ?? item.data.prompt_type}
+                        {getPromptTypeLabel(item.data.prompt_type)}
                       </Text>
                     </View>
                   )}
@@ -339,15 +344,15 @@ function TimelineList({
                     </View>
                   )}
                   {item.data.critical_use_verification && (
-                    <View style={[styles.tlMiniTag, { backgroundColor: '#F3E5F5' }]}>
-                      <Text style={[styles.tlMiniTagTxt, { color: '#7B1FA2' }, boldStyle]}>
+                    <View style={[styles.tlMiniTag, { backgroundColor: CRITICAL_USE_BG }]}>
+                      <Text style={[styles.tlMiniTagTxt, { color: CRITICAL_USE_COLOR }, boldStyle]}>
                         비판적 사용 - 검증 질문
                       </Text>
                     </View>
                   )}
                   {item.data.critical_use_web && (
-                    <View style={[styles.tlMiniTag, { backgroundColor: '#E8F5E9' }]}>
-                      <Text style={[styles.tlMiniTagTxt, { color: '#2E7D32' }, boldStyle]}>
+                    <View style={[styles.tlMiniTag, { backgroundColor: CRITICAL_USE_BG }]}>
+                      <Text style={[styles.tlMiniTagTxt, { color: CRITICAL_USE_COLOR }, boldStyle]}>
                         비판적 사용 - 웹 검색
                       </Text>
                     </View>
@@ -457,12 +462,29 @@ function StepSentencesBlock({
   );
 }
 
+function resolveAiLogOffset(aiLogId, aiItemOffsets) {
+  if (aiLogId == null || !aiItemOffsets?.current) return null;
+  const map = aiItemOffsets.current;
+  if (map[aiLogId] != null) return map[aiLogId];
+  const asString = String(aiLogId);
+  if (map[asString] != null) return map[asString];
+  return null;
+}
+
 /** 형광펜 탭 → 오른쪽 패널 내부 스크롤로 해당 AI 로그 이동 */
-function scrollToAiLogInPanel(aiLogId, { rightScrollRef, rightContentRef, aiItemRefs }) {
-  const itemRef = aiItemRefs.current[aiLogId];
+function scrollToAiLogInPanel(aiLogId, { rightScrollRef, rightContentRef, aiItemRefs, aiItemOffsets }) {
   const scroll = rightScrollRef?.current;
+  if (!scroll) return false;
+
+  const offsetY = resolveAiLogOffset(aiLogId, aiItemOffsets);
+  if (offsetY != null) {
+    scroll.scrollTo({ y: Math.max(0, offsetY - 48), animated: true });
+    return true;
+  }
+
+  const itemRef = aiItemRefs?.current?.[aiLogId] ?? aiItemRefs?.current?.[String(aiLogId)];
   const content = rightContentRef?.current;
-  if (!itemRef || !scroll || !content) return false;
+  if (!itemRef || !content) return false;
 
   itemRef.measureLayout(
     content,
@@ -491,21 +513,33 @@ export const SimilarityActivitySplitPanel = forwardRef(function SimilarityActivi
     urlLogs = [],
     aiLogs = [],
     byStep = [],
+    fillViewport = false,
   },
   ref
 ) {
   const { height: windowHeight } = useWindowDimensions();
-  const rightPanelMaxHeight = Math.max(280, windowHeight - 140);
-  const rightScrollMaxHeight = rightPanelMaxHeight - 38;
+  const useFillViewport = fillViewport && Platform.OS !== 'web';
+  const rightPanelMaxHeight = useFillViewport
+    ? undefined
+    : Math.max(280, windowHeight - 140);
+  const rightScrollMaxHeight = useFillViewport
+    ? undefined
+    : rightPanelMaxHeight - 38;
 
   const [responseModal, setResponseModal] = useState(null);
   const [selectedSegmentKey, setSelectedSegmentKey] = useState(null);
   const [highlightAiLogId, setHighlightAiLogId] = useState(null);
   const aiItemRefs = useRef({});
+  const aiItemOffsets = useRef({});
   const rightScrollRef = useRef(null);
   const rightContentRef = useRef(null);
   const pendingScrollId = useRef(null);
   const flashTimerRef = useRef(null);
+
+  const handleAiItemLayout = useCallback((aiLogId, y) => {
+    aiItemOffsets.current[aiLogId] = y;
+    aiItemOffsets.current[String(aiLogId)] = y;
+  }, []);
 
   const timeline = useMemo(
     () => buildUnifiedTimeline(urlLogs, aiLogs, byStep, highlightAiLogId),
@@ -513,7 +547,12 @@ export const SimilarityActivitySplitPanel = forwardRef(function SimilarityActivi
   );
 
   const performScrollToAiLog = useCallback((aiLogId) => {
-    return scrollToAiLogInPanel(aiLogId, { rightScrollRef, rightContentRef, aiItemRefs });
+    return scrollToAiLogInPanel(aiLogId, {
+      rightScrollRef,
+      rightContentRef,
+      aiItemRefs,
+      aiItemOffsets,
+    });
   }, []);
 
   useEffect(() => {
@@ -523,7 +562,11 @@ export const SimilarityActivitySplitPanel = forwardRef(function SimilarityActivi
 
     const attempt = () => performScrollToAiLog(id);
     requestAnimationFrame(() => {
-      if (!attempt()) setTimeout(attempt, 80);
+      if (attempt()) return;
+      setTimeout(() => {
+        if (attempt()) return;
+        setTimeout(attempt, 120);
+      }, 80);
     });
   }, [highlightAiLogId, timeline, performScrollToAiLog]);
 
@@ -558,50 +601,75 @@ export const SimilarityActivitySplitPanel = forwardRef(function SimilarityActivi
     }, HIGHLIGHT_FLASH_MS);
   }, []);
 
+  const renderLeftContent = () => (
+    stepDisplayList.length === 0 ? (
+      <Text style={styles.sentenceEmpty}>제출된 내용이 없습니다.</Text>
+    ) : (
+      stepDisplayList.map(({ stepIdKey, stepTitle, sentences, compliance }, idx) => (
+        <View key={stepIdKey}>
+          {idx > 0 && <View style={styles.stepDivider} />}
+          <StepSentencesBlock
+            stepIdKey={stepIdKey}
+            stepTitle={stepTitle}
+            sentences={sentences}
+            onJumpToAiLog={handleJumpToAiLog}
+            onClearHighlight={clearHighlight}
+            compliance={compliance}
+            selectedSegmentKey={selectedSegmentKey}
+          />
+        </View>
+      ))
+    )
+  );
+
   return (
     <>
-      <View style={styles.splitRow}>
-        <Pressable style={styles.leftCol} onPress={clearHighlight}>
-          <View style={styles.leftColContent}>
-          {stepDisplayList.length === 0 ? (
-            <Text style={styles.sentenceEmpty}>제출된 내용이 없습니다.</Text>
+      <View style={[styles.splitRow, useFillViewport && styles.splitRowFill]}>
+        <View style={[styles.leftCol, useFillViewport && styles.leftColFill]}>
+          {useFillViewport ? (
+            <ScrollView
+              style={styles.leftScroll}
+              contentContainerStyle={styles.leftColContent}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+              keyboardShouldPersistTaps="handled"
+            >
+              {renderLeftContent()}
+            </ScrollView>
           ) : (
-            stepDisplayList.map(({ stepIdKey, stepTitle, sentences, compliance }, idx) => (
-                <View key={stepIdKey}>
-                  {idx > 0 && <View style={styles.stepDivider} />}
-                  <StepSentencesBlock
-                    stepIdKey={stepIdKey}
-                    stepTitle={stepTitle}
-                    sentences={sentences}
-                    onJumpToAiLog={handleJumpToAiLog}
-                    onClearHighlight={clearHighlight}
-                    compliance={compliance}
-                    selectedSegmentKey={selectedSegmentKey}
-                  />
-                </View>
-              ))
+            <View style={styles.leftColContent}>
+              {renderLeftContent()}
+            </View>
           )}
-          </View>
-        </Pressable>
+        </View>
 
         <View style={styles.divider} />
 
-        <View style={[styles.rightCol, { maxHeight: rightPanelMaxHeight }]}>
+        <View style={[
+          styles.rightCol,
+          useFillViewport && styles.rightColFill,
+          !useFillViewport && rightPanelMaxHeight != null && { maxHeight: rightPanelMaxHeight },
+        ]}>
           <Pressable onPress={clearHighlight}>
             <Text style={styles.rightColTitle}>활동 기록 (시간순)</Text>
           </Pressable>
           <ScrollView
             ref={rightScrollRef}
-            style={{ maxHeight: rightScrollMaxHeight }}
+            style={[
+              useFillViewport ? styles.rightScrollFill : null,
+              !useFillViewport && rightScrollMaxHeight != null && { maxHeight: rightScrollMaxHeight },
+            ]}
             contentContainerStyle={styles.rightTimeline}
             showsVerticalScrollIndicator
             nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
           >
             <View ref={rightContentRef} collapsable={false}>
               <TimelineList
                 timeline={timeline}
                 matchedAiLogId={highlightAiLogId}
                 aiItemRefs={aiItemRefs}
+                onAiItemLayout={handleAiItemLayout}
                 onViewResponse={setResponseModal}
                 withDate
               />
@@ -673,9 +741,22 @@ const styles = StyleSheet.create({
     backgroundColor: C.card,
     overflow: 'visible',
   },
+  splitRowFill: {
+    flex: 1,
+    minHeight: 280,
+    alignItems: 'stretch',
+    overflow: 'hidden',
+  },
   leftCol: {
     flex: 1,
     minWidth: 0,
+  },
+  leftColFill: {
+    flex: 1,
+    minHeight: 0,
+  },
+  leftScroll: {
+    flex: 1,
   },
   leftColContent: { padding: 12, paddingBottom: 16 },
   divider: {
@@ -696,6 +777,14 @@ const styles = StyleSheet.create({
           zIndex: 1,
         }
       : null),
+  },
+  rightColFill: {
+    flex: 1,
+    minHeight: 0,
+    alignSelf: 'stretch',
+  },
+  rightScrollFill: {
+    flex: 1,
   },
   rightColTitle: {
     fontFamily: F.sansMedium,

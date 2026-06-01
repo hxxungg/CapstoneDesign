@@ -8,7 +8,7 @@ export const AI_MODE = {
 
 /** 조건부 허용 단계 기본 지침 (교사가 편집 가능) */
 export const DEFAULT_CONDITIONAL_GUIDANCE =
-  '교사 지침에 따라 AI를 보조 수단으로만 활용하세요. 생성 문장을 그대로 제출하지 말고 반드시 검토·수정하며, 인용 시 출처를 표기하세요.';
+  '교사 지침에 따라 AI를 보조 수단으로만 활용합니다. 생성 문장을 그대로 제출하지 않고 반드시 검토·수정하며, 인용 시 출처를 표기합니다.';
 
 export const AI_MODE_LABELS = {
   [AI_MODE.DISALLOWED]: '비허용',

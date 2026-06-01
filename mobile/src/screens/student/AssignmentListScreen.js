@@ -219,8 +219,8 @@ export default function AssignmentListScreen({ navigation }) {
             {loading
               ? '수행평가를 불러오는 중...'
               : inProgress.length > 0
-                ? `진행 중인 수행평가가 ${inProgress.length}건 있어요.`
-                : '현재 진행 중인 수행평가가 없어요.'
+                ? `진행 중인 수행평가가 ${inProgress.length}건 있습니다.`
+                : '현재 진행 중인 수행평가가 없습니다.'
             }
           </Text>
         </View>
@@ -298,7 +298,7 @@ export default function AssignmentListScreen({ navigation }) {
                   <Ionicons name="book-outline" size={32} color={C.textSecondary} />
                 </View>
                 <Text style={s.emptyTitle}>참여 중인 수행평가가 없습니다</Text>
-                <Text style={s.emptyDesc}>교사에게 수행평가 코드를 받아 참여하세요.</Text>
+                <Text style={s.emptyDesc}>교사에게 수행평가 코드를 받아 참여할 수 있습니다.</Text>
               </View>
             )}
           </>

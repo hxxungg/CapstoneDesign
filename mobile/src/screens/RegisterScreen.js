@@ -7,30 +7,13 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { THEME, FONTS } from '../config/api';
 import { appAlert } from '../utils/appAlert';
+import { VALIDATION } from '../utils/uiCopy';
+import PolicyModal from '../components/PolicyModal';
+import BrandMark from '../components/BrandMark';
 
 const C = THEME;
 const F = FONTS;
 const GRADES = ['1학년', '2학년', '3학년'];
-
-// ── BrandMark ───────────────────────────────────────────────────────────────
-function BrandMark({ size = 56, variant = 'navy' }) {
-  const bg = variant === 'navy' ? C.dark : C.card;
-  const fg = variant === 'navy' ? '#fff' : C.dark;
-  return (
-    <View style={[bm.wrap, { width: size, height: size, borderRadius: size * 0.22, backgroundColor: bg }]}>
-      <Text style={[bm.text, { fontSize: size * 0.32, lineHeight: size * 0.36, color: fg }]}>AI</Text>
-      <View style={[bm.dot, {
-        right: size * 0.18, bottom: size * 0.18,
-        width: size * 0.08, height: size * 0.08, borderRadius: size * 0.04,
-      }]} />
-    </View>
-  );
-}
-const bm = StyleSheet.create({
-  wrap: { alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' },
-  text: { fontFamily: F.sansBold, letterSpacing: -1, includeFontPadding: false },
-  dot:  { position: 'absolute', backgroundColor: C.primary },
-});
 
 // ── Field + Input ───────────────────────────────────────────────────────────
 function Field({ label, hint, children }) {
@@ -78,8 +61,8 @@ function AuthShell({ title, subtitle, children, footer }) {
       <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.dark }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={sh.phoneHeader}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <BrandMark size={36} variant="navy" />
-            <Text style={sh.phoneHeaderName}>AI나침반</Text>
+            <BrandMark size={36} />
+            <Text style={sh.phoneHeaderName}>AI 나침반</Text>
           </View>
         </View>
         <ScrollView
@@ -90,7 +73,7 @@ function AuthShell({ title, subtitle, children, footer }) {
         >
           <View style={sh.formBox}>
             <View style={{ gap: 4, marginBottom: 28 }}>
-              <Text style={sh.formTitle}>{title}</Text>
+              {title ? <Text style={sh.formTitle}>{title}</Text> : null}
               {subtitle ? <Text style={sh.formSub}>{subtitle}</Text> : null}
             </View>
             <View style={{ gap: 16 }}>{children}</View>
@@ -109,19 +92,19 @@ function AuthShell({ title, subtitle, children, footer }) {
     <View style={{ flex: 1, flexDirection: 'row', backgroundColor: C.background }}>
       <View style={sh.leftPanel}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <BrandMark size={36} variant="navy" />
-          <Text style={sh.leftBrandName}>AI나침반</Text>
+          <BrandMark size={36} />
+          <Text style={sh.leftBrandName}>AI 나침반</Text>
         </View>
         <View style={{ flex: 1, justifyContent: 'center' }}>
           <Text style={sh.tagline}>올바른 AI 사용을 위하여</Text>
           <Text style={sh.taglineSub}>
-            AI나침반은 학생이 AI를 올바르게 사용할 수 있도록 돕는 도구입니다.{'\n'}
+            AI 나침반은 학생이 AI를 올바르게 사용할 수 있도록 돕는 도구입니다.{'\n'}
             교사는 학생의 사고 흐름을 한눈에 확인합니다.
           </Text>
 
         </View>
         
-        <Text style={sh.leftFooter}>© 2026 AI나침반</Text>
+        <Text style={sh.leftFooter}>© 2026 AI 나침반</Text>
       </View>
 
       <ScrollView
@@ -131,7 +114,7 @@ function AuthShell({ title, subtitle, children, footer }) {
       >
         <View style={{ width: '100%', maxWidth: 380, gap: 28 }}>
           <View>
-            <Text style={sh.formTitle}>{title}</Text>
+            {title ? <Text style={sh.formTitle}>{title}</Text> : null}
             {subtitle ? <Text style={sh.formSub}>{subtitle}</Text> : null}
           </View>
           <View style={{ gap: 16 }}>{children}</View>
@@ -159,7 +142,7 @@ const sh = StyleSheet.create({
     fontFamily: F.serifKo, fontSize: 28, color: C.text,
     letterSpacing: -0.4, lineHeight: 36, marginBottom: 8,
   },
-  formSub: { fontFamily: F.sans, fontSize: 14, color: C.textSoft, lineHeight: 21 },
+  formSub: { fontFamily: F.sans, fontSize: 16, color: C.textSoft, lineHeight: 24 },
   leftPanel: {
     width: 420, backgroundColor: C.dark,
     paddingHorizontal: 44, paddingVertical: 52, overflow: 'hidden',
@@ -181,12 +164,6 @@ const sh = StyleSheet.create({
   featureDesc:    { marginTop: 2, fontFamily: F.sans, fontSize: 12.5, color: 'rgba(255,255,255,0.55)' },
 });
 
-const POLICY = {
-  terms:    { title: '서비스 이용약관',           body: "제1조 (목적)\n본 약관은 AI나침반 서비스의 이용 조건에 관한 사항을 규정합니다.\n\n제2조 (서비스 이용)\n학생의 AI 사용 학습을 지원하고 교사가 학습 과정을 모니터링할 수 있도록 돕는 에듀테크 플랫폼입니다.\n\n제3조 (이용자 의무)\n타인의 권리를 침해하거나 법령을 위반하는 행위를 해서는 안 됩니다.\n\n제4조 (면송)\n천재지변 등 불가항력적 사유로 인한 서비스 중단에 대해 접뢰를 지지 않습니다." },
-  privacy:  { title: '개인정보 수집·이용 동의',  body: "■ 수집 항목\n- 필수: 이름, 이메일 주소, 역할(교사/학생)\n- 선택: 학교명, 학년, 반, 담당 과목\n\n■ 수집 목적\n- 회원 식별 및 서비스 제공\n- 학습 진도 관리 및 AI 사용 분석\n- 수행평가 참여 기록 보관\n\n■ 보유 기간\n회원 탈퇴 시 즉시 파기\n\n※ 동의를 거부할 권리가 있으나, 거부 시 서비스 이용이 제한됩니다." },
-  marketing:{ title: '마케팅 정보 수신 동의 (선택)', body: "■ 수신 목적\n서비스 업데이트, 새로운 기능 안내, 교육 관련 정보 등을 이메일로 수신합니다.\n\n■ 보유 기간\n동의 철회 시까지\n\n※ 미동의 시에도 서비스 이용에 제한이 없습니다." },
-};
-
 function ConsentRow({ checked, onToggle, label, onView }) {
   return (
     <View style={cs.row}>
@@ -200,29 +177,6 @@ function ConsentRow({ checked, onToggle, label, onView }) {
         <Text style={cs.viewBtnText}>보기</Text>
       </Pressable>
     </View>
-  );
-}
-
-function PolicyModal({ visible, type, onClose }) {
-  const content = type ? POLICY[type] : null;
-  if (!content) return null;
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-        <Pressable style={{ flex: 1 }} onPress={onClose} />
-        <View style={cs.policySheet}>
-          <View style={cs.policyHeader}>
-            <Text style={cs.policyTitle}>{content.title}</Text>
-            <Pressable onPress={onClose} style={cs.policyClose}>
-              <Text style={cs.policyCloseText}>닫기</Text>
-            </Pressable>
-          </View>
-          <ScrollView style={cs.policyScroll} showsVerticalScrollIndicator={false}>
-            <Text style={cs.policyBody}>{content.body}</Text>
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
   );
 }
 
@@ -242,13 +196,6 @@ const cs = StyleSheet.create({
   itemLabel: { fontFamily: F.sans, fontSize: 13, color: C.textSoft, flex: 1 },
   viewBtn: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: C.border },
   viewBtnText: { fontFamily: F.sans, fontSize: 11, color: C.textSecondary },
-  policySheet: { backgroundColor: C.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%', paddingBottom: 40 },
-  policyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: C.border },
-  policyTitle: { fontFamily: F.sansSemi, fontSize: 16, color: C.text },
-  policyClose: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: C.card, borderRadius: 8 },
-  policyCloseText: { fontFamily: F.sansMedium, fontSize: 13, color: C.textSoft },
-  policyScroll: { padding: 20 },
-  policyBody: { fontFamily: F.sans, fontSize: 13.5, color: C.textSoft, lineHeight: 22 },
 });
 
 // ── RegisterScreen ──────────────────────────────────────────────────────────
@@ -278,14 +225,14 @@ export default function RegisterScreen({ navigation }) {
   };
 
   const validate = () => {
-    if (!name.trim()) return '이름을 입력해주세요.';
-    if (!email.trim()) return '이메일을 입력해주세요.';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return '올바른 이메일 형식을 입력해주세요.';
-    if (!password) return '비밀번호를 입력해주세요.';
+    if (!name.trim()) return VALIDATION.name;
+    if (!email.trim()) return VALIDATION.email;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return VALIDATION.emailFormat;
+    if (!password) return VALIDATION.password;
     if (password.length < 6) return '비밀번호는 6자 이상이어야 합니다.';
     if (password !== passwordConfirm) return '비밀번호가 일치하지 않습니다.';
-    if (!termsAgreed) return '서비스 이용약관에 동의해주세요.';
-    if (!privacyAgreed) return '개인정보 수집·이용에 동의해주세요.';
+    if (!termsAgreed) return VALIDATION.terms;
+    if (!privacyAgreed) return VALIDATION.privacy;
     return null;
   };
 
@@ -293,7 +240,7 @@ export default function RegisterScreen({ navigation }) {
     const error = validate();
     if (error) { appAlert('입력 오류', error, null, { type: 'warning' }); return; }
     if (role === 'student' && !inviteCode.trim()) {
-      appAlert('입력 오류', '교사에게 받은 초대 코드를 입력해주세요.', null, { type: 'warning' });
+      appAlert('입력 오류', VALIDATION.inviteCode, null, { type: 'warning' });
       return;
     }
     const payload = {
@@ -318,11 +265,10 @@ export default function RegisterScreen({ navigation }) {
 
   return (
     <AuthShell
-      title="처음이시군요. 환영합니다."
-      subtitle="역할을 먼저 선택해주세요. 이후 정보가 달라집니다."
+      subtitle="이메일로 새 계정을 만들 수 있습니다."
       footer={
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={{ fontFamily: F.sans, fontSize: 13, color: C.textSoft }}>이미 계정이 있으신가요?</Text>
+          <Text style={{ fontFamily: F.sans, fontSize: 13, color: C.textSoft }}>이미 계정이 있습니다.</Text>
           <TouchableOpacity onPress={() => navigation.goBack()} disabled={loading}>
             <Text style={{ fontFamily: F.sansMedium, fontSize: 13.5, color: C.primary }}>로그인 →</Text>
           </TouchableOpacity>

@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, Pressable, Modal, StyleSheet,
+  View, Text, TextInput, TouchableOpacity, Pressable, StyleSheet,
   KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { THEME } from '../config/api';
 import { appAlert } from '../utils/appAlert';
+import { VALIDATION } from '../utils/uiCopy';
+import PolicyModal from '../components/PolicyModal';
 
 const GRADES = ['1학년', '2학년', '3학년'];
 
@@ -35,11 +37,11 @@ export default function SocialRegisterScreen({ navigation, route }) {
 
   const handleSubmit = async () => {
     if (role === 'student' && !inviteCode.trim()) {
-      appAlert('입력 오류', '교사에게 받은 초대 코드를 입력해주세요.', null, { type: 'warning' });
+      appAlert('입력 오류', VALIDATION.inviteCode, null, { type: 'warning' });
       return;
     }
-    if (!termsAgreed) { appAlert('동의 필요', '서비스 이용약관에 동의해주세요.', null, { type: 'warning' }); return; }
-    if (!privacyAgreed) { appAlert('동의 필요', '개인정보 수집·이용에 동의해주세요.', null, { type: 'warning' }); return; }
+    if (!termsAgreed) { appAlert('동의 필요', VALIDATION.terms, null, { type: 'warning' }); return; }
+    if (!privacyAgreed) { appAlert('동의 필요', VALIDATION.privacy, null, { type: 'warning' }); return; }
 
     const payload = {
       provider,
@@ -79,7 +81,7 @@ export default function SocialRegisterScreen({ navigation, route }) {
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Text style={styles.appName}>{providerLabel} 계정 연동</Text>
-          <Text style={styles.subtitle}>역할과 추가 정보를 입력해 주세요</Text>
+          <Text style={styles.subtitle}>역할과 추가 정보를 입력하면 가입이 완료됩니다.</Text>
         </View>
 
         <View style={styles.form}>
@@ -149,7 +151,7 @@ export default function SocialRegisterScreen({ navigation, route }) {
             <SConsentRow checked={privacyAgreed} onToggle={() => setPrivacyAgreed(v => !v)} label="[필수] 개인정보 수집·이용 동의" onView={() => setPolicyModal('privacy')} />
             <SConsentRow checked={marketingAgreed} onToggle={() => setMarketingAgreed(v => !v)} label="[선택] 마케팅 정보 수신 동의" onView={() => setPolicyModal('marketing')} />
           </View>
-          <SPolicyModal visible={!!policyModal} type={policyModal} onClose={() => setPolicyModal(null)} />
+          <PolicyModal visible={!!policyModal} type={policyModal} onClose={() => setPolicyModal(null)} />
 
           <TouchableOpacity
             style={[styles.submitButton, loading && styles.buttonDisabled]}
@@ -168,12 +170,6 @@ export default function SocialRegisterScreen({ navigation, route }) {
   );
 }
 
-const S_POLICY = {
-  terms:    { title: '서비스 이용약관',           body: "제1조 (목적)\n본 약관은 AI나침반 서비스의 이용 조건에 관한 사항을 규정합니다.\n\n제2조 (서비스 이용)\n학생의 AI 사용 학습을 지원하고 교사가 학습 과정을 모니터링할 수 있도록 돕는 에듀테크 플랫폼입니다.\n\n제3조 (이용자 의무)\n타인의 권리를 침해하거나 법령을 위반하는 행위를 해서는 안 됩니다.\n\n제4조 (면송)\n천재지변 등 불가항력적 사유로 인한 서비스 중단에 대해 접뢰를 지지 않습니다." },
-  privacy:  { title: '개인정보 수집·이용 동의',  body: "■ 수집 항목\n- 필수: 이름, 이메일 주소, 역할(교사/학생)\n- 선택: 학교명, 학년, 반, 담당 과목\n\n■ 수집 목적\n- 회원 식별 및 서비스 제공\n- 학습 진도 관리 및 AI 사용 분석\n- 수행평가 참여 기록 보관\n\n■ 보유 기간\n회원 탈퇴 시 즉시 파기\n\n※ 동의를 거부할 권리가 있으나, 거부 시 서비스 이용이 제한됩니다." },
-  marketing:{ title: '마케팅 정보 수신 동의 (선택)', body: "■ 수신 목적\n서비스 업데이트, 새로운 기능 안내, 교육 관련 정보 등을 이메일로 수신합니다.\n\n■ 보유 기간\n동의 철회 시까지\n\n※ 미동의 시에도 서비스 이용에 제한이 없습니다." },
-};
-
 function SConsentRow({ checked, onToggle, label, onView }) {
   return (
     <View style={styles.consentRow}>
@@ -187,29 +183,6 @@ function SConsentRow({ checked, onToggle, label, onView }) {
         <Text style={styles.consentViewBtnText}>보기</Text>
       </Pressable>
     </View>
-  );
-}
-
-function SPolicyModal({ visible, type, onClose }) {
-  const content = type ? S_POLICY[type] : null;
-  if (!content) return null;
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-        <Pressable style={{ flex: 1 }} onPress={onClose} />
-        <View style={styles.policySheet}>
-          <View style={styles.policyHeader}>
-            <Text style={styles.policyTitle}>{content.title}</Text>
-            <Pressable onPress={onClose} style={styles.policyClose}>
-              <Text style={styles.policyCloseText}>닫기</Text>
-            </Pressable>
-          </View>
-          <ScrollView style={styles.policyScroll} showsVerticalScrollIndicator={false}>
-            <Text style={styles.policyBody}>{content.body}</Text>
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
   );
 }
 
@@ -227,7 +200,7 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1 },
   header: { alignItems: 'center', paddingVertical: 32, paddingHorizontal: 24 },
   appName: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 8 },
-  subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.8)' },
+  subtitle: { fontSize: 16, lineHeight: 24, color: 'rgba(255,255,255,0.8)' },
   form: { backgroundColor: THEME.card, borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 32, flex: 1 },
   profileBox: { backgroundColor: THEME.primaryLight, borderRadius: 12, padding: 16, marginBottom: 20 },
   profileName: { fontSize: 16, fontWeight: '700', color: THEME.text },
@@ -252,13 +225,6 @@ const styles = StyleSheet.create({
   backLinkText: { color: THEME.textSecondary, fontSize: 14 },
   consentViewBtn: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: THEME.border },
   consentViewBtnText: { fontSize: 11, color: THEME.textSecondary },
-  policySheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%', paddingBottom: 40 },
-  policyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: THEME.border },
-  policyTitle: { fontSize: 16, fontWeight: '700', color: THEME.text },
-  policyClose: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: THEME.background, borderRadius: 8 },
-  policyCloseText: { fontSize: 13, color: THEME.textSecondary },
-  policyScroll: { padding: 20 },
-  policyBody: { fontSize: 13.5, lineHeight: 22, color: THEME.textSoft || THEME.textSecondary },
   consentBox: { gap: 10, padding: 16, backgroundColor: THEME.background, borderRadius: 12, borderWidth: 1, borderColor: THEME.border, marginBottom: 16 },
   consentDivider: { height: 1, backgroundColor: THEME.border },
   consentRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },

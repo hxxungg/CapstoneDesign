@@ -9,16 +9,8 @@ import {
 } from 'react-native';
 import { analyticsAPI } from '../../services/api';
 import { THEME } from '../../config/api';
+import { getPromptTypeLabel } from '../../config/promptLabels';
 import { appAlert } from '../../utils/appAlert';
-
-const PROMPT_TYPE_LABEL = {
-  info:     '정보 요청',
-  summary:  '요약 요청',
-  compare:  '비교 요청',
-  predict:  '예측 요청',
-  evaluate: '평가 요청',
-  generate: '생성 요청',
-};
 
 const PROMPT_LEVEL_LABEL = {
   '1': '단순 (30자 미만)',
@@ -101,7 +93,7 @@ export default function StudentLogsScreen({ route }) {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
         <Text style={styles.emptyText}>
-          종합 리포트 데이터를 불러올 수 없습니다. 백엔드를 최신 코드로 실행한 뒤 다시 시도해 주세요.
+          종합 리포트 데이터를 불러올 수 없습니다. 백엔드를 최신 코드로 실행한 뒤 다시 시도할 수 있습니다.
         </Text>
       </ScrollView>
     );
@@ -232,7 +224,7 @@ export default function StudentLogsScreen({ route }) {
                     <View style={styles.timelineCard}>
                       <Text style={styles.timelineTime}>{formatDate(ev.at)}</Text>
                       <View style={styles.tagRow}>
-                        <Text style={styles.tag}>{ev.prompt_type}</Text>
+                        <Text style={styles.tag}>{getPromptTypeLabel(ev.prompt_type)}</Text>
                         <Text style={styles.tagMuted}>{ev.level}</Text>
                         {ev.kind === 'web_search' ? <Text style={styles.tagOutline}>웹 검색</Text> : null}
                         {ev.kind === 'ai_session' ? <Text style={styles.tagOutline}>AI 세션</Text> : null}
@@ -276,7 +268,12 @@ export default function StudentLogsScreen({ route }) {
         </Text>
 
         <Text style={[styles.sectionTitle, { marginTop: 18 }]}>프롬프트 유형 리포트</Text>
-        {renderBarBlock(rep?.charts?.prompt_types, THEME.primary)}
+        {renderBarBlock(
+          Object.fromEntries(
+            Object.entries(rep?.charts?.prompt_types || {}).map(([k, v]) => [getPromptTypeLabel(k), v])
+          ),
+          THEME.primary
+        )}
 
         <Text style={[styles.sectionTitle, { marginTop: 18 }]}>프롬프트 수준 리포트</Text>
         {renderBarBlock(rep?.charts?.prompt_levels, '#6366F1')}
@@ -360,7 +357,7 @@ export default function StudentLogsScreen({ route }) {
               {renderBarBlock(
                 Object.fromEntries(
                   Object.entries(participationData.summary.prompt_types).map(
-                    ([k, v]) => [PROMPT_TYPE_LABEL[k] || k, v]
+                    ([k, v]) => [getPromptTypeLabel(k), v]
                   )
                 ),
                 THEME.primary
@@ -403,7 +400,7 @@ export default function StudentLogsScreen({ route }) {
                       <View style={styles.aiLogTags}>
                         <View style={[styles.tag, { backgroundColor: THEME.primary }]}>
                           <Text style={styles.tagText}>
-                            {PROMPT_TYPE_LABEL[log.prompt_type] || log.prompt_type || 'info'}
+                            {getPromptTypeLabel(log.prompt_type)}
                           </Text>
                         </View>
                         <View style={[styles.tag, { backgroundColor: '#6366F1' }]}>
