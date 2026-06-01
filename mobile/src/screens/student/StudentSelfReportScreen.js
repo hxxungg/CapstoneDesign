@@ -149,7 +149,7 @@ export default function StudentSelfReportScreen({ navigation, route }) {
 
     return (
       <Pressable onPress={clearPanelHighlight}>
-        <SectionCard title="AI 분석 요약" icon="pie-chart-outline">
+        <SectionCard title="AI 분석 요약" icon="pie-chart-outline" style={s.sectionSummary}>
           <View style={s.pieGrid}>
             {hasOrig  && <View style={s.pieCell}><PieChart title="유사도 분포" data={origData}  size={110} /></View>}
             {hasType  && <View style={s.pieCell}><PieChart title="질문 유형"   data={typeData}  size={110} /></View>}
@@ -247,7 +247,7 @@ export default function StudentSelfReportScreen({ navigation, route }) {
           <View style={s.nativeBody}>
             <ScrollView
               style={s.nativeSummaryScroll}
-              contentContainerStyle={s.scroll}
+              contentContainerStyle={s.nativeSummaryContent}
               refreshControl={refreshControl}
               nestedScrollEnabled
               showsVerticalScrollIndicator={false}
@@ -301,11 +301,13 @@ const s = StyleSheet.create({
   loadingBox:  { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll:      { padding: 20, gap: 16 },
   nativeBody: { flex: 1, minHeight: 0 },
-  nativeSummaryScroll: { flexGrow: 0, flexShrink: 1, maxHeight: '42%' },
-  analysisDock: { flex: 1, minHeight: 0, paddingHorizontal: 20, paddingBottom: 12 },
+  nativeSummaryScroll: { flexGrow: 0, flexShrink: 1, alignSelf: 'stretch' },
+  nativeSummaryContent: { paddingHorizontal: 20, paddingBottom: 4, flexGrow: 0 },
+  analysisDock: { flex: 1, minHeight: 0, paddingHorizontal: 20, paddingTop: 0, paddingBottom: 12 },
   analysisSectionFill: { flex: 1, marginBottom: 0, minHeight: 0, overflow: 'hidden' },
   analysisPanelFill: { flex: 1, minHeight: 0 },
   section:     { backgroundColor: THEME.card, borderRadius: 14, padding: 16, gap: 12, borderWidth: 1, borderColor: THEME.border, overflow: 'visible' },
+  sectionSummary: { marginBottom: 8 },
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   sectionTitle:{ fontFamily: FONTS.sansMedium, fontSize: 13, color: THEME.textSecondary },
   kpiRow:      { flexDirection: 'row', gap: 8 },

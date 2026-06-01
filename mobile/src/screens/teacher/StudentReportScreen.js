@@ -165,7 +165,7 @@ export default function StudentReportScreen({ navigation, route }) {
 
     return (
       <Pressable onPress={clearPanelHighlight}>
-        <SectionCard title="AI 분석 요약" icon="pie-chart-outline">
+        <SectionCard title="AI 분석 요약" icon="pie-chart-outline" style={s.sectionSummary}>
           <View style={s.pieGrid}>
             {hasOrig  && <View style={s.pieCell}><PieChart title="유사도 분포" data={origData}  size={110} /></View>}
             {hasType  && <View style={s.pieCell}><PieChart title="질문 유형"   data={typeData}  size={110} /></View>}
@@ -185,7 +185,7 @@ export default function StudentReportScreen({ navigation, route }) {
     if (!participation.started_at && !participation.submitted_at) return null;
     return (
       <Pressable onPress={clearPanelHighlight}>
-        <SectionCard title="참여 기간" icon="calendar-outline">
+        <SectionCard title="참여 기간" icon="calendar-outline" style={s.sectionSummary}>
           <View style={s.periodRow}>
             {participation.started_at ? (
               <View style={s.periodItem}>
@@ -297,7 +297,7 @@ export default function StudentReportScreen({ navigation, route }) {
           <View style={s.nativeBody}>
             <ScrollView
               style={s.nativeSummaryScroll}
-              contentContainerStyle={s.scrollContent}
+              contentContainerStyle={s.nativeSummaryContent}
               refreshControl={refreshControl}
               nestedScrollEnabled
               showsVerticalScrollIndicator={false}
@@ -370,8 +370,9 @@ const s = StyleSheet.create({
   scrollContent: { paddingHorizontal: 16, paddingBottom: 60 },
 
   nativeBody: { flex: 1, minHeight: 0 },
-  nativeSummaryScroll: { flexGrow: 0, flexShrink: 1, maxHeight: '42%' },
-  analysisDock: { flex: 1, minHeight: 0, paddingHorizontal: 16, paddingBottom: 12 },
+  nativeSummaryScroll: { flexGrow: 0, flexShrink: 1, alignSelf: 'stretch' },
+  nativeSummaryContent: { paddingHorizontal: 16, paddingBottom: 4, flexGrow: 0 },
+  analysisDock: { flex: 1, minHeight: 0, paddingHorizontal: 16, paddingTop: 0, paddingBottom: 12 },
   analysisSectionFill: { flex: 1, marginBottom: 0, minHeight: 0, overflow: 'hidden' },
   analysisPanelFill: { flex: 1, minHeight: 0 },
 
@@ -394,6 +395,7 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: C.border, marginBottom: 14,
     overflow: 'visible',
   },
+  sectionSummary: { marginBottom: 8 },
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 14 },
   sectionTitle: { fontFamily: F.sansSemi, fontSize: 14, color: C.text },
 
