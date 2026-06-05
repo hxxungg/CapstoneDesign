@@ -9,6 +9,7 @@ const {
   callScoreStep,
   saveStepComplianceScore,
 } = require('../src/services/stepComplianceScoring');
+const { getAiServiceCandidates } = require('../src/services/aiServiceClient');
 const participationId = parseInt(process.argv[2], 10);
 
 async function runRubricScoring(participationId, assessmentId) {
@@ -90,7 +91,7 @@ async function main() {
 
   console.log('=== 단계별 이행 판정 재실행 ===');
   console.log(`participation_id: ${participationId}`);
-  console.log(`AI_SERVICE_URL: ${AI_SERVICE_URL}\n`);
+  console.log(`AI_SERVICE_URL: ${getAiServiceCandidates()[0]}\n`);
 
   try {
     const [[row]] = await pool.query(
