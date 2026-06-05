@@ -18,6 +18,7 @@ SSH_PASSWORD = os.environ.get("SSH_PASSWORD", "Capstonedesign!")
 # 업로드 대상 — src 전체 + package 파일 (의존성 변경 시)
 UPLOAD_REL_PATHS = [
     "src/routes/analytics.js",
+    "src/services/classChartAverages.js",
 ]
 
 

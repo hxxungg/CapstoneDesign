@@ -1,44 +1,77 @@
 import React from 'react';
-import { Modal, Pressable, Text, View, StyleSheet } from 'react-native';
+import {
+  Modal, Pressable, Text, View, StyleSheet, ScrollView, useWindowDimensions,
+} from 'react-native';
 import { THEME, FONTS } from '../config/api';
 import PieChart from './PieChart';
 
 const C = THEME;
 const F = FONTS;
 
-export default function ClassCriticalUseModal({ visible, onClose, summary }) {
-  const avgCritical = summary?.critical_use_avg_percent;
-  const avgOther = summary?.critical_use_other_avg_percent;
-  const studentCount = summary?.critical_use_students_with_prompts ?? 0;
-  const hasData = avgCritical != null && avgOther != null && studentCount > 0;
+const CHART_DEFS = [
+  { key: 'originality', title: '유사도 분포', helpKey: 'originality' },
+  { key: 'prompt_type', title: '질문 유형', helpKey: 'prompt_type' },
+  { key: 'prompt_level', title: '질문 수준', helpKey: 'prompt_level' },
+  { key: 'critical_use', title: '비판적 사용', helpKey: 'critical_use' },
+];
 
-  const pieData = hasData
-    ? [
-        { label: '비판적 사용', value: avgCritical, color: '#7B1FA2' },
-        { label: '기타', value: avgOther, color: '#BDBDBD' },
-      ]
-    : [];
+function ChartCell({ def, chart }) {
+  const hasData = (chart?.student_count ?? 0) > 0 && (chart?.items?.length ?? 0) > 0;
+  if (!hasData) {
+    return (
+      <View style={s.pieCell}>
+        <Text style={s.emptyChartTitle}>{def.title}</Text>
+        <View style={s.emptyChartBox}>
+          <Text style={s.emptyChartText}>데이터 없음</Text>
+        </View>
+      </View>
+    );
+  }
+  return (
+    <View style={s.pieCell}>
+      <PieChart
+        title={`${def.title} 평균`}
+        totalCaption={`${chart.student_count}명`}
+        data={chart.items}
+        size={88}
+        helpKey={def.helpKey}
+        hideLegendCount
+      />
+    </View>
+  );
+}
+
+export default function ClassCriticalUseModal({ visible, onClose, summary }) {
+  const { height: winH } = useWindowDimensions();
+  const charts = summary?.class_chart_averages ?? {};
+  const hasAny = CHART_DEFS.some((def) => {
+    const c = charts[def.key];
+    return (c?.student_count ?? 0) > 0 && (c?.items?.length ?? 0) > 0;
+  });
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={s.overlay}>
         <Pressable style={s.backdrop} onPress={onClose} accessibilityLabel="닫기" />
-        <View style={s.box}>
-          <Text style={s.title}>반 비판적 사용</Text>
+        <View style={[s.box, { maxHeight: Math.floor(winH * 0.88) }]}>
+          <Text style={s.title}>반 AI 분석 통계</Text>
           <Text style={s.sub}>
-            {hasData
-              ? `AI 질문이 있는 학생 ${studentCount}명의 비율 평균`
-              : '아직 AI 질문 데이터가 없습니다.'}
+            {hasAny
+              ? '학생별 비율의 평균'
+              : '아직 분석할 데이터가 없습니다.'}
           </Text>
-          {hasData && (
-            <PieChart
-              title="비판적 사용 평균"
-              totalCaption={`${studentCount}명`}
-              data={pieData}
-              size={130}
-              hideLegendCount
-            />
-          )}
+          <ScrollView
+            style={s.scroll}
+            contentContainerStyle={s.scrollContent}
+            showsVerticalScrollIndicator
+            nestedScrollEnabled
+          >
+            <View style={s.pieGrid}>
+              {CHART_DEFS.map((def) => (
+                <ChartCell key={def.key} def={def} chart={charts[def.key]} />
+              ))}
+            </View>
+          </ScrollView>
           <Pressable
             style={({ pressed }) => [s.closeBtn, pressed && { opacity: 0.7 }]}
             onPress={onClose}
@@ -52,16 +85,15 @@ export default function ClassCriticalUseModal({ visible, onClose, summary }) {
 }
 
 const s = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,27,45,0.4)' },
   box: {
-    width: 340,
+    width: 360,
     maxWidth: '100%',
-    padding: 24,
+    padding: 20,
     borderRadius: 16,
     backgroundColor: C.background,
     zIndex: 1,
-    gap: 8,
     elevation: 12,
     shadowColor: C.dark,
     shadowOffset: { width: 0, height: 8 },
@@ -75,10 +107,30 @@ const s = StyleSheet.create({
     color: C.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
-    marginBottom: 4,
+    marginBottom: 8,
   },
+  scroll: { flexGrow: 0, flexShrink: 1 },
+  scrollContent: { paddingBottom: 4 },
+  pieGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  pieCell: { width: '47%', flexGrow: 0, flexShrink: 0 },
+  emptyChartTitle: {
+    fontFamily: F.sansMedium,
+    fontSize: 12,
+    color: C.textSecondary,
+    marginBottom: 6,
+  },
+  emptyChartBox: {
+    height: 120,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyChartText: { fontFamily: F.sans, fontSize: 12, color: C.textFaint },
   closeBtn: {
-    marginTop: 8,
+    marginTop: 12,
     alignItems: 'center',
     padding: 12,
     backgroundColor: C.card,

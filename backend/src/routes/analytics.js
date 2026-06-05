@@ -5,6 +5,7 @@ const { authenticateToken, requireTeacher } = require('../middleware/auth');
 const { normalizeStage } = require('../stageNormalize');
 const { buildComprehensiveReport } = require('../studentReportBuilder');
 const { enrichAiLogsWithCriticalUseFromDb } = require('../services/criticalUseAnalysis');
+const { computeClassChartAverages } = require('../services/classChartAverages');
 const { toComplianceDto } = require('../services/rubricComplianceService');
 const {
   enrichAiLogsPromptFieldsFromDb,
@@ -347,6 +348,7 @@ router.get('/assessment/:id', authenticateToken, requireTeacher, async (req, res
     if (pIds.length > 0) {
       [allAiLogs] = await pool.query(
         `SELECT id, participation_id, prompt, logged_at, step_id, response, complete_at,
+                prompt_type, prompt_level,
                 critical_label, critical_label_name, critical_confidence,
                 related_url_log_id, relevance_score
          FROM log_db.ai_logs WHERE participation_id IN (?)`,
@@ -381,25 +383,28 @@ router.get('/assessment/:id', authenticateToken, requireTeacher, async (req, res
     // exit_attempts는 participations 컬럼에서 직접 읽음
     const totalExitAttempts = participations.reduce((sum, p) => sum + (p.exit_attempts || 0), 0);
 
-    // 반 비판적 사용 — 학생별 비율의 산술 평균 (AI 질문 있는 학생만)
-    const studentCriticalPercents = [];
-    for (const p of participations) {
-      const aiLogs = aiByP[p.id] || [];
-      const urlLogs = urlByP[p.id] || [];
-      const { criticalUseSummary } = enrichAiLogsWithCriticalUseFromDb(aiLogs, urlLogs);
-      if (criticalUseSummary.total_prompts <= 0) continue;
-      studentCriticalPercents.push(
-        Math.round(
-          (criticalUseSummary.critical_count / criticalUseSummary.total_prompts) * 100
-        )
+    const simByP = {};
+    if (pIds.length > 0) {
+      const [simRows] = await pool.query(
+        `SELECT sub.participation_id, ss.originality
+         FROM log_db.submissions_step ss
+         JOIN log_db.submissions sub ON ss.submission_id = sub.id
+         WHERE sub.participation_id IN (?)
+           AND ss.originality IS NOT NULL`,
+        [pIds]
       );
+      simRows.forEach((row) => {
+        if (!simByP[row.participation_id]) simByP[row.participation_id] = [];
+        simByP[row.participation_id].push(row);
+      });
     }
-    const criticalUseAvgPercent = studentCriticalPercents.length > 0
-      ? Math.round(
-          studentCriticalPercents.reduce((sum, pct) => sum + pct, 0)
-            / studentCriticalPercents.length
-        )
-      : null;
+
+    const classChartAverages = computeClassChartAverages(
+      participations,
+      aiByP,
+      urlByP,
+      simByP
+    );
 
     const studentsData = participations.map(p => {
       const aiLogs  = aiByP[p.id]  || [];
@@ -440,11 +445,7 @@ router.get('/assessment/:id', authenticateToken, requireTeacher, async (req, res
         total_duration_seconds: 0,
         total_exit_attempts: totalExitAttempts,
         tools_used: summaryTools,
-        critical_use_avg_percent: criticalUseAvgPercent,
-        critical_use_other_avg_percent: criticalUseAvgPercent != null
-          ? 100 - criticalUseAvgPercent
-          : null,
-        critical_use_students_with_prompts: studentCriticalPercents.length,
+        class_chart_averages: classChartAverages,
       },
       students: studentsData,
     });
