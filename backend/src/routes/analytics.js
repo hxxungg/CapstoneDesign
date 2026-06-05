@@ -547,7 +547,7 @@ router.get('/participation/:id', authenticateToken, async (req, res) => {
     let unlockByStepId = {};
     try {
       const [unlockRows] = await pool.query(
-        `SELECT sub.step_id, sub.content_at_unlock, sub.browser_unlocked_at
+        `SELECT sub.step_id, sub.content, sub.content_at_unlock, sub.browser_unlocked_at
          FROM log_db.submissions sub
          WHERE sub.participation_id = ?
            AND sub.id = (
@@ -562,6 +562,7 @@ router.get('/participation/:id', authenticateToken, async (req, res) => {
         unlockRows.map((r) => [
           Number(r.step_id),
           {
+            submission_content: r.content ?? null,
             content_at_unlock: r.content_at_unlock ?? null,
             browser_unlocked_at: r.browser_unlocked_at ?? null,
           },
@@ -658,6 +659,7 @@ router.get('/participation/:id', authenticateToken, async (req, res) => {
         step_title:     step.title,
         step_order:     step.step_order,
         ai_permission:  step.ai_permission,
+        submission_content: unlockMeta?.submission_content ?? null,
         content_at_unlock: unlockMeta?.content_at_unlock ?? null,
         browser_unlocked_at: unlockMeta?.browser_unlocked_at ?? null,
         url_count:      stepUrlLogs.length,

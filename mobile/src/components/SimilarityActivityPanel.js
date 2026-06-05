@@ -82,56 +82,66 @@ export function buildStepDisplayList(byStep, simByStep, { includeStepOrderInTitl
     }));
 }
 
+function normalizeUnlockText(text) {
+  return (text ?? '').replace(/\s+/g, ' ').trim();
+}
+
 /** 조건부 AI — 웹뷰 해제 시점(content_at_unlock) 기준으로 문장 목록 분리 */
 export function partitionSentencesByUnlock(sentences, contentAtUnlock) {
   if (!contentAtUnlock?.trim() || !sentences?.length) {
     return { before: sentences ?? [], after: [], showDivider: false };
   }
 
-  const unlockRaw = contentAtUnlock.trim();
-  const joined = sentences
-    .map((s) => (s.sentence ?? '').trim())
-    .filter(Boolean)
-    .join(' ');
+  const unlockRaw = normalizeUnlockText(contentAtUnlock);
+  const joined = normalizeUnlockText(
+    sentences
+      .map((s) => (s.sentence ?? '').trim())
+      .filter(Boolean)
+      .join(' ')
+  );
 
-  if (joined.startsWith(unlockRaw)) {
-    let pos = 0;
-    let splitAt = 0;
-    for (let i = 0; i < sentences.length; i += 1) {
-      const chunk = (sentences[i].sentence ?? '').trim();
-      if (!chunk) continue;
-      const sep = pos > 0 ? ' ' : '';
-      pos += sep.length + chunk.length;
-      splitAt = i + 1;
-      if (pos >= unlockRaw.length) break;
-    }
-    const after = sentences.slice(splitAt);
-    return {
-      before: sentences.slice(0, splitAt),
-      after,
-      showDivider: after.length > 0,
-    };
+  if (!joined || joined.length <= unlockRaw.length) {
+    return { before: sentences, after: [], showDivider: false };
   }
 
-  const targetLen = unlockRaw.length;
-  let built = '';
-  let splitAt = sentences.length;
+  if (!joined.toLowerCase().startsWith(unlockRaw.toLowerCase())) {
+    return { before: sentences, after: [], showDivider: false };
+  }
+
+  const splitAt = unlockRaw.length;
+  const beforeText = joined.slice(0, splitAt).trimEnd();
+  const afterText = joined.slice(splitAt).trimStart();
+  if (!afterText) {
+    return { before: sentences, after: [], showDivider: false };
+  }
+
+  // 문장 단위로 나뉜 경우 — 형광펜(유사도) 메타 유지
+  let pos = 0;
+  let boundarySplit = 0;
   for (let i = 0; i < sentences.length; i += 1) {
     const chunk = (sentences[i].sentence ?? '').trim();
     if (!chunk) continue;
-    const sep = built ? ' ' : '';
-    const nextLen = built.length + sep.length + chunk.length;
-    if (built.length < targetLen && nextLen >= targetLen) {
-      splitAt = i + 1;
-      break;
-    }
-    built += sep + chunk;
+    const sep = pos > 0 ? ' ' : '';
+    pos += sep.length + chunk.length;
+    boundarySplit = i + 1;
+    if (pos >= splitAt) break;
   }
-  const after = sentences.slice(splitAt);
+
+  const boundaryAfter = sentences.slice(boundarySplit);
+  if (boundaryAfter.length > 0) {
+    return {
+      before: sentences.slice(0, boundarySplit),
+      after: boundaryAfter,
+      showDivider: true,
+    };
+  }
+
+  // 한 문장으로 합쳐진 경우(예: "Test. Test.") — 텍스트 중간에서 분리
+  const template = sentences.find((s) => (s.sentence ?? '').trim()) ?? sentences[0];
   return {
-    before: sentences.slice(0, splitAt),
-    after,
-    showDivider: after.length > 0,
+    before: [{ ...template, sentence: beforeText }],
+    after: [{ ...template, sentence: afterText }],
+    showDivider: true,
   };
 }
 
@@ -552,7 +562,7 @@ function StepSentencesBlock({
   aiPermission = null,
 }) {
   const isConditional = aiPermission === 'conditional';
-  const { before, after, showDivider } = isConditional && contentAtUnlock
+  const { before, after, showDivider } = isConditional && contentAtUnlock?.trim()
     ? partitionSentencesByUnlock(sentences, contentAtUnlock)
     : { before: sentences, after: [], showDivider: false };
 
