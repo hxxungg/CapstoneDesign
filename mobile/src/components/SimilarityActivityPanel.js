@@ -78,6 +78,7 @@ export function buildStepDisplayList(byStep, simByStep, { includeStepOrderInTitl
       compliance: s.compliance ?? null,
       contentAtUnlock: s.content_at_unlock ?? null,
       browserUnlockedAt: s.browser_unlocked_at ?? null,
+      submissionContent: s.submission_content ?? null,
       aiPermission: s.ai_permission ?? null,
     }));
 }
@@ -86,29 +87,55 @@ function normalizeUnlockText(text) {
   return (text ?? '').replace(/\s+/g, ' ').trim();
 }
 
+function stripTrailingPunct(text) {
+  return (text ?? '').replace(/[.!?…]+$/u, '').trimEnd();
+}
+
+/** content_at_unlock이 제출 본문·유사도 문장 어디에 해당하는지 (문장 부호 차이 허용) */
+function findUnlockSplitIndex(joined, unlockRaw) {
+  const j = normalizeUnlockText(joined);
+  const u = normalizeUnlockText(unlockRaw);
+  if (!j || !u || j.length <= u.length) return -1;
+
+  const jLow = j.toLowerCase();
+  const uLow = u.toLowerCase();
+
+  if (jLow.startsWith(uLow)) {
+    return u.length;
+  }
+
+  const uCore = stripTrailingPunct(u);
+  if (!uCore || !jLow.startsWith(uCore.toLowerCase())) return -1;
+
+  let splitAt = uCore.length;
+  const tail = j.slice(uCore.length);
+  const punctGap = tail.match(/^[.!?…]*\s*/u);
+  if (punctGap) splitAt += punctGap[0].length;
+
+  return splitAt < j.length ? splitAt : -1;
+}
+
 /** 조건부 AI — 웹뷰 해제 시점(content_at_unlock) 기준으로 문장 목록 분리 */
-export function partitionSentencesByUnlock(sentences, contentAtUnlock) {
+export function partitionSentencesByUnlock(sentences, contentAtUnlock, submissionContent = null) {
   if (!contentAtUnlock?.trim() || !sentences?.length) {
     return { before: sentences ?? [], after: [], showDivider: false };
   }
 
   const unlockRaw = normalizeUnlockText(contentAtUnlock);
-  const joined = normalizeUnlockText(
+  const joinedFromSentences = normalizeUnlockText(
     sentences
       .map((s) => (s.sentence ?? '').trim())
       .filter(Boolean)
       .join(' ')
   );
+  const joinedFromSubmission = normalizeUnlockText(submissionContent);
+  const joined = joinedFromSubmission || joinedFromSentences;
 
-  if (!joined || joined.length <= unlockRaw.length) {
+  const splitAt = findUnlockSplitIndex(joined, unlockRaw);
+  if (splitAt < 0) {
     return { before: sentences, after: [], showDivider: false };
   }
 
-  if (!joined.toLowerCase().startsWith(unlockRaw.toLowerCase())) {
-    return { before: sentences, after: [], showDivider: false };
-  }
-
-  const splitAt = unlockRaw.length;
   const beforeText = joined.slice(0, splitAt).trimEnd();
   const afterText = joined.slice(splitAt).trimStart();
   if (!afterText) {
@@ -559,11 +586,13 @@ function StepSentencesBlock({
   selectedSegmentKey = null,
   contentAtUnlock = null,
   browserUnlockedAt = null,
+  submissionContent = null,
   aiPermission = null,
 }) {
   const isConditional = aiPermission === 'conditional';
-  const { before, after, showDivider } = isConditional && contentAtUnlock?.trim()
-    ? partitionSentencesByUnlock(sentences, contentAtUnlock)
+  const hasUnlockSnapshot = !!contentAtUnlock?.trim();
+  const { before, after, showDivider } = hasUnlockSnapshot
+    ? partitionSentencesByUnlock(sentences, contentAtUnlock, submissionContent)
     : { before: sentences, after: [], showDivider: false };
 
   return (
@@ -578,7 +607,7 @@ function StepSentencesBlock({
         <Text style={styles.sentenceEmpty}>제출된 내용이 없습니다.</Text>
       ) : (
         <View>
-          {isConditional && showDivider && (
+          {hasUnlockSnapshot && showDivider && (
             <Text style={styles.unlockSectionLabel}>웹뷰 열기 전 (독립 사고)</Text>
           )}
           <Text style={styles.paragraphWrap}>
@@ -767,6 +796,7 @@ export const SimilarityActivitySplitPanel = forwardRef(function SimilarityActivi
         compliance,
         contentAtUnlock,
         browserUnlockedAt,
+        submissionContent,
         aiPermission,
       }, idx) => (
         <View key={stepIdKey}>
@@ -781,6 +811,7 @@ export const SimilarityActivitySplitPanel = forwardRef(function SimilarityActivi
             selectedSegmentKey={selectedSegmentKey}
             contentAtUnlock={contentAtUnlock}
             browserUnlockedAt={browserUnlockedAt}
+            submissionContent={submissionContent}
             aiPermission={aiPermission}
           />
         </View>
