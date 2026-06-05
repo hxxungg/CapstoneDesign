@@ -58,15 +58,10 @@ async function main() {
      WHERE assessment_id = ? ORDER BY step_order`,
     [parts[0].assessment_id]
   );
-  const [[assessment]] = await pool.query(
-    `SELECT rubric_json FROM teacher_db.assessments WHERE id = ?`,
-    [parts[0].assessment_id]
-  );
-
   const sub = submissions[0];
   const promptLog = aiLogs.find((l) => l.prompt?.trim());
   const samplePrompt = promptLog?.prompt?.trim() || '인공지능의 윤리적 사용에 대해 설명해줘';
-  const stepPlan = buildStepScoringPlan(steps, assessment?.rubric_json ?? null);
+  const stepPlan = buildStepScoringPlan(steps);
   const firstPlan = stepPlan?.[0];
   const criteria = firstPlan?.criteria ?? ['수행 기준을 충족했는지 평가합니다.'];
 

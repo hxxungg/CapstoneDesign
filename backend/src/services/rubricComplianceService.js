@@ -7,11 +7,6 @@ const { callScoreStep } = require('./stepComplianceScoring');
 
 /** DB에 없는 단계만 모델 호출 → 메모리 결과 반환 (DB 미기록) */
 async function computeMissingComplianceScores(participationId, assessmentId, existingRows = []) {
-  const [[assessment]] = await pool.query(
-    'SELECT rubric_json FROM teacher_db.assessments WHERE id = ?',
-    [assessmentId]
-  );
-
   const [steps] = await pool.query(
     `SELECT id, step_order, title, description
      FROM teacher_db.assessment_steps
@@ -20,7 +15,7 @@ async function computeMissingComplianceScores(participationId, assessmentId, exi
     [assessmentId]
   );
 
-  const stepInstructions = buildStepScoringPlan(steps, assessment?.rubric_json ?? null);
+  const stepInstructions = buildStepScoringPlan(steps);
   if (!stepInstructions) return [];
 
   const stepByOrder = Object.fromEntries(steps.map((s) => [s.step_order, s]));

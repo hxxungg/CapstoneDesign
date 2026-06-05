@@ -1,7 +1,6 @@
 /**
- * rubric_json + assessment_steps → 단계별 instruction 변환 및 이행 판정
- * - 모든 수행 단계마다 채점 (단계 수 ≠ 루브릭 블록 수여도 실행)
- * - instruction = (매핑된 rubric block) + 단계 제목/설명 + (필요 시) rubric 공통 맥락
+ * assessment_steps → 단계별 /score-step criteria 및 이행 판정
+ * - criteria = 각 단계의 description 만 사용 (rubric_json 미사용)
  * - 이행: /score-step 응답의 met (또는 score >= threshold, 기본 3)
  */
 
@@ -137,63 +136,33 @@ function buildInstructionForStep(step, rubric, stepOrder, stepCount) {
   return parts.join('\n\n');
 }
 
-/** 단계별 /score-step criteria 배열 */
-function buildCriteriaForStep(step, rubric, stepOrder, stepCount) {
-  const criteria = [];
-  const blockCount = Array.isArray(rubric?.blocks) ? rubric.blocks.length : 0;
-  const blockIndex = mapStepToBlockIndex(stepOrder, stepCount, blockCount);
-
-  if (blockIndex >= 0 && rubric?.blocks?.[blockIndex]) {
-    const block = rubric.blocks[blockIndex];
-    const element = (block.element || '').trim();
-    const topLevel = pickTopLevelRow(block);
-    if (element) criteria.push(element);
-    if (topLevel && topLevel !== element) criteria.push(topLevel);
-  }
-
-  const stepTitle = (step?.title || '').trim();
+/** 단계별 /score-step criteria 배열 (description 1개) */
+function buildCriteriaForStep(step) {
   const stepDesc = (step?.description || '').trim();
-  if (stepTitle || stepDesc) {
-    criteria.push([stepTitle, stepDesc].filter(Boolean).join(' — '));
-  }
-
-  if (criteria.length === 0) {
-    criteria.push(...buildRubricContextLines(rubric));
-  }
-  if (criteria.length === 0) {
-    criteria.push(`${stepTitle || `${stepOrder}단계`}의 수행 기준을 충족했는지 평가합니다.`);
-  }
-
-  return [...new Set(criteria.map((c) => c.trim()).filter(Boolean))];
+  return stepDesc ? [stepDesc] : [];
 }
 
 /**
  * @param {Array<{ id?: number, step_order: number, title?: string, description?: string }>} steps
- * @param {object|string|null} rubricRaw
- * @returns {Array<{ stepOrder: number, stepId?: number, blockIndex: number, criteria: string[], instruction: string }>|null}
+ * @returns {Array<{ stepOrder: number, stepId?: number, criteria: string[], instruction: string }>|null}
  */
-function buildStepScoringPlan(steps, rubricRaw) {
+function buildStepScoringPlan(steps) {
   if (!Array.isArray(steps) || steps.length === 0) return null;
 
-  const rubric = parseRubric(rubricRaw);
-  const stepCount = steps.length;
   const out = [];
 
   for (const step of steps) {
     const stepOrder = Number(step?.step_order);
     if (!Number.isFinite(stepOrder) || stepOrder <= 0) continue;
 
-    const blockCount = Array.isArray(rubric?.blocks) ? rubric.blocks.length : 0;
-    const blockIndex = mapStepToBlockIndex(stepOrder, stepCount, blockCount);
-    const criteria = buildCriteriaForStep(step, rubric, stepOrder, stepCount);
+    const criteria = buildCriteriaForStep(step);
     if (!criteria.length) continue;
 
     out.push({
       stepOrder,
       stepId: step.id,
-      blockIndex,
       criteria,
-      instruction: criteria.join('\n\n'),
+      instruction: criteria[0],
     });
   }
 
@@ -233,16 +202,13 @@ function aggregateStepScoreResults(results, threshold = STEP_SCORE_THRESHOLD) {
 }
 
 /** @deprecated buildStepScoringPlan 사용 */
-function buildStepInstructions(rubricRaw, stepCount) {
-  const rubric = parseRubric(rubricRaw);
-  if (!rubric || !Array.isArray(rubric.blocks)) return null;
-
+function buildStepInstructions(_rubricRaw, stepCount) {
   const steps = Array.from({ length: stepCount }, (_, i) => ({
     step_order: i + 1,
     title: '',
     description: '',
   }));
-  return buildStepScoringPlan(steps, rubric);
+  return buildStepScoringPlan(steps);
 }
 
 function isCriteriaMet(scoreClassification, threshold = STEP_SCORE_THRESHOLD) {

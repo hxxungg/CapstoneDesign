@@ -16,11 +16,6 @@ async function runRubricScoring(participationId, assessmentId) {
   const t0 = Date.now();
   console.log(`[루브릭채점] 시작 — participation=${participationId} assessment=${assessmentId}`);
 
-  const [[assessment]] = await pool.query(
-    'SELECT rubric_json FROM teacher_db.assessments WHERE id = ?',
-    [assessmentId]
-  );
-
   const [steps] = await pool.query(
     `SELECT id, step_order, title, description
      FROM teacher_db.assessment_steps
@@ -28,7 +23,7 @@ async function runRubricScoring(participationId, assessmentId) {
      ORDER BY step_order ASC`,
     [assessmentId]
   );
-  const stepInstructions = buildStepScoringPlan(steps, assessment?.rubric_json ?? null);
+  const stepInstructions = buildStepScoringPlan(steps);
   if (!stepInstructions) {
     console.log(`[루브릭채점] 채점 가능한 단계 없음 — participation=${participationId}`);
     return;

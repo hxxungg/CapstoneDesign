@@ -716,7 +716,7 @@ export default function CreateAssignmentScreen({ navigation, route }) {
                 }
               </Pressable>
             </View>
-          </View>
+        </View>
 
           {/* ── 기본 정보 ─────────────────────────────── */}
           <View style={s.section}>
@@ -733,7 +733,7 @@ export default function CreateAssignmentScreen({ navigation, route }) {
                   value={title}
                   onChangeText={setTitle}
                 />
-              </View>
+                </View>
               <View style={s.field}>
                 <Text style={s.label}>과목</Text>
                 <TextInput
@@ -744,13 +744,13 @@ export default function CreateAssignmentScreen({ navigation, route }) {
                   onChangeText={setSubject}
                 />
               </View>
-            </View>
+              </View>
 
             {/* 대상 반 | 마감 */}
             <View style={s.row2}>
               <View style={s.field}>
                 <Text style={s.label}>대상 반</Text>
-                <TextInput
+              <TextInput
                   style={s.input}
                   placeholder="2-4"
                   placeholderTextColor={C.textFaint}
@@ -848,7 +848,7 @@ export default function CreateAssignmentScreen({ navigation, route }) {
             </View>
             <Text style={s.sectionDesc}>
               학생이 거칠 사고의 단계를 직접 디자인합니다. 각 단계마다 AI 사용 가능 여부를 정할 수 있습니다.
-            </Text>
+                    </Text>
 
             <View style={{ gap: 10 }}>
             {stages.map((stage, idx) => {
@@ -914,7 +914,7 @@ export default function CreateAssignmentScreen({ navigation, route }) {
               <Ionicons name="add" size={14} color={C.textSoft} />
               <Text style={s.addBtnText}>단계 추가</Text>
             </Pressable>
-          </View>
+              </View>
 
           <View style={{ height: 48 }} />
         </ScrollView>
@@ -929,7 +929,7 @@ export default function CreateAssignmentScreen({ navigation, route }) {
                 <Text style={se.title}>수행평가가 수정되었습니다.</Text>
                 <Text style={[se.label, { marginTop: 0, fontSize: 14, lineHeight: 22, color: C.textSoft }]}>
                   변경 사항이 저장되었습니다.
-                </Text>
+              </Text>
               </>
             ) : (
               <>
@@ -951,8 +951,8 @@ export default function CreateAssignmentScreen({ navigation, route }) {
                     {createdCode}
                   </Text>
                 </View>
-              </>
-            )}
+                </>
+              )}
 
             <View style={se.btnRow}>
               <Pressable
