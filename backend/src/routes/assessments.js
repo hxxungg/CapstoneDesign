@@ -353,6 +353,14 @@ function toFrontendAiMode(aiPermission) {
   return aiPermission;
 }
 
+/** ISO 8601 등 → MySQL DATETIME ('YYYY-MM-DD HH:MM:SS') */
+function toMysqlDatetime(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 19).replace('T', ' ');
+}
+
 // 교사 본인의 class invite_code 조회 (학생 회원가입용)
 router.get('/invite-codes', authenticateToken, requireTeacher, async (req, res) => {
   try {
@@ -903,7 +911,9 @@ router.post('/participation/:participationId/submit', authenticateToken, async (
           ? content_at_unlock.trim()
           : null;
       const unlockedAt =
-        unlockContent && browser_unlocked_at ? browser_unlocked_at : null;
+        unlockContent && browser_unlocked_at
+          ? toMysqlDatetime(browser_unlocked_at)
+          : null;
 
       let subResult;
       try {
