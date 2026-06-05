@@ -7,6 +7,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { pool } = require('../src/database');
+const { buildStepScoringPlan } = require('../src/utils/rubricScoring');
 
 const STUDENT_NAME = process.argv[2] || '하승연_학생test';
 const OUT = path.join(__dirname, 'ha-seungyeon-model-payloads.json');
@@ -65,8 +66,9 @@ async function main() {
   const sub = submissions[0];
   const promptLog = aiLogs.find((l) => l.prompt?.trim());
   const samplePrompt = promptLog?.prompt?.trim() || '인공지능의 윤리적 사용에 대해 설명해줘';
-  const step = steps[0];
-  let instruction = [step?.title, step?.description].filter(Boolean).join('\n');
+  const stepPlan = buildStepScoringPlan(steps, assessment?.rubric_json ?? null);
+  const firstPlan = stepPlan?.[0];
+  const criteria = firstPlan?.criteria ?? ['수행 기준을 충족했는지 평가합니다.'];
 
   const out = {
     student,
@@ -92,11 +94,15 @@ async function main() {
       },
       analyze_prompt_type: { method: 'POST', path: '/analyze-prompt-type', body: { prompt: samplePrompt } },
       analyze_prompt_level: { method: 'POST', path: '/analyze-prompt-level', body: { prompt: samplePrompt } },
-      score_rubric: {
+      score_step: {
         method: 'POST',
-        path: '/score-rubric',
+        path: '/score-step',
         body: sub
-          ? { instruction: instruction.trim(), student_text: sub.content.trim() }
+          ? {
+              submission: sub.content.trim(),
+              criteria,
+              threshold: 3,
+            }
           : null,
       },
       analyze_critical_use: {

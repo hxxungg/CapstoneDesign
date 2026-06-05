@@ -4,12 +4,11 @@
  */
 require('dotenv').config();
 const { pool } = require('../src/database');
+const { buildStepScoringPlan } = require('../src/utils/rubricScoring');
 const {
-  buildStepScoringPlan,
-  isCriteriaMet,
-} = require('../src/utils/rubricScoring');
-
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://101.79.18.104:8001';
+  callScoreStep,
+  saveStepComplianceScore,
+} = require('../src/services/stepComplianceScoring');
 const participationId = parseInt(process.argv[2], 10);
 
 async function runRubricScoring(participationId, assessmentId) {
@@ -58,70 +57,25 @@ async function runRubricScoring(participationId, assessmentId) {
       continue;
     }
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 120000);
     try {
-      const res = await fetch(`${AI_SERVICE_URL}/score-rubric`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          instruction: item.instruction,
-          student_text: submission.content.trim(),
-        }),
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
-
-      if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        console.error(
-          `[루브릭채점] AI 오류 step_order=${item.stepOrder} status=${res.status} ${errText.slice(0, 200)}`
-        );
+      const aggregated = await callScoreStep(submission.content.trim(), item.criteria);
+      if (!aggregated) {
+        console.error(`[단계이행채점] AI 오류 step_order=${item.stepOrder} — /score-step 응답 없음`);
         continue;
       }
 
-      const result = await res.json();
-      const criteriaMet = isCriteriaMet(result.score_classification);
-
-      await pool.query(
-        `INSERT INTO log_db.step_compliance_scores
-           (participation_id, step_id, submission_id, instruction,
-            score_regression, score_classification, confidence, class_probs,
-            criteria_met, model_version)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE
-           submission_id = VALUES(submission_id),
-           instruction = VALUES(instruction),
-           score_regression = VALUES(score_regression),
-           score_classification = VALUES(score_classification),
-           confidence = VALUES(confidence),
-           class_probs = VALUES(class_probs),
-           criteria_met = VALUES(criteria_met),
-           model_version = VALUES(model_version),
-           scored_at = CURRENT_TIMESTAMP`,
-        [
-          participationId,
-          step.id,
-          submission.submissionId,
-          item.instruction,
-          result.score_regression ?? null,
-          result.score_classification ?? null,
-          result.confidence ?? null,
-          result.class_probs ? JSON.stringify(result.class_probs) : null,
-          criteriaMet ? 1 : 0,
-          'essay_rubric_scorer_v1',
-        ]
-      );
+      await saveStepComplianceScore({
+        participationId,
+        stepId: step.id,
+        submissionId: submission.submissionId,
+        criteria: item.criteria,
+        aggregated,
+      });
       console.log(
-        `[루브릭채점] 저장 step_order=${item.stepOrder} class=${result.score_classification} met=${criteriaMet}`
+        `[단계이행채점] 저장 step_order=${item.stepOrder} score=${aggregated.scoreClassification} met=${aggregated.criteriaMet}`
       );
     } catch (err) {
-      clearTimeout(timer);
-      if (err.name === 'AbortError' || err.message?.includes('aborted')) {
-        console.error(`[루브릭채점] 타임아웃 step_order=${item.stepOrder}`);
-      } else {
-        console.error(`[루브릭채점] 오류 step_order=${item.stepOrder}`, err.message);
-      }
+      console.error(`[단계이행채점] 오류 step_order=${item.stepOrder}`, err.message);
     }
   }
 

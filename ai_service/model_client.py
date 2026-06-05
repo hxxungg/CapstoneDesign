@@ -150,6 +150,21 @@ def classify_prompt_level(prompt: str) -> dict:
     }
 
 
+def score_step(submission: str, criteria: list[str], threshold: int = 3) -> list[dict]:
+    """POST /score-step — [{criterion, met, score}, ...]"""
+    data = _post(
+        "/score-step",
+        {
+            "submission": submission,
+            "criteria": criteria,
+            "threshold": threshold,
+        },
+    )
+    if not isinstance(data, list):
+        raise ModelAPIError(f"/score-step 응답이 list가 아님: {type(data)!r}")
+    return data
+
+
 def score_rubric(instruction: str, student_text: str) -> dict:
     """POST /score-rubric — {score_regression, score_classification, confidence, class_probs}"""
     data = _post(

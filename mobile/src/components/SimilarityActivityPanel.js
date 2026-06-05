@@ -194,11 +194,21 @@ function renderSentenceSegments({
   onJumpToAiLog,
   selectedSegmentKey,
   keyPrefix = '',
+  linkZone = 'all',
+  byStep = [],
+  aiLogs = [],
+  browserUnlockedAt = null,
 }) {
   return sentences.flatMap((r, ri) => {
     const bg = ORIGINALITY_COLOR[r.originality] ?? null;
     const text = formatSentenceForDisplay(r.sentence);
-    const canOpenLink = r.ai_log_id != null;
+    const canOpenLink = canOpenAiLogLink(r.ai_log_id, {
+      linkZone,
+      stepIdKey,
+      byStep,
+      aiLogs,
+      browserUnlockedAt,
+    });
     const segmentKey = `${stepIdKey}-${keyPrefix}${r.segment_order ?? ri}`;
     const isSelected = selectedSegmentKey === segmentKey;
 
@@ -330,6 +340,35 @@ function getStepScopeStepIds(stepId, byStep) {
 export function getAiLogsInStepScope(stepId, byStep, aiLogs) {
   const scopedIds = getStepScopeStepIds(stepId, byStep);
   return (aiLogs || []).filter((l) => scopedIds.has(String(l.step_id)));
+}
+
+/** 형광펜 탭 시 AI 로그로 이동 가능 여부 */
+function canOpenAiLogLink(aiLogId, {
+  linkZone = 'all',
+  stepIdKey,
+  byStep = [],
+  aiLogs = [],
+  browserUnlockedAt = null,
+}) {
+  if (aiLogId == null) return false;
+  if (linkZone !== 'pre-unlock') return true;
+
+  // eslint-disable-next-line eqeqeq
+  const log = (aiLogs || []).find((l) => l.id == aiLogId);
+  if (!log) return false;
+
+  const scopedIds = getStepScopeStepIds(stepIdKey, byStep);
+  if (!scopedIds.has(String(log.step_id))) return false;
+
+  if (browserUnlockedAt && String(log.step_id) === String(stepIdKey)) {
+    const unlockAt = new Date(browserUnlockedAt);
+    const logTime = log.logged_at ? new Date(log.logged_at) : null;
+    if (!isNaN(unlockAt.getTime()) && (!logTime || logTime >= unlockAt)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /** 모달용 — 현재 단계 + 이전 단계 AI·URL 활동 타임라인 */
@@ -588,8 +627,9 @@ function StepSentencesBlock({
   browserUnlockedAt = null,
   submissionContent = null,
   aiPermission = null,
+  byStep = [],
+  aiLogs = [],
 }) {
-  const isConditional = aiPermission === 'conditional';
   const hasUnlockSnapshot = !!contentAtUnlock?.trim();
   const { before, after, showDivider } = hasUnlockSnapshot
     ? partitionSentencesByUnlock(sentences, contentAtUnlock, submissionContent)
@@ -607,9 +647,6 @@ function StepSentencesBlock({
         <Text style={styles.sentenceEmpty}>제출된 내용이 없습니다.</Text>
       ) : (
         <View>
-          {hasUnlockSnapshot && showDivider && (
-            <Text style={styles.unlockSectionLabel}>웹뷰 열기 전 (독립 사고)</Text>
-          )}
           <Text style={styles.paragraphWrap}>
             {renderSentenceSegments({
               sentences: before,
@@ -617,24 +654,29 @@ function StepSentencesBlock({
               onJumpToAiLog,
               selectedSegmentKey,
               keyPrefix: 'pre-',
+              linkZone: showDivider ? 'pre-unlock' : 'all',
+              byStep,
+              aiLogs,
+              browserUnlockedAt,
             })}
           </Text>
           {showDivider ? (
             <>
               <ConditionalUnlockDivider unlockedAt={browserUnlockedAt} />
               {after.length > 0 ? (
-                <>
-                  <Text style={styles.unlockSectionLabel}>웹뷰 열기 후</Text>
-                  <Text style={styles.paragraphWrap}>
-                    {renderSentenceSegments({
-                      sentences: after,
-                      stepIdKey,
-                      onJumpToAiLog,
-                      selectedSegmentKey,
-                      keyPrefix: 'post-',
-                    })}
-                  </Text>
-                </>
+                <Text style={styles.paragraphWrap}>
+                  {renderSentenceSegments({
+                    sentences: after,
+                    stepIdKey,
+                    onJumpToAiLog,
+                    selectedSegmentKey,
+                    keyPrefix: 'post-',
+                    linkZone: 'all',
+                    byStep,
+                    aiLogs,
+                    browserUnlockedAt,
+                  })}
+                </Text>
               ) : null}
             </>
           ) : null}
@@ -813,6 +855,8 @@ export const SimilarityActivitySplitPanel = forwardRef(function SimilarityActivi
             browserUnlockedAt={browserUnlockedAt}
             submissionContent={submissionContent}
             aiPermission={aiPermission}
+            byStep={byStep}
+            aiLogs={aiLogs}
           />
         </View>
       ))
@@ -904,13 +948,6 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: C.border,
     marginVertical: 14,
-  },
-  unlockSectionLabel: {
-    fontFamily: F.sansMedium,
-    fontSize: 10,
-    color: C.textSecondary,
-    marginBottom: 4,
-    letterSpacing: 0.2,
   },
   unlockDividerWrap: {
     flexDirection: 'row',

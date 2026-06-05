@@ -2,8 +2,8 @@
  * 단계별 이행(루브릭) — DB 읽기 + 모델 호출만 (INSERT/UPDATE 없음)
  */
 const { pool } = require('../database');
-const { buildStepScoringPlan, isCriteriaMet } = require('../utils/rubricScoring');
-const { aiPostJson } = require('./aiServiceClient');
+const { buildStepScoringPlan } = require('../utils/rubricScoring');
+const { callScoreStep } = require('./stepComplianceScoring');
 
 /** DB에 없는 단계만 모델 호출 → 메모리 결과 반환 (DB 미기록) */
 async function computeMissingComplianceScores(participationId, assessmentId, existingRows = []) {
@@ -49,26 +49,18 @@ async function computeMissingComplianceScores(participationId, assessmentId, exi
     if (!step || !submission?.content?.trim()) continue;
     if (scoredStepIds.has(Number(step.id))) continue;
 
-    const result = await aiPostJson(
-      '/score-rubric',
-      {
-        instruction: item.instruction,
-        student_text: submission.content.trim(),
-      },
-      120000
-    );
-    if (!result) continue;
+    const aggregated = await callScoreStep(submission.content.trim(), item.criteria);
+    if (!aggregated) continue;
 
-    const criteriaMet = isCriteriaMet(result.score_classification);
     computed.push({
       step_id: step.id,
       step_order: step.step_order,
       step_title: step.title,
       submission_id: submission.submissionId,
-      score_regression: result.score_regression ?? null,
-      score_classification: result.score_classification ?? null,
-      confidence: result.confidence ?? null,
-      criteria_met: criteriaMet ? 1 : 0,
+      score_regression: null,
+      score_classification: aggregated.scoreClassification,
+      confidence: aggregated.confidence,
+      criteria_met: aggregated.criteriaMet ? 1 : 0,
       scored_at: null,
     });
   }

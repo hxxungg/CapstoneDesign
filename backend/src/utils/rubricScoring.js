@@ -2,8 +2,10 @@
  * rubric_json + assessment_steps → 단계별 instruction 변환 및 이행 판정
  * - 모든 수행 단계마다 채점 (단계 수 ≠ 루브릭 블록 수여도 실행)
  * - instruction = (매핑된 rubric block) + 단계 제목/설명 + (필요 시) rubric 공통 맥락
- * - 이행: score_classification >= 3
+ * - 이행: /score-step 응답의 met (또는 score >= threshold, 기본 3)
  */
+
+const STEP_SCORE_THRESHOLD = 3;
 
 function parseRubric(raw) {
   if (raw == null || raw === '') return null;
@@ -135,10 +137,40 @@ function buildInstructionForStep(step, rubric, stepOrder, stepCount) {
   return parts.join('\n\n');
 }
 
+/** 단계별 /score-step criteria 배열 */
+function buildCriteriaForStep(step, rubric, stepOrder, stepCount) {
+  const criteria = [];
+  const blockCount = Array.isArray(rubric?.blocks) ? rubric.blocks.length : 0;
+  const blockIndex = mapStepToBlockIndex(stepOrder, stepCount, blockCount);
+
+  if (blockIndex >= 0 && rubric?.blocks?.[blockIndex]) {
+    const block = rubric.blocks[blockIndex];
+    const element = (block.element || '').trim();
+    const topLevel = pickTopLevelRow(block);
+    if (element) criteria.push(element);
+    if (topLevel && topLevel !== element) criteria.push(topLevel);
+  }
+
+  const stepTitle = (step?.title || '').trim();
+  const stepDesc = (step?.description || '').trim();
+  if (stepTitle || stepDesc) {
+    criteria.push([stepTitle, stepDesc].filter(Boolean).join(' — '));
+  }
+
+  if (criteria.length === 0) {
+    criteria.push(...buildRubricContextLines(rubric));
+  }
+  if (criteria.length === 0) {
+    criteria.push(`${stepTitle || `${stepOrder}단계`}의 수행 기준을 충족했는지 평가합니다.`);
+  }
+
+  return [...new Set(criteria.map((c) => c.trim()).filter(Boolean))];
+}
+
 /**
  * @param {Array<{ id?: number, step_order: number, title?: string, description?: string }>} steps
  * @param {object|string|null} rubricRaw
- * @returns {Array<{ stepOrder: number, stepId?: number, blockIndex: number, instruction: string }>|null}
+ * @returns {Array<{ stepOrder: number, stepId?: number, blockIndex: number, criteria: string[], instruction: string }>|null}
  */
 function buildStepScoringPlan(steps, rubricRaw) {
   if (!Array.isArray(steps) || steps.length === 0) return null;
@@ -153,18 +185,51 @@ function buildStepScoringPlan(steps, rubricRaw) {
 
     const blockCount = Array.isArray(rubric?.blocks) ? rubric.blocks.length : 0;
     const blockIndex = mapStepToBlockIndex(stepOrder, stepCount, blockCount);
-    const instruction = buildInstructionForStep(step, rubric, stepOrder, stepCount);
-    if (!instruction) continue;
+    const criteria = buildCriteriaForStep(step, rubric, stepOrder, stepCount);
+    if (!criteria.length) continue;
 
     out.push({
       stepOrder,
       stepId: step.id,
       blockIndex,
-      instruction,
+      criteria,
+      instruction: criteria.join('\n\n'),
     });
   }
 
   return out.length > 0 ? out : null;
+}
+
+/** /score-step 응답 배열 → 단계 이행 요약 */
+function aggregateStepScoreResults(results, threshold = STEP_SCORE_THRESHOLD) {
+  if (!Array.isArray(results) || results.length === 0) {
+    return {
+      criteriaMet: false,
+      scoreClassification: null,
+      confidence: null,
+      results: [],
+      threshold,
+    };
+  }
+
+  const scores = results
+    .map((r) => Number(r?.score))
+    .filter((n) => Number.isFinite(n));
+
+  const criteriaMet = results.every((r) => r?.met === true);
+  const scoreClassification = scores.length > 0 ? Math.min(...scores) : null;
+  const confidences = results
+    .map((r) => Number(r?.confidence))
+    .filter((n) => Number.isFinite(n));
+  const confidence = confidences.length > 0 ? Math.min(...confidences) : null;
+
+  return {
+    criteriaMet,
+    scoreClassification,
+    confidence,
+    results,
+    threshold,
+  };
 }
 
 /** @deprecated buildStepScoringPlan 사용 */
@@ -180,9 +245,9 @@ function buildStepInstructions(rubricRaw, stepCount) {
   return buildStepScoringPlan(steps, rubric);
 }
 
-function isCriteriaMet(scoreClassification) {
+function isCriteriaMet(scoreClassification, threshold = STEP_SCORE_THRESHOLD) {
   const n = Number(scoreClassification);
-  return Number.isFinite(n) && n >= 3;
+  return Number.isFinite(n) && n >= threshold;
 }
 
 function complianceStatus(scoreClassification) {
@@ -190,12 +255,15 @@ function complianceStatus(scoreClassification) {
 }
 
 module.exports = {
+  STEP_SCORE_THRESHOLD,
   parseRubric,
   buildInstructionFromBlock,
   buildInstructionForStep,
+  buildCriteriaForStep,
   buildStepScoringPlan,
   buildStepInstructions,
   mapStepToBlockIndex,
+  aggregateStepScoreResults,
   isCriteriaMet,
   complianceStatus,
 };

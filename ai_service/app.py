@@ -16,6 +16,7 @@ from model_client import (
     classify_prompt_type,
     match_relevance,
     score_rubric,
+    score_step,
 )
 
 
@@ -114,6 +115,35 @@ def analyze_prompt_level():
     data = request.get_json(force=True)
     prompt = data.get("prompt", "")
     return jsonify(classify_prompt_level(prompt))
+
+
+@app.route("/score-step", methods=["POST"])
+def score_step_route():
+    t0 = time.time()
+    data = request.get_json(force=True)
+    submission = data.get("submission", "")
+    criteria = data.get("criteria", [])
+    threshold = data.get("threshold", 3)
+
+    if not submission or not str(submission).strip():
+        return jsonify({"error": "submission이 필요합니다."}), 400
+    if not isinstance(criteria, list) or len(criteria) == 0:
+        return jsonify({"error": "criteria 배열이 필요합니다."}), 400
+
+    try:
+        result = score_step(
+            str(submission).strip(),
+            [str(c).strip() for c in criteria if str(c).strip()],
+            int(threshold) if threshold is not None else 3,
+        )
+        print(
+            f"[단계이행채점] 완료 {time.time() - t0:.1f}s — {len(result)}개 기준",
+            flush=True,
+        )
+        return jsonify(result)
+    except Exception as e:
+        print(f"[단계이행채점] 오류 — {e}", flush=True)
+        return jsonify({"error": "단계 이행 채점 중 오류가 발생했습니다."}), 500
 
 
 @app.route("/score-rubric", methods=["POST"])

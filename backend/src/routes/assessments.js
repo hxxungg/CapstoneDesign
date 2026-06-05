@@ -5,8 +5,11 @@ const { pool } = require('../database');
 const { authenticateToken, requireTeacher } = require('../middleware/auth');
 const {
   buildStepScoringPlan,
-  isCriteriaMet,
 } = require('../utils/rubricScoring');
+const {
+  callScoreStep,
+  saveStepComplianceScore,
+} = require('../services/stepComplianceScoring');
 const { deleteAssessmentCascade } = require('../services/assessmentCleanup');
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://101.79.18.104:8001';
@@ -205,7 +208,7 @@ let _rubricRunning = false;
 
 function enqueueRubricScoring(participationId, assessmentId) {
   _rubricQueue.push({ participationId, assessmentId });
-  console.log(`[루브릭채점 큐] participation=${participationId} (대기 ${_rubricQueue.length}개)`);
+  console.log(`[단계이행채점 큐] participation=${participationId} (대기 ${_rubricQueue.length}개)`);
   _drainRubricQueue();
 }
 
@@ -222,7 +225,7 @@ function _drainRubricQueue() {
 
 async function runRubricScoring(participationId, assessmentId) {
   const t0 = Date.now();
-  console.log(`[루브릭채점] 시작 — participation=${participationId} assessment=${assessmentId}`);
+  console.log(`[단계이행채점] 시작 — participation=${participationId} assessment=${assessmentId}`);
   try {
     const [[assessment]] = await pool.query(
       'SELECT rubric_json FROM teacher_db.assessments WHERE id = ?',
@@ -239,7 +242,7 @@ async function runRubricScoring(participationId, assessmentId) {
     const stepInstructions = buildStepScoringPlan(steps, assessment?.rubric_json ?? null);
     if (!stepInstructions) {
       console.log(
-        `[루브릭채점] 채점 가능한 단계 없음 — participation=${participationId} 스킵`
+        `[단계이행채점] 채점 가능한 단계 없음 — participation=${participationId} 스킵`
       );
       return;
     }
@@ -265,74 +268,34 @@ async function runRubricScoring(participationId, assessmentId) {
       const step = stepByOrder[item.stepOrder];
       const submission = subByOrder[item.stepOrder];
       if (!step || !submission?.content?.trim()) {
-        console.log(`[루브릭채점] step_order=${item.stepOrder} 제출 없음 — 스킵`);
+        console.log(`[단계이행채점] step_order=${item.stepOrder} 제출 없음 — 스킵`);
         continue;
       }
 
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 120000);
-      const res = await fetch(`${AI_SERVICE_URL}/score-rubric`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          instruction: item.instruction,
-          student_text: submission.content.trim(),
-        }),
-        signal: controller.signal,
+      const aggregated = await callScoreStep(submission.content.trim(), item.criteria);
+      if (!aggregated) {
+        console.error(`[단계이행채점] AI 오류 step_order=${item.stepOrder} — /score-step 응답 없음`);
+        continue;
+      }
+
+      await saveStepComplianceScore({
+        participationId,
+        stepId: step.id,
+        submissionId: submission.submissionId,
+        criteria: item.criteria,
+        aggregated,
       });
-      clearTimeout(timer);
-
-      if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        console.error(
-          `[루브릭채점] AI 오류 step_order=${item.stepOrder} status=${res.status} ${errText.slice(0, 200)}`
-        );
-        continue;
-      }
-
-      const result = await res.json();
-      const criteriaMet = isCriteriaMet(result.score_classification);
-
-      await pool.query(
-        `INSERT INTO log_db.step_compliance_scores
-           (participation_id, step_id, submission_id, instruction,
-            score_regression, score_classification, confidence, class_probs,
-            criteria_met, model_version)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE
-           submission_id = VALUES(submission_id),
-           instruction = VALUES(instruction),
-           score_regression = VALUES(score_regression),
-           score_classification = VALUES(score_classification),
-           confidence = VALUES(confidence),
-           class_probs = VALUES(class_probs),
-           criteria_met = VALUES(criteria_met),
-           model_version = VALUES(model_version),
-           scored_at = CURRENT_TIMESTAMP`,
-        [
-          participationId,
-          step.id,
-          submission.submissionId,
-          item.instruction,
-          result.score_regression ?? null,
-          result.score_classification ?? null,
-          result.confidence ?? null,
-          result.class_probs ? JSON.stringify(result.class_probs) : null,
-          criteriaMet ? 1 : 0,
-          'essay_rubric_scorer_v1',
-        ]
-      );
       console.log(
-        `[루브릭채점] 저장 step_order=${item.stepOrder} class=${result.score_classification} met=${criteriaMet}`
+        `[단계이행채점] 저장 step_order=${item.stepOrder} score=${aggregated.scoreClassification} met=${aggregated.criteriaMet}`
       );
     }
 
-    console.log(`[루브릭채점] 완료 (${((Date.now() - t0) / 1000).toFixed(1)}s) participation=${participationId}`);
+    console.log(`[단계이행채점] 완료 (${((Date.now() - t0) / 1000).toFixed(1)}s) participation=${participationId}`);
   } catch (err) {
     if (err.name === 'AbortError' || err.message?.includes('aborted')) {
-      console.error(`[루브릭채점 타임아웃] participation=${participationId}`);
+      console.error(`[단계이행채점 타임아웃] participation=${participationId}`);
     } else {
-      console.error(`[루브릭채점 오류] participation=${participationId}`, err.message);
+      console.error(`[단계이행채점 오류] participation=${participationId}`, err.message);
     }
   }
 }
@@ -975,9 +938,9 @@ router.post('/participation/:participationId/submit', authenticateToken, async (
           enqueueSimilarityAnalysis(sub.content, sub.submissionId, participationId, sub.step_id);
         }
         enqueueRubricScoring(participationId, participation.assessment_id);
-        console.log(`[분석] 최종제출 동의 — participation=${participationId} 유사도 ${allSubs.length}건 + 루브릭채점 큐 추가`);
+        console.log(`[분석] 최종제출 동의 — participation=${participationId} 유사도 ${allSubs.length}건 + 단계이행채점 큐 추가`);
       } else {
-        console.log(`[분석] 최종제출 미동의 — participation=${participationId} 유사도·루브릭채점 생략`);
+        console.log(`[분석] 최종제출 미동의 — participation=${participationId} 유사도·단계이행채점 생략`);
       }
 
       return res.json({ status: 'submitted', message: '수행평가를 제출했습니다.' });

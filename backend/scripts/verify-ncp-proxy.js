@@ -105,15 +105,16 @@ async function main() {
     return `level=${r.data.level ?? r.data.label}`;
   });
 
-  await check('④ 루브릭 POST /score-rubric', async () => {
-    const r = await request('POST', '/score-rubric', {
-      instruction: '주제를 명확히 서술하고 근거를 제시하세요.',
-      student_text: '인공지능은 데이터를 학습해 결과를 예측하는 기술이다.',
+  await check('④ 단계이행 POST /score-step', async () => {
+    const r = await request('POST', '/score-step', {
+      submission: '인공지능은 데이터를 학습해 결과를 예측하는 기술이다.',
+      criteria: ['주제를 명확히 서술하고 근거를 제시하세요.'],
+      threshold: 3,
     });
-    if (!r.ok || r.data?.score_classification == null) {
+    if (!r.ok || !Array.isArray(r.data) || r.data[0]?.score == null) {
       throw new Error(JSON.stringify(r.data));
     }
-    return `class=${r.data.score_classification}`;
+    return `met=${r.data[0].met} score=${r.data[0].score}`;
   });
 
   await check('⑤ 비판적 사용 POST /analyze-critical-use', async () => {
