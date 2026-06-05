@@ -14,6 +14,35 @@ const ORIGINALITY_COLOR = {
   yellow: '#FFF9C4',
   green: '#E8F5E9',
 };
+
+/** 좌·우 내부 스크롤 터치 시 바깥 ScrollView 잠금 (중첩 스크롤 제스처 분리) */
+function OuterScrollLockZone({ enabled, onLockChange, children }) {
+  const unlock = useCallback(() => onLockChange?.(false), [onLockChange]);
+  const lock = useCallback(() => onLockChange?.(true), [onLockChange]);
+
+  if (!enabled) return children;
+
+  return (
+    <View
+      onStartShouldSetResponderCapture={() => {
+        lock();
+        return false;
+      }}
+      onTouchEnd={unlock}
+      onTouchCancel={unlock}
+    >
+      {children}
+    </View>
+  );
+}
+
+function innerScrollLockProps(onLockChange) {
+  if (!onLockChange) return {};
+  return {
+    onScrollBeginDrag: () => onLockChange(true),
+    onMomentumScrollEnd: () => onLockChange(false),
+  };
+}
 const CRITICAL_USE_COLOR = '#7B1FA2';
 const CRITICAL_USE_BG = '#F3E5F5';
 
@@ -514,17 +543,19 @@ export const SimilarityActivitySplitPanel = forwardRef(function SimilarityActivi
     aiLogs = [],
     byStep = [],
     fillViewport = false,
+    onOuterScrollLock,
   },
   ref
 ) {
   const { height: windowHeight } = useWindowDimensions();
   const useFillViewport = fillViewport && Platform.OS !== 'web';
-  const rightPanelMaxHeight = useFillViewport
+  // 전체 스크롤(바깥) + 좌·우 패널 각각 내부 스크롤 (우측 sticky)
+  const panelMaxHeight = useFillViewport
     ? undefined
-    : Math.max(280, windowHeight - 140);
+    : Math.max(320, Math.floor(windowHeight * 0.72));
   const rightScrollMaxHeight = useFillViewport
     ? undefined
-    : rightPanelMaxHeight - 38;
+    : panelMaxHeight - 38;
 
   const [responseModal, setResponseModal] = useState(null);
   const [selectedSegmentKey, setSelectedSegmentKey] = useState(null);
@@ -622,61 +653,74 @@ export const SimilarityActivitySplitPanel = forwardRef(function SimilarityActivi
     )
   );
 
+  const useOuterScrollLock = !useFillViewport && !!onOuterScrollLock;
+  const innerLock = innerScrollLockProps(useOuterScrollLock ? onOuterScrollLock : null);
+
+  const splitPanel = (
+    <View style={[
+      styles.splitRow,
+      useFillViewport && styles.splitRowFill,
+      !useFillViewport && panelMaxHeight != null && { minHeight: panelMaxHeight },
+    ]}>
+      <View style={[styles.leftCol, useFillViewport && styles.leftColFill]}>
+        <ScrollView
+          style={[
+            styles.leftScroll,
+            !useFillViewport && panelMaxHeight != null && { maxHeight: panelMaxHeight },
+          ]}
+          contentContainerStyle={styles.leftColContent}
+          nestedScrollEnabled
+          showsVerticalScrollIndicator
+          keyboardShouldPersistTaps="handled"
+          {...innerLock}
+        >
+          {renderLeftContent()}
+        </ScrollView>
+      </View>
+
+      <View style={styles.divider} />
+
+      <View style={[
+        styles.rightCol,
+        useFillViewport && styles.rightColFill,
+        !useFillViewport && styles.rightColSticky,
+        !useFillViewport && panelMaxHeight != null && { maxHeight: panelMaxHeight },
+      ]}>
+        <Pressable onPress={clearHighlight}>
+          <Text style={styles.rightColTitle}>활동 기록 (시간순)</Text>
+        </Pressable>
+        <ScrollView
+          ref={rightScrollRef}
+          style={[
+            useFillViewport ? styles.rightScrollFill : null,
+            !useFillViewport && rightScrollMaxHeight != null && { maxHeight: rightScrollMaxHeight },
+          ]}
+          contentContainerStyle={styles.rightTimeline}
+          showsVerticalScrollIndicator
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
+          {...innerLock}
+        >
+          <View ref={rightContentRef} collapsable={false}>
+            <TimelineList
+              timeline={timeline}
+              matchedAiLogId={highlightAiLogId}
+              aiItemRefs={aiItemRefs}
+              onAiItemLayout={handleAiItemLayout}
+              onViewResponse={setResponseModal}
+              withDate
+            />
+          </View>
+        </ScrollView>
+      </View>
+    </View>
+  );
+
   return (
     <>
-      <View style={[styles.splitRow, useFillViewport && styles.splitRowFill]}>
-        <View style={[styles.leftCol, useFillViewport && styles.leftColFill]}>
-          {useFillViewport ? (
-            <ScrollView
-              style={styles.leftScroll}
-              contentContainerStyle={styles.leftColContent}
-              nestedScrollEnabled
-              showsVerticalScrollIndicator
-              keyboardShouldPersistTaps="handled"
-            >
-              {renderLeftContent()}
-            </ScrollView>
-          ) : (
-            <View style={styles.leftColContent}>
-              {renderLeftContent()}
-            </View>
-          )}
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={[
-          styles.rightCol,
-          useFillViewport && styles.rightColFill,
-          !useFillViewport && rightPanelMaxHeight != null && { maxHeight: rightPanelMaxHeight },
-        ]}>
-          <Pressable onPress={clearHighlight}>
-            <Text style={styles.rightColTitle}>활동 기록 (시간순)</Text>
-          </Pressable>
-          <ScrollView
-            ref={rightScrollRef}
-            style={[
-              useFillViewport ? styles.rightScrollFill : null,
-              !useFillViewport && rightScrollMaxHeight != null && { maxHeight: rightScrollMaxHeight },
-            ]}
-            contentContainerStyle={styles.rightTimeline}
-            showsVerticalScrollIndicator
-            nestedScrollEnabled
-            keyboardShouldPersistTaps="handled"
-          >
-            <View ref={rightContentRef} collapsable={false}>
-              <TimelineList
-                timeline={timeline}
-                matchedAiLogId={highlightAiLogId}
-                aiItemRefs={aiItemRefs}
-                onAiItemLayout={handleAiItemLayout}
-                onViewResponse={setResponseModal}
-                withDate
-              />
-            </View>
-          </ScrollView>
-        </View>
-      </View>
+      <OuterScrollLockZone enabled={useOuterScrollLock} onLockChange={onOuterScrollLock}>
+        {splitPanel}
+      </OuterScrollLockZone>
 
       <ResponseModal responseModal={responseModal} onClose={() => setResponseModal(null)} />
     </>
@@ -769,14 +813,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
     backgroundColor: C.background,
     overflow: 'hidden',
-    ...(Platform.OS === 'web'
-      ? {
-          position: 'sticky',
-          top: 12,
-          alignSelf: 'flex-start',
-          zIndex: 1,
-        }
-      : null),
+  },
+  rightColSticky: {
+    position: 'sticky',
+    top: 12,
+    alignSelf: 'flex-start',
+    zIndex: 1,
   },
   rightColFill: {
     flex: 1,

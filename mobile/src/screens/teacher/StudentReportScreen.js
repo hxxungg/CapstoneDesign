@@ -1,15 +1,17 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, Pressable, StyleSheet,
-  ActivityIndicator, RefreshControl, Platform,
+  ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { analyticsAPI } from '../../services/api';
 import { THEME, FONTS } from '../../config/api';
 import { PROMPT_TYPE_LABEL } from '../../config/promptLabels';
+import { ORIGINALITY_LEGEND_DEF } from '../../config/analyticsChartHelp';
 import AppShell from '../../components/AppShell';
 import PieChart from '../../components/PieChart';
+import SimilarityLegendWithHelp from '../../components/SimilarityLegendWithHelp';
 import { buildStepDisplayList, SimilarityActivitySplitPanel } from '../../components/SimilarityActivityPanel';
 
 const C = THEME;
@@ -116,11 +118,13 @@ export default function StudentReportScreen({ navigation, route }) {
   const stepDisplayList = buildStepDisplayList(byStep, simByStep);
   const showAnalysisPanel = stepDisplayList.length > 0 || aiLogs.length > 0 || urlLogs.length > 0;
   const panelRef = useRef(null);
+  const [outerScrollEnabled, setOuterScrollEnabled] = useState(true);
+  const handleOuterScrollLock = useCallback((locked) => {
+    setOuterScrollEnabled(!locked);
+  }, []);
   const clearPanelHighlight = useCallback(() => {
     panelRef.current?.clearHighlight?.();
   }, []);
-
-  const useNativeSplitLayout = Platform.OS !== 'web';
 
   const refreshControl = (
     <RefreshControl
@@ -136,11 +140,12 @@ export default function StudentReportScreen({ navigation, route }) {
     Object.values(simByStep).forEach(sentences =>
       sentences.forEach(r => { if (r.originality) origCount[r.originality] = (origCount[r.originality] || 0) + 1; })
     );
-    const origData = [
-      { label: 'AI 의존 (70%+)',  value: origCount.red,    color: '#E53935' },
-      { label: '주의 (40-69%)',    value: origCount.yellow, color: '#F9A825' },
-      { label: '독창적 (~39%)',    value: origCount.green,  color: '#43A047' },
-    ];
+    const origKeys = ['red', 'yellow', 'green'];
+    const origData = ORIGINALITY_LEGEND_DEF.map((item, i) => ({
+      label: item.label,
+      value: origCount[origKeys[i]] ?? 0,
+      color: item.pieColor,
+    }));
     const typeColors = ['#1E88E5','#8E24AA','#00897B','#F4511E','#3949AB','#039BE5'];
     const typeData = Object.entries(promptTypes).map(([k, v], i) => ({
       label: PROMPT_TYPE_LABEL[k] ?? k, value: v, color: typeColors[i % typeColors.length],
@@ -166,13 +171,14 @@ export default function StudentReportScreen({ navigation, route }) {
     return (
       <Pressable onPress={clearPanelHighlight}>
         <SectionCard title="AI 분석 요약" icon="pie-chart-outline" style={s.sectionSummary}>
+          {hasOrig && <SimilarityLegendWithHelp style={s.simLegend} />}
           <View style={s.pieGrid}>
-            {hasOrig  && <View style={s.pieCell}><PieChart title="유사도 분포" data={origData}  size={110} /></View>}
-            {hasType  && <View style={s.pieCell}><PieChart title="질문 유형"   data={typeData}  size={110} /></View>}
-            {hasLevel && <View style={s.pieCell}><PieChart title="질문 수준"   data={levelData} size={110} /></View>}
+            {hasOrig  && <View style={s.pieCell}><PieChart title="유사도 분포" data={origData} size={110} helpKey="originality" /></View>}
+            {hasType  && <View style={s.pieCell}><PieChart title="질문 유형" data={typeData} size={110} helpKey="prompt_type" /></View>}
+            {hasLevel && <View style={s.pieCell}><PieChart title="질문 수준" data={levelData} size={110} helpKey="prompt_level" /></View>}
             {hasCritical && (
               <View style={s.pieCell}>
-                <PieChart title="비판적 사용" data={criticalData} size={110} />
+                <PieChart title="비판적 사용" data={criticalData} size={110} helpKey="critical_use" />
               </View>
             )}
           </View>
@@ -214,18 +220,6 @@ export default function StudentReportScreen({ navigation, route }) {
         onHeadPress={clearPanelHighlight}
         style={fillViewport ? s.analysisSectionFill : null}
       >
-        <Pressable onPress={clearPanelHighlight} style={s.simLegend}>
-          {[
-            { color: '#FFCDD2', label: '70%+ 매우 유사 (red)' },
-            { color: '#FFF9C4', label: '40–69% 유사 가능성 (yellow)' },
-            { color: C.card,   label: '40% 미만 자작 (green)' },
-          ].map(({ color, label }) => (
-            <View key={label} style={s.simLegendItem}>
-              <View style={[s.simLegendDot, { backgroundColor: color, borderWidth: 1, borderColor: C.border }]} />
-              <Text style={s.simLegendText}>{label}</Text>
-            </View>
-          ))}
-        </Pressable>
         <View style={fillViewport ? s.analysisPanelFill : null}>
           <SimilarityActivitySplitPanel
             ref={panelRef}
@@ -234,6 +228,7 @@ export default function StudentReportScreen({ navigation, route }) {
             aiLogs={aiLogs}
             byStep={byStep}
             fillViewport={fillViewport}
+            onOuterScrollLock={handleOuterScrollLock}
           />
         </View>
       </SectionCard>
@@ -293,30 +288,14 @@ export default function StudentReportScreen({ navigation, route }) {
 
         {loading ? (
           <View style={s.center}><ActivityIndicator size="large" color={C.primary} /></View>
-        ) : useNativeSplitLayout && showAnalysisPanel ? (
-          <View style={s.nativeBody}>
-            <ScrollView
-              style={s.nativeSummaryScroll}
-              contentContainerStyle={s.nativeSummaryContent}
-              refreshControl={refreshControl}
-              nestedScrollEnabled
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              {renderPieSummary()}
-              {renderPeriodSection()}
-              {renderEmptyState()}
-            </ScrollView>
-            <View style={s.analysisDock}>
-              {renderAnalysisPanel(true)}
-            </View>
-          </View>
         ) : (
           <ScrollView
             style={{ flex: 1 }}
+            scrollEnabled={outerScrollEnabled}
             refreshControl={refreshControl}
-            showsVerticalScrollIndicator={false}
+            showsVerticalScrollIndicator
             nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
           >
             <View style={s.scrollContent}>
               {renderPieSummary()}
@@ -364,8 +343,8 @@ const s = StyleSheet.create({
   },
   gradeBtnText: { fontFamily: F.sansMedium, fontSize: 13, color: C.primary },
   exitBadge:    { fontFamily: F.sansMedium, fontSize: 12, color: '#C62828', backgroundColor: '#FFEBEE', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
-  pieGrid:      { flexDirection: 'row', flexWrap: 'wrap', gap: 20 },
-  pieCell:      { flex: 1, minWidth: 200 },
+  pieGrid:      { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+  pieCell:      { width: '47%', flexGrow: 0, flexShrink: 0 },
 
   scrollContent: { paddingHorizontal: 16, paddingBottom: 60 },
 
@@ -452,7 +431,7 @@ const s = StyleSheet.create({
   logDuration: { fontFamily: F.sans, fontSize: 11, color: C.textSecondary, marginTop: 3 },
 
   // 유사도 형광펜
-  simLegend: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  simLegend: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
   simLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   simLegendDot: { width: 10, height: 10, borderRadius: 3 },
   simLegendText: { fontFamily: F.sans, fontSize: 11, color: C.textSecondary },

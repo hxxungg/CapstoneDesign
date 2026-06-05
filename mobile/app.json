@@ -4,13 +4,13 @@
     "slug": "performance-eval-app",
     "owner": "hxxxungg",
     "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "orientation": "landscape",
+    "icon": "./assets/brand-mark.png",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#3B82F6"
+      "backgroundColor": "#F7F4EC"
     },
     "scheme": "performanceeval",
     "ios": {
@@ -28,8 +28,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#3B82F6"
+        "foregroundImage": "./assets/brand-mark.png",
+        "backgroundColor": "#00000000"
       },
       "package": "com.performanceeval.app",
       "softwareKeyboardLayoutMode": "resize",
@@ -51,7 +51,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/brand-mark.png"
     },
     "plugins": []
   }

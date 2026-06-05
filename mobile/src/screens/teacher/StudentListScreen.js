@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { analyticsAPI } from '../../services/api';
 import { THEME, FONTS } from '../../config/api';
 import AppShell from '../../components/AppShell';
+import ClassCriticalUseModal from '../../components/ClassCriticalUseModal';
 
 const C = THEME;
 const F = FONTS;
@@ -30,6 +31,7 @@ export default function StudentListScreen({ navigation, route }) {
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [classStatsVisible, setClassStatsVisible] = useState(false);
 
   const load = async () => {
     try {
@@ -123,7 +125,17 @@ export default function StudentListScreen({ navigation, route }) {
               <View style={s.section}>
                 <View style={s.sectionHead}>
                   <Text style={s.sectionTitle}>참여 학생</Text>
-                  <Text style={s.sectionCount}>{students.length}명</Text>
+                  <View style={s.sectionHeadRight}>
+                    <Pressable
+                      onPress={() => setClassStatsVisible(true)}
+                      style={({ pressed }) => [s.statsBtn, pressed && { opacity: 0.7 }]}
+                      hitSlop={6}
+                    >
+                      <Ionicons name="stats-chart-outline" size={14} color={C.primary} />
+                      <Text style={s.statsBtnText}>반 통계</Text>
+                    </Pressable>
+                    <Text style={s.sectionCount}>{students.length}명</Text>
+                  </View>
                 </View>
                 <View style={s.list}>
                   {sortedStudents.map((item, i) => {
@@ -183,6 +195,11 @@ export default function StudentListScreen({ navigation, route }) {
           </ScrollView>
         )}
       </View>
+      <ClassCriticalUseModal
+        visible={classStatsVisible}
+        onClose={() => setClassStatsVisible(false)}
+        summary={summary}
+      />
     </AppShell>
   );
 }
@@ -233,9 +250,17 @@ const s = StyleSheet.create({
     backgroundColor: C.card, borderRadius: 16, padding: 18,
     borderWidth: 1, borderColor: C.border, marginBottom: 16,
   },
-  sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 },
+  sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   sectionTitle: { fontFamily: F.sansSemi, fontSize: 14, color: C.text },
+  sectionHeadRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   sectionCount: { fontFamily: F.mono, fontSize: 12, color: C.textSecondary },
+  statsBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 8, paddingVertical: 4,
+    borderRadius: 8, borderWidth: 1, borderColor: C.primary + '40',
+    backgroundColor: C.primaryLight,
+  },
+  statsBtnText: { fontFamily: F.sansMedium, fontSize: 11.5, color: C.primary },
 
   list: {},
   row: {

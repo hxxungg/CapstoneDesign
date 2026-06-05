@@ -1,24 +1,22 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, Pressable, StyleSheet,
-  ActivityIndicator, RefreshControl, Platform,
+  ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { analyticsAPI } from '../../services/api';
 import { THEME, FONTS } from '../../config/api';
 import { PROMPT_TYPE_LABEL } from '../../config/promptLabels';
+import { ORIGINALITY_LEGEND_DEF } from '../../config/analyticsChartHelp';
 import AppShell from '../../components/AppShell';
 import PieChart from '../../components/PieChart';
+import SimilarityLegendWithHelp from '../../components/SimilarityLegendWithHelp';
 import { buildStepDisplayList, SimilarityActivitySplitPanel } from '../../components/SimilarityActivityPanel';
 import { appAlert } from '../../utils/appAlert';
 
 const C = THEME;
 const F = FONTS;
-
-const ORIGINALITY_COLOR      = { red: '#FFCDD2', yellow: '#FFF9C4', green: '#E8F5E9' };
-const ORIGINALITY_TEXT_COLOR = { red: '#C62828', yellow: '#F57F17', green: C?.textSoft };
-const ORIGINALITY_LABEL      = { red: 'AI 의존 가능성', yellow: '주의', green: '독창적' };
 
 function fmtSec(sec) {
   if (!sec || sec <= 0) return '0초';
@@ -93,6 +91,10 @@ export default function StudentSelfReportScreen({ navigation, route }) {
   const finalScore = data?.evaluation?.score;
   const hasFinalScore = finalScore != null && finalScore !== '';
   const panelRef = useRef(null);
+  const [outerScrollEnabled, setOuterScrollEnabled] = useState(true);
+  const handleOuterScrollLock = useCallback((locked) => {
+    setOuterScrollEnabled(!locked);
+  }, []);
   const clearPanelHighlight = useCallback(() => {
     panelRef.current?.clearHighlight?.();
   }, []);
@@ -104,8 +106,6 @@ export default function StudentSelfReportScreen({ navigation, route }) {
       appAlert('최종 점수', '아직 교사가 점수를 입력하지 않았습니다.', null, { type: 'info' });
     }
   }, [hasFinalScore, finalScore]);
-
-  const useNativeSplitLayout = Platform.OS !== 'web';
 
   const refreshControl = (
     <RefreshControl
@@ -120,11 +120,12 @@ export default function StudentSelfReportScreen({ navigation, route }) {
     Object.values(simByStep).forEach(sentences =>
       sentences.forEach(r => { if (r.originality) origCount[r.originality] = (origCount[r.originality] || 0) + 1; })
     );
-    const origData = [
-      { label: 'AI 의존 (70%+)',  value: origCount.red,    color: '#E53935' },
-      { label: '주의 (40-69%)',    value: origCount.yellow, color: '#F9A825' },
-      { label: '독창적 (~39%)',    value: origCount.green,  color: '#43A047' },
-    ];
+    const origKeys = ['red', 'yellow', 'green'];
+    const origData = ORIGINALITY_LEGEND_DEF.map((item, i) => ({
+      label: item.label,
+      value: origCount[origKeys[i]] ?? 0,
+      color: item.pieColor,
+    }));
     const typeColors = ['#1E88E5','#8E24AA','#00897B','#F4511E','#3949AB','#039BE5'];
     const typeData = Object.entries(promptTypes).map(([k, v], i) => ({
       label: PROMPT_TYPE_LABEL[k] ?? k, value: v, color: typeColors[i % typeColors.length],
@@ -150,13 +151,14 @@ export default function StudentSelfReportScreen({ navigation, route }) {
     return (
       <Pressable onPress={clearPanelHighlight}>
         <SectionCard title="AI 분석 요약" icon="pie-chart-outline" style={s.sectionSummary}>
+          {hasOrig && <SimilarityLegendWithHelp style={s.simLegend} />}
           <View style={s.pieGrid}>
-            {hasOrig  && <View style={s.pieCell}><PieChart title="유사도 분포" data={origData}  size={110} /></View>}
-            {hasType  && <View style={s.pieCell}><PieChart title="질문 유형"   data={typeData}  size={110} /></View>}
-            {hasLevel && <View style={s.pieCell}><PieChart title="질문 수준"   data={levelData} size={110} /></View>}
+            {hasOrig  && <View style={s.pieCell}><PieChart title="유사도 분포" data={origData} size={110} helpKey="originality" /></View>}
+            {hasType  && <View style={s.pieCell}><PieChart title="질문 유형" data={typeData} size={110} helpKey="prompt_type" /></View>}
+            {hasLevel && <View style={s.pieCell}><PieChart title="질문 수준" data={levelData} size={110} helpKey="prompt_level" /></View>}
             {hasCritical && (
               <View style={s.pieCell}>
-                <PieChart title="비판적 사용" data={criticalData} size={110} />
+                <PieChart title="비판적 사용" data={criticalData} size={110} helpKey="critical_use" />
               </View>
             )}
           </View>
@@ -174,18 +176,6 @@ export default function StudentSelfReportScreen({ navigation, route }) {
         onHeadPress={clearPanelHighlight}
         style={fillViewport ? s.analysisSectionFill : null}
       >
-        <Pressable onPress={clearPanelHighlight} style={s.simLegend}>
-          {[
-            { color: '#FFCDD2', label: '70%+ 매우 유사' },
-            { color: '#FFF9C4', label: '40–69% 유사 가능성' },
-            { color: C.card,   label: '40% 미만 자작' },
-          ].map(({ color, label }) => (
-            <View key={label} style={s.simLegendItem}>
-              <View style={[s.simLegendDot, { backgroundColor: color, borderWidth: 1, borderColor: C.border }]} />
-              <Text style={s.simDesc}>{label}</Text>
-            </View>
-          ))}
-        </Pressable>
         <View style={fillViewport ? s.analysisPanelFill : null}>
           <SimilarityActivitySplitPanel
             ref={panelRef}
@@ -194,6 +184,7 @@ export default function StudentSelfReportScreen({ navigation, route }) {
             aiLogs={aiLogs}
             byStep={byStep}
             fillViewport={fillViewport}
+            onOuterScrollLock={handleOuterScrollLock}
           />
         </View>
       </SectionCard>
@@ -243,29 +234,14 @@ export default function StudentSelfReportScreen({ navigation, route }) {
           <View style={s.loadingBox}>
             <ActivityIndicator size="large" color={C.primary} />
           </View>
-        ) : useNativeSplitLayout && showAnalysisPanel ? (
-          <View style={s.nativeBody}>
-            <ScrollView
-              style={s.nativeSummaryScroll}
-              contentContainerStyle={s.nativeSummaryContent}
-              refreshControl={refreshControl}
-              nestedScrollEnabled
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              {renderPieSummary()}
-              {renderEmptyState()}
-            </ScrollView>
-            <View style={s.analysisDock}>
-              {renderAnalysisPanel(true)}
-            </View>
-          </View>
         ) : (
           <ScrollView
             style={{ flex: 1 }}
+            scrollEnabled={outerScrollEnabled}
             refreshControl={refreshControl}
-            showsVerticalScrollIndicator={false}
+            showsVerticalScrollIndicator
             nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
           >
             <View style={s.scroll}>
               {renderPieSummary()}
@@ -318,7 +294,7 @@ const s = StyleSheet.create({
   tag:         { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: THEME.background, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: THEME.border },
   tagLabel:    { fontFamily: FONTS.sansMedium, fontSize: 12, color: THEME.text },
   tagCount:    { fontFamily: FONTS.sans, fontSize: 12, color: THEME.textSecondary },
-  simLegend:    { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  simLegend:    { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
   simLegendItem:{ flexDirection: 'row', alignItems: 'center', gap: 5 },
   simLegendDot: { width: 10, height: 10, borderRadius: 3 },
   simDesc:      { fontFamily: FONTS.sans, fontSize: 11, color: THEME.textSecondary, lineHeight: 18 },
@@ -352,8 +328,8 @@ const s = StyleSheet.create({
   emptyText:   { fontFamily: FONTS.sansMedium, fontSize: 15, color: THEME.textSecondary },
   emptyDesc:   { fontFamily: FONTS.sans, fontSize: 13, color: THEME.textFaint, textAlign: 'center' },
   exitBadge:   { fontFamily: FONTS.sansMedium, fontSize: 11, color: '#C62828', backgroundColor: '#FFEBEE', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999 },
-  pieGrid:     { flexDirection: 'row', flexWrap: 'wrap', gap: 20 },
-  pieCell:     { flex: 1, minWidth: 200 },
+  pieGrid:     { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+  pieCell:     { width: '47%', flexGrow: 0, flexShrink: 0 },
 
   // 타임라인 모달
   tlOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },

@@ -346,11 +346,15 @@ router.get('/assessment/:id', authenticateToken, requireTeacher, async (req, res
 
     if (pIds.length > 0) {
       [allAiLogs] = await pool.query(
-        'SELECT participation_id, prompt, logged_at FROM log_db.ai_logs WHERE participation_id IN (?)',
+        `SELECT id, participation_id, prompt, logged_at, step_id, response, complete_at,
+                critical_label, critical_label_name, critical_confidence,
+                related_url_log_id, relevance_score
+         FROM log_db.ai_logs WHERE participation_id IN (?)`,
         [pIds]
       );
       [allUrlLogs] = await pool.query(
-        'SELECT participation_id, url FROM log_db.url_logs WHERE participation_id IN (?)',
+        `SELECT id, participation_id, url, visited_at, complete_at, step_id, search_query
+         FROM log_db.url_logs WHERE participation_id IN (?)`,
         [pIds]
       );
     }
@@ -376,6 +380,26 @@ router.get('/assessment/:id', authenticateToken, requireTeacher, async (req, res
 
     // exit_attempts는 participations 컬럼에서 직접 읽음
     const totalExitAttempts = participations.reduce((sum, p) => sum + (p.exit_attempts || 0), 0);
+
+    // 반 비판적 사용 — 학생별 비율의 산술 평균 (AI 질문 있는 학생만)
+    const studentCriticalPercents = [];
+    for (const p of participations) {
+      const aiLogs = aiByP[p.id] || [];
+      const urlLogs = urlByP[p.id] || [];
+      const { criticalUseSummary } = enrichAiLogsWithCriticalUseFromDb(aiLogs, urlLogs);
+      if (criticalUseSummary.total_prompts <= 0) continue;
+      studentCriticalPercents.push(
+        Math.round(
+          (criticalUseSummary.critical_count / criticalUseSummary.total_prompts) * 100
+        )
+      );
+    }
+    const criticalUseAvgPercent = studentCriticalPercents.length > 0
+      ? Math.round(
+          studentCriticalPercents.reduce((sum, pct) => sum + pct, 0)
+            / studentCriticalPercents.length
+        )
+      : null;
 
     const studentsData = participations.map(p => {
       const aiLogs  = aiByP[p.id]  || [];
@@ -416,6 +440,11 @@ router.get('/assessment/:id', authenticateToken, requireTeacher, async (req, res
         total_duration_seconds: 0,
         total_exit_attempts: totalExitAttempts,
         tools_used: summaryTools,
+        critical_use_avg_percent: criticalUseAvgPercent,
+        critical_use_other_avg_percent: criticalUseAvgPercent != null
+          ? 100 - criticalUseAvgPercent
+          : null,
+        critical_use_students_with_prompts: studentCriticalPercents.length,
       },
       students: studentsData,
     });

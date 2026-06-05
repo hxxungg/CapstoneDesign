@@ -2,6 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { THEME, FONTS } from '../config/api';
+import ChartHelpTitleButton from './ChartHelpTitleButton';
+import { CHART_COUNT_UNITS } from '../config/analyticsChartHelp';
 
 const C = THEME;
 const F = FONTS;
@@ -11,8 +13,13 @@ const F = FONTS;
  * size: SVG 크기 (px)
  * title: 차트 제목
  */
-export default function PieChart({ data = [], size = 130, title }) {
+export default function PieChart({
+  data = [], size = 130, title, helpKey, countUnit, totalCaption, hideLegendCount = false,
+}) {
   const total = data.reduce((s, d) => s + (d.value || 0), 0);
+  const unit = countUnit ?? (helpKey && CHART_COUNT_UNITS[helpKey]) ?? '개';
+
+  const pctOf = (value) => (total > 0 ? `${Math.round((value / total) * 100)}%` : '0%');
 
   const renderSlices = () => {
     if (total === 0) return null;
@@ -43,9 +50,21 @@ export default function PieChart({ data = [], size = 130, title }) {
       });
   };
 
+  const titleWithTotal = title
+    ? totalCaption != null
+      ? `${title} (${totalCaption})`
+      : `${title} (총 ${total}${unit})`
+    : null;
+
   return (
     <View style={st.wrap}>
-      {title ? <Text style={st.title}>{title}</Text> : null}
+      {titleWithTotal ? (
+        helpKey ? (
+          <ChartHelpTitleButton title={titleWithTotal} helpKey={helpKey} />
+        ) : (
+          <Text style={st.title}>{titleWithTotal}</Text>
+        )
+      ) : null}
       <View style={st.chartRow}>
         {/* 파이 */}
         <Svg width={size} height={size}>
@@ -54,7 +73,7 @@ export default function PieChart({ data = [], size = 130, title }) {
             : renderSlices()
           }
         </Svg>
-        {/* 범례 */}
+        {/* 범례 — 비율 + 개수 */}
         <View style={st.legend}>
           {data.map((d, i) => (
             <View key={i} style={st.legendRow}>
@@ -62,9 +81,10 @@ export default function PieChart({ data = [], size = 130, title }) {
               <Text style={st.legendLabel} numberOfLines={1}>
                 {d.label}
               </Text>
-              <Text style={st.legendVal}>
-                {total > 0 ? `${Math.round((d.value / total) * 100)}%` : '0%'}
-              </Text>
+              <Text style={st.legendPct}>{pctOf(d.value ?? 0)}</Text>
+              {!hideLegendCount && (
+                <Text style={st.legendCount}>({d.value ?? 0}{unit})</Text>
+              )}
             </View>
           ))}
           {total === 0 && (
@@ -83,7 +103,8 @@ const st = StyleSheet.create({
   legend:     { flex: 1, gap: 6 },
   legendRow:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot:  { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
-  legendLabel:{ fontFamily: F.sans, fontSize: 12, color: C.text, flex: 1 },
-  legendVal:  { fontFamily: F.mono, fontSize: 12, color: C.textSecondary },
+  legendLabel:{ fontFamily: F.sans, fontSize: 12, color: C.text, flex: 1, minWidth: 0 },
+  legendPct:  { fontFamily: F.mono, fontSize: 12, color: C.text, width: 34, textAlign: 'right' },
+  legendCount:{ fontFamily: F.mono, fontSize: 12, color: C.textSecondary, width: 52 },
   emptyTxt:   { fontFamily: F.sans, fontSize: 12, color: C.textFaint },
 });

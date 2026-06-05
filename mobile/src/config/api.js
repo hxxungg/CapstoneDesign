@@ -27,13 +27,13 @@ function getDevBackendHost() {
 }
 
 function resolveApiBaseUrl() {
-  if (isWeb) {
-    return 'http://localhost:3000/api';
-  }
-
   const host = getDevBackendHost();
   if (host) {
     return `http://${host}:3000/api`;
+  }
+
+  if (isWeb) {
+    return 'http://localhost:3000/api';
   }
 
   if (Platform.OS === 'android') {
