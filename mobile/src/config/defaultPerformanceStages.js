@@ -76,6 +76,16 @@ export function stageAllowsAiBrowser(stage) {
   return getResolvedAiMode(stage) !== AI_MODE.DISALLOWED;
 }
 
+/** 조건부 허용 — 먼저 독립 작성 후 「웹뷰 보기」로 브라우저 해제 */
+export function stageIsConditionalAi(stage) {
+  return getResolvedAiMode(stage) === AI_MODE.CONDITIONAL;
+}
+
+/** AI 활성(allowed) — 처음부터 웹뷰 패널 표시 */
+export function stageIsUnrestrictedAiBrowser(stage) {
+  return getResolvedAiMode(stage) === AI_MODE.ALLOWED;
+}
+
 /** 학생 수행 화면 헤더 배지 */
 export function getStudentAiBadgeText(stage) {
   const m = getResolvedAiMode(stage);

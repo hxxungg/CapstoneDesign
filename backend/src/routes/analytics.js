@@ -543,6 +543,34 @@ router.get('/participation/:id', authenticateToken, async (req, res) => {
     // 이탈 시도 — participations.exit_attempts 컬럼
     const exitCount = participation.exit_attempts || 0;
 
+    // 단계별 최신 제출 (조건부 AI 웹뷰 해제 스냅샷)
+    let unlockByStepId = {};
+    try {
+      const [unlockRows] = await pool.query(
+        `SELECT sub.step_id, sub.content_at_unlock, sub.browser_unlocked_at
+         FROM log_db.submissions sub
+         WHERE sub.participation_id = ?
+           AND sub.id = (
+             SELECT s2.id FROM log_db.submissions s2
+             WHERE s2.participation_id = sub.participation_id AND s2.step_id = sub.step_id
+             ORDER BY s2.submitted_at DESC
+             LIMIT 1
+           )`,
+        [participationId]
+      );
+      unlockByStepId = Object.fromEntries(
+        unlockRows.map((r) => [
+          Number(r.step_id),
+          {
+            content_at_unlock: r.content_at_unlock ?? null,
+            browser_unlocked_at: r.browser_unlocked_at ?? null,
+          },
+        ])
+      );
+    } catch (unlockErr) {
+      if (unlockErr.code !== 'ER_BAD_FIELD_ERROR') throw unlockErr;
+    }
+
     // 문장별 유사도 — submissions_step 에서 직접 읽기
     const [simRows] = await pool.query(
       `SELECT ss.segment_order, ss.content AS sentence,
@@ -624,11 +652,14 @@ router.get('/participation/:id', authenticateToken, async (req, res) => {
       const submittedAt = stepSim?.submitted_at ?? null;
       const compliance = complianceByStepId[Number(step.id)];
 
+      const unlockMeta = unlockByStepId[Number(step.id)] ?? null;
       return {
         step_id:        step.id,
         step_title:     step.title,
         step_order:     step.step_order,
         ai_permission:  step.ai_permission,
+        content_at_unlock: unlockMeta?.content_at_unlock ?? null,
+        browser_unlocked_at: unlockMeta?.browser_unlocked_at ?? null,
         url_count:      stepUrlLogs.length,
         ai_prompt_count: stepAiLogs.length,
         total_duration_seconds: Math.round(totalDuration),

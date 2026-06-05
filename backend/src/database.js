@@ -14,11 +14,30 @@ const pool = mysql.createPool({
   dateStrings: true,
 });
 
+async function ensureSubmissionBrowserUnlockColumns() {
+  const [rows] = await pool.query(
+    `SELECT COLUMN_NAME
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = 'log_db'
+       AND TABLE_NAME = 'submissions'
+       AND COLUMN_NAME = 'content_at_unlock'`
+  );
+  if (rows.length > 0) return;
+
+  await pool.query(
+    `ALTER TABLE log_db.submissions
+       ADD COLUMN content_at_unlock TEXT NULL,
+       ADD COLUMN browser_unlocked_at DATETIME NULL`
+  );
+  console.log('DB: submissions.content_at_unlock / browser_unlocked_at 컬럼 추가됨');
+}
+
 async function initDatabase() {
   try {
     const conn = await pool.getConnection();
     conn.release();
     console.log('DB 연결 성공');
+    await ensureSubmissionBrowserUnlockColumns();
   } catch (err) {
     const hint =
       err.code === 'ETIMEDOUT' || err.code === 'ECONNREFUSED'

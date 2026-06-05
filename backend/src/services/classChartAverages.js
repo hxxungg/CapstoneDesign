@@ -50,9 +50,15 @@ function averageStudentPercents(perStudentPercentsList) {
   return avg;
 }
 
-function buildChartFromAvg(avgPercents, metaList, studentCount) {
+function mergeCounts(target, source) {
+  for (const [key, value] of Object.entries(source)) {
+    target[key] = (target[key] || 0) + value;
+  }
+}
+
+function buildChartFromAvg(avgPercents, metaList, studentCount, aggregateCounts = {}) {
   if (!avgPercents || studentCount <= 0) {
-    return { student_count: 0, items: [] };
+    return { student_count: 0, total_count: 0, items: [] };
   }
   const items = metaList
     .filter((m) => (avgPercents[m.key] ?? 0) > 0)
@@ -60,8 +66,10 @@ function buildChartFromAvg(avgPercents, metaList, studentCount) {
       label: m.label,
       color: m.color,
       value: avgPercents[m.key],
+      count: aggregateCounts[m.key] ?? 0,
     }));
-  return { student_count: studentCount, items };
+  const total_count = Object.values(aggregateCounts).reduce((sum, v) => sum + v, 0);
+  return { student_count: studentCount, total_count, items };
 }
 
 function computeClassChartAverages(participations, aiByP, urlByP, simByP) {
@@ -70,6 +78,10 @@ function computeClassChartAverages(participations, aiByP, urlByP, simByP) {
   const levelStudentPercents = [];
   const criticalStudentPercents = [];
   const levelKeysSeen = new Set();
+  const origAggregate = { red: 0, yellow: 0, green: 0 };
+  const typeAggregate = {};
+  const levelAggregate = {};
+  const criticalAggregate = { critical: 0, other: 0 };
 
   for (const p of participations) {
     const simRows = simByP[p.id] || [];
@@ -79,11 +91,14 @@ function computeClassChartAverages(participations, aiByP, urlByP, simByP) {
         origCount[row.originality] = (origCount[row.originality] || 0) + 1;
       }
     });
+    mergeCounts(origAggregate, origCount);
     const origPct = countsToPercents(origCount);
     if (origPct) origStudentPercents.push(origPct);
 
     const aiLogs = enrichAiLogsPromptFieldsFromDb(aiByP[p.id] || []);
     const { promptTypes, promptLevels } = aggregatePromptStats(aiLogs);
+    mergeCounts(typeAggregate, promptTypes);
+    mergeCounts(levelAggregate, promptLevels);
     const typePct = countsToPercents(promptTypes);
     if (typePct) typeStudentPercents.push(typePct);
 
@@ -98,6 +113,8 @@ function computeClassChartAverages(participations, aiByP, urlByP, simByP) {
       urlByP[p.id] || []
     );
     if (criticalUseSummary.total_prompts > 0) {
+      criticalAggregate.critical += criticalUseSummary.critical_count;
+      criticalAggregate.other += criticalUseSummary.non_critical_count;
       criticalStudentPercents.push({
         critical: Math.round(
           (criticalUseSummary.critical_count / criticalUseSummary.total_prompts) * 100
@@ -121,22 +138,26 @@ function computeClassChartAverages(participations, aiByP, urlByP, simByP) {
     originality: buildChartFromAvg(
       averageStudentPercents(origStudentPercents),
       ORIGINALITY_META,
-      origStudentPercents.length
+      origStudentPercents.length,
+      origAggregate
     ),
     prompt_type: buildChartFromAvg(
       averageStudentPercents(typeStudentPercents),
       PROMPT_TYPE_META,
-      typeStudentPercents.length
+      typeStudentPercents.length,
+      typeAggregate
     ),
     prompt_level: buildChartFromAvg(
       averageStudentPercents(levelStudentPercents),
       levelMeta,
-      levelStudentPercents.length
+      levelStudentPercents.length,
+      levelAggregate
     ),
     critical_use: buildChartFromAvg(
       averageStudentPercents(criticalStudentPercents),
       CRITICAL_META,
-      criticalStudentPercents.length
+      criticalStudentPercents.length,
+      criticalAggregate
     ),
   };
 }

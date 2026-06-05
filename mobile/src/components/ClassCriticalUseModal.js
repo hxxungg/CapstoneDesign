@@ -3,6 +3,7 @@ import {
   Modal, Pressable, Text, View, StyleSheet, ScrollView, useWindowDimensions,
 } from 'react-native';
 import { THEME, FONTS } from '../config/api';
+import { CHART_COUNT_UNITS } from '../config/analyticsChartHelp';
 import PieChart from './PieChart';
 
 const C = THEME;
@@ -17,6 +18,8 @@ const CHART_DEFS = [
 
 function ChartCell({ def, chart }) {
   const hasData = (chart?.student_count ?? 0) > 0 && (chart?.items?.length ?? 0) > 0;
+  const countUnit = CHART_COUNT_UNITS[def.helpKey] ?? '개';
+
   if (!hasData) {
     return (
       <View style={s.pieCell}>
@@ -27,15 +30,17 @@ function ChartCell({ def, chart }) {
       </View>
     );
   }
+
   return (
     <View style={s.pieCell}>
       <PieChart
-        title={`${def.title} 평균`}
-        totalCaption={`${chart.student_count}명`}
+        title={def.title}
         data={chart.items}
-        size={88}
+        size={100}
         helpKey={def.helpKey}
-        hideLegendCount
+        countUnit={countUnit}
+        totalCount={chart.total_count}
+        percentMode
       />
     </View>
   );
@@ -53,11 +58,11 @@ export default function ClassCriticalUseModal({ visible, onClose, summary }) {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={s.overlay}>
         <Pressable style={s.backdrop} onPress={onClose} accessibilityLabel="닫기" />
-        <View style={[s.box, { maxHeight: Math.floor(winH * 0.88) }]}>
+        <View style={[s.box, { maxHeight: Math.floor(winH * 0.9) }]}>
           <Text style={s.title}>반 AI 분석 통계</Text>
           <Text style={s.sub}>
             {hasAny
-              ? '학생별 비율의 평균'
+              ? '학생별 비율의 평균 · 괄호 안 숫자는 반 전체 합계'
               : '아직 분석할 데이터가 없습니다.'}
           </Text>
           <ScrollView
@@ -85,10 +90,10 @@ export default function ClassCriticalUseModal({ visible, onClose, summary }) {
 }
 
 const s = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
+  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 12 },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,27,45,0.4)' },
   box: {
-    width: 360,
+    width: 380,
     maxWidth: '100%',
     padding: 20,
     borderRadius: 16,
@@ -103,15 +108,15 @@ const s = StyleSheet.create({
   title: { fontFamily: F.serifKo, fontSize: 20, color: C.text, textAlign: 'center' },
   sub: {
     fontFamily: F.sans,
-    fontSize: 13,
+    fontSize: 12,
     color: C.textSecondary,
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 8,
+    lineHeight: 18,
+    marginBottom: 10,
   },
   scroll: { flexGrow: 0, flexShrink: 1 },
   scrollContent: { paddingBottom: 4 },
-  pieGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  pieGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
   pieCell: { width: '47%', flexGrow: 0, flexShrink: 0 },
   emptyChartTitle: {
     fontFamily: F.sansMedium,
@@ -120,7 +125,7 @@ const s = StyleSheet.create({
     marginBottom: 6,
   },
   emptyChartBox: {
-    height: 120,
+    height: 130,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: C.border,

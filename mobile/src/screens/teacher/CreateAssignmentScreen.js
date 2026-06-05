@@ -360,7 +360,7 @@ const AI_OPTIONS = [
 ];
 
 // ── 단계 편집 모달 ────────────────────────────────────────────────────────────
-function StageEditModal({ visible, stage, onSave, onDelete, onClose }) {
+function StageEditModal({ visible, stage, onSave, onClose }) {
   const [title, setTitle]       = useState(stage?.title || '');
   const [desc, setDesc]         = useState(stage?.description || '');
 
@@ -396,13 +396,6 @@ function StageEditModal({ visible, stage, onSave, onDelete, onClose }) {
           />
 
           <View style={se.btnRow}>
-            <Pressable
-              style={({ pressed }) => [se.btn, se.btnDanger, pressed && { opacity: 0.7 }]}
-              onPress={onDelete}
-            >
-              <Ionicons name="trash-outline" size={14} color={C.danger} />
-              <Text style={se.btnDangerText}>삭제</Text>
-            </Pressable>
             <Pressable
               style={({ pressed }) => [se.btn, se.btnCancel, pressed && { opacity: 0.7 }]}
               onPress={onClose}
@@ -443,10 +436,8 @@ const se = StyleSheet.create({
   textArea: { height: 80, paddingTop: 12, textAlignVertical: 'top' },
   btnRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
   btn: { height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5 },
-  btnDanger:  { paddingHorizontal: 12, borderWidth: 1, borderColor: C.danger + '60', backgroundColor: C.dangerLight },
   btnCancel:  { flex: 1, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
   btnPrimary: { flex: 1, backgroundColor: C.dark },
-  btnDangerText:  { fontFamily: F.sansMedium, fontSize: 13, color: C.danger },
   btnCancelText:  { fontFamily: F.sansMedium, fontSize: 14, color: C.textSecondary },
   btnPrimaryText: { fontFamily: F.sansMedium, fontSize: 14, color: '#fff' },
 });
@@ -600,6 +591,27 @@ export default function CreateAssignmentScreen({ navigation, route }) {
       return;
     }
     setStages(stages.filter((_, i) => i !== idx));
+    if (editModalIdx === idx) setEditModalIdx(null);
+    else if (editModalIdx !== null && editModalIdx > idx) setEditModalIdx(editModalIdx - 1);
+    if (aiModalIdx === idx) setAiModalIdx(null);
+    else if (aiModalIdx !== null && aiModalIdx > idx) setAiModalIdx(aiModalIdx - 1);
+  };
+
+  const confirmRemoveStage = (idx) => {
+    if (stages.length <= 1) {
+      appAlert('알림', '최소 1개 이상의 단계가 필요합니다.');
+      return;
+    }
+    const stageTitle = stages[idx]?.title?.trim() || `${idx + 1}단계`;
+    appAlert(
+      '단계 삭제',
+      `"${stageTitle}" 단계를 삭제하시겠습니까?`,
+      [
+        { text: '취소', style: 'cancel' },
+        { text: '삭제', style: 'destructive', onPress: () => removeStage(idx) },
+      ],
+      { type: 'warning' },
+    );
   };
 
   const updateStage = (idx, field, value) => {
@@ -870,14 +882,25 @@ export default function CreateAssignmentScreen({ navigation, route }) {
                     <Text style={[s.aiBadgeText, { color: aiOpt.fg }]}>{aiOpt.label}</Text>
                   </Pressable>
 
-                  {/* 연필(편집) 아이콘 */}
-                  <Pressable
-                    onPress={() => setEditModalIdx(idx)}
-                    style={({ pressed }) => [s.editBtn, pressed && { opacity: 0.6 }]}
-                    hitSlop={8}
-                  >
-                    <Ionicons name="pencil-outline" size={15} color={C.textSecondary} />
-                  </Pressable>
+                  {/* 수정 · 삭제 */}
+                  <View style={s.stageActions}>
+                    <Pressable
+                      onPress={() => setEditModalIdx(idx)}
+                      style={({ pressed }) => [s.stageActionBtn, pressed && { opacity: 0.6 }]}
+                      hitSlop={6}
+                      accessibilityLabel="단계 수정"
+                    >
+                      <Ionicons name="pencil-outline" size={16} color={C.textSecondary} />
+                    </Pressable>
+                    <Pressable
+                      onPress={() => confirmRemoveStage(idx)}
+                      style={({ pressed }) => [s.stageActionBtn, pressed && { opacity: 0.6 }]}
+                      hitSlop={6}
+                      accessibilityLabel="단계 삭제"
+                    >
+                      <Ionicons name="trash-outline" size={16} color={C.danger} />
+                    </Pressable>
+                  </View>
                 </View>
               );
             })}
@@ -961,9 +984,6 @@ export default function CreateAssignmentScreen({ navigation, route }) {
             updated[editModalIdx] = { ...updated[editModalIdx], title, description: desc };
             setStages(updated);
           }
-        }}
-        onDelete={() => {
-          if (editModalIdx !== null) { removeStage(editModalIdx); setEditModalIdx(null); }
         }}
         onClose={() => setEditModalIdx(null)}
       />
@@ -1065,8 +1085,11 @@ const s = StyleSheet.create({
     fontFamily: F.sans, fontSize: 12.5, color: C.textSoft,
     marginTop: 2, lineHeight: 18,
   },
-  editBtn: {
-    width: 28, height: 28, flexShrink: 0,
+  stageActions: {
+    flexDirection: 'row', alignItems: 'center', gap: 2, flexShrink: 0,
+  },
+  stageActionBtn: {
+    width: 28, height: 28,
     alignItems: 'center', justifyContent: 'center',
   },
 

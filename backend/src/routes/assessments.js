@@ -869,7 +869,7 @@ router.post('/participation/:participationId/submit', authenticateToken, async (
   const participationId = parseInt(req.params.participationId, 10);
   if (isNaN(participationId)) return res.status(400).json({ error: '잘못된 ID입니다.' });
 
-  const { step_id, content, consent_given } = req.body;
+  const { step_id, content, consent_given, content_at_unlock, browser_unlocked_at } = req.body;
 
   try {
     // 본인 참여인지 확인
@@ -898,11 +898,32 @@ router.post('/participation/:participationId/submit', authenticateToken, async (
 
     // 제출 내용 저장 (content 있을 때만)
     if (content && content.trim()) {
-      const [subResult] = await pool.query(
-        `INSERT INTO log_db.submissions (participation_id, step_id, content, submitted_at)
-         VALUES (?, ?, ?, NOW())`,
-        [participationId, step_id || null, content.trim()]
-      );
+      const unlockContent =
+        typeof content_at_unlock === 'string' && content_at_unlock.trim()
+          ? content_at_unlock.trim()
+          : null;
+      const unlockedAt =
+        unlockContent && browser_unlocked_at ? browser_unlocked_at : null;
+
+      let subResult;
+      try {
+        [subResult] = await pool.query(
+          `INSERT INTO log_db.submissions
+             (participation_id, step_id, content, content_at_unlock, browser_unlocked_at, submitted_at)
+           VALUES (?, ?, ?, ?, ?, NOW())`,
+          [participationId, step_id || null, content.trim(), unlockContent, unlockedAt]
+        );
+      } catch (insertErr) {
+        if (insertErr.code !== 'ER_BAD_FIELD_ERROR') throw insertErr;
+        console.warn(
+          '[submit] content_at_unlock 컬럼 없음 — 마이그레이션 후 재시작 필요. 스냅샷 미저장.'
+        );
+        [subResult] = await pool.query(
+          `INSERT INTO log_db.submissions (participation_id, step_id, content, submitted_at)
+           VALUES (?, ?, ?, NOW())`,
+          [participationId, step_id || null, content.trim()]
+        );
+      }
       const submissionId = subResult.insertId;
 
       // submissions_step: 전체 내용을 1개 행으로 임시 저장

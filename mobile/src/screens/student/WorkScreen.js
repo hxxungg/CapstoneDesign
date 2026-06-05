@@ -14,6 +14,8 @@ import { useAuth } from '../../context/AuthContext';
 import { THEME, FONTS, INAPP_BROWSER_HOME } from '../../config/api';
 import {
   stageAllowsAiBrowser,
+  stageIsConditionalAi,
+  stageIsUnrestrictedAiBrowser,
   getStudentAiBadgeText,
   getStudentAiBadgeColor,
 } from '../../config/defaultPerformanceStages';
@@ -116,6 +118,8 @@ export default function WorkScreen({ navigation, route }) {
     width: PANEL_INITIAL_WIDTH,
     height: PANEL_INITIAL_HEIGHT,
   });
+  /** 조건부 AI — 단계별 웹뷰 해제 여부 */
+  const [browserUnlockedByStep, setBrowserUnlockedByStep] = useState({});
 
   const webViewRef          = useRef(null);
   const loadingTimerRef     = useRef(null);
@@ -129,6 +133,8 @@ export default function WorkScreen({ navigation, route }) {
   const localAiLogsRef = useRef([]); // { localId, step_id, prompt, response, logged_at, complete_at }
   const localAiLogIdCounterRef = useRef(1);
   const localUrlLogsRef = useRef([]); // { step_id, url, search_query, visited_at, complete_at }
+  /** 조건부 AI — 웹뷰 해제 시 작성 스냅샷 (제출 시 서버 저장) */
+  const unlockSnapshotByStepRef = useRef({});
   const appStateRef         = useRef(AppState.currentState);
   const saveWritingTimerRef = useRef(null);
   const writingScrollRef = useRef(null);
@@ -206,7 +212,7 @@ export default function WorkScreen({ navigation, route }) {
         setAssignment(syntheticAssignment);
 
         const curStage = allStagesNorm.find(s => s.order_num === currentOrder);
-        if (stageAllowsAiBrowser(curStage)) {
+        if (stageIsUnrestrictedAiBrowser(curStage)) {
           setAiUrl(INAPP_BROWSER_HOME);
           setAddressDraft(INAPP_BROWSER_HOME);
         }
@@ -226,7 +232,7 @@ export default function WorkScreen({ navigation, route }) {
         const stage = data.stages?.find(s => s.order_num === stageOrder);
         setAllStages((data.stages || []).map(s => ({ ...s, step_order: s.order_num })));
         setViewedStageOrder(stageOrder);
-        if (stageAllowsAiBrowser(stage)) {
+        if (stageIsUnrestrictedAiBrowser(stage)) {
           setAiUrl(INAPP_BROWSER_HOME);
           setAddressDraft(INAPP_BROWSER_HOME);
         }
@@ -567,10 +573,19 @@ export default function WorkScreen({ navigation, route }) {
           await uploadLocalUrlLogs();
         }
 
+        const unlockSnap = currentStepId
+          ? unlockSnapshotByStepRef.current[currentStepId]
+          : null;
         const result = await assessmentAPI.submitStep(participation_id, {
           step_id: currentStepId || null,
           content: writingTextRef.current,
           consent_given: consentGiven,
+          ...(unlockSnap
+            ? {
+                content_at_unlock: unlockSnap.content_at_unlock,
+                browser_unlocked_at: unlockSnap.browser_unlocked_at,
+              }
+            : {}),
         });
 
         if (result.status === 'submitted') {
@@ -759,7 +774,13 @@ export default function WorkScreen({ navigation, route }) {
   const currentStage = assignment?.stages?.find(s => s.order_num === currentStageOrder);
   const viewedStage = assignment?.stages?.find(s => s.order_num === viewOrder) || currentStage;
   const isCompleted = assignment?.studentProgress?.status === 'completed' || assignment?.studentProgress?.status === 'submitted';
-  const aiAllowed = viewOrder === currentStageOrder && stageAllowsAiBrowser(viewedStage);
+  const isCurrentStageView = viewOrder === currentStageOrder && !isCompleted;
+  const stepBrowserUnlocked = !!(currentStepId && browserUnlockedByStep[currentStepId]);
+  const showWebViewPanel = isCurrentStageView && (
+    stageIsUnrestrictedAiBrowser(viewedStage)
+    || (stageIsConditionalAi(viewedStage) && stepBrowserUnlocked)
+  );
+  const isConditionalLocked = isCurrentStageView && stageIsConditionalAi(viewedStage) && !stepBrowserUnlocked;
   const isViewingPast = viewOrder < currentStageOrder;
   const isViewingFuture = viewOrder > currentStageOrder && !isCompleted;
   const previousStageWritings = isNewSystem
@@ -787,6 +808,34 @@ export default function WorkScreen({ navigation, route }) {
           };
         })
         .filter((item) => item.content.trim().length > 0);
+
+  const handleUnlockBrowser = () => {
+    if (!currentStepId || !stageIsConditionalAi(viewedStage)) return;
+    appAlert(
+      '웹뷰 열기',
+      '지금까지 작성한 내용은 「독립 사고」 구간으로 기록됩니다.\n이후 AI·웹 검색을 사용할 수 있습니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '웹뷰 열기',
+          onPress: () => {
+            const snapshot = writingTextRef.current ?? '';
+            const unlockedAt = new Date().toISOString();
+            unlockSnapshotByStepRef.current[currentStepId] = {
+              content_at_unlock: snapshot,
+              browser_unlocked_at: unlockedAt,
+            };
+            setBrowserUnlockedByStep((prev) => ({ ...prev, [currentStepId]: true }));
+            setAiUrl(INAPP_BROWSER_HOME);
+            setAddressDraft(INAPP_BROWSER_HOME);
+            lastLoggedUrlRef.current = null;
+            pageStartTimeRef.current = Date.now();
+            visitedAtRef.current = unlockedAt;
+          },
+        },
+      ]
+    );
+  };
 
   const navigateFromAddressBar = () => {
     const raw = addressDraft.trim();
@@ -941,13 +990,13 @@ export default function WorkScreen({ navigation, route }) {
       )}
 
       {/* ── 왼쪽 작업열 + 오른쪽 브라우저 — 작성창만 visualViewport/키보드 높이만큼 위로 ── */}
-      <View style={[styles.bodyRow, aiAllowed && styles.splitContainer]}>
+      <View style={[styles.bodyRow, showWebViewPanel && styles.splitContainer]}>
         <KeyboardAvoidingView
           ref={leftColumnRef}
           nativeID="work-left-column"
           style={[
             styles.leftWorkColumn,
-            { flex: aiAllowed ? splitRatio : 1 },
+            { flex: showWebViewPanel ? splitRatio : 1 },
           ]}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           enabled={Platform.OS !== 'web'}
@@ -982,6 +1031,15 @@ export default function WorkScreen({ navigation, route }) {
               <View style={nh.deadlineBadge}>
                 <Text style={nh.deadlineText}>{deadlineLabel}</Text>
               </View>
+            )}
+            {isConditionalLocked && (
+              <Pressable
+                style={({ pressed }) => [nh.webviewBtn, pressed && { opacity: 0.75 }]}
+                onPress={handleUnlockBrowser}
+              >
+                <Ionicons name="globe-outline" size={14} color={C.primary} />
+                <Text style={nh.webviewBtnText}>웹뷰 보기</Text>
+              </Pressable>
             )}
             <Pressable
               style={({ pressed }) => [nh.submitBtn, (pressed || isCompleted) && { opacity: 0.7 }]}
@@ -1173,7 +1231,18 @@ export default function WorkScreen({ navigation, route }) {
             </View>
             </View>
 
-            {!aiAllowed && (
+            {isConditionalLocked && (
+              <View style={[styles.infoBox, styles.conditionalAiBox]}>
+                <Text style={styles.conditionalAiIcon}>📋</Text>
+                <Text style={styles.conditionalAiTitle}>AI·웹 조건부 단계</Text>
+                <Text style={styles.conditionalAiDesc}>
+                  먼저 스스로 생각하며 작성하세요.{'\n'}
+                  준비가 되면 상단 「웹뷰 보기」를 눌러 AI·웹 검색을 시작할 수 있습니다.
+                </Text>
+              </View>
+            )}
+
+            {isCurrentStageView && !stageAllowsAiBrowser(viewedStage) && (
               <View style={[styles.infoBox, styles.noAiBox]}>
                 <Text style={styles.noAiIcon}>🚫</Text>
                 <Text style={styles.noAiTitle}>AI 사용 제한 단계</Text>
@@ -1194,8 +1263,8 @@ export default function WorkScreen({ navigation, route }) {
         </View>
         </KeyboardAvoidingView>
 
-        {/* ── 분할선 + AI 브라우저 패널 (AI 허용 시만 표시, 키보드 영향 없음) ── */}
-        {aiAllowed && (
+        {/* ── 분할선 + AI 브라우저 패널 (허용·조건부 해제 후 표시) ── */}
+        {showWebViewPanel && (
           <>
             <View style={styles.divider} {...panResponder.panHandlers}>
               <View style={styles.dividerHandle} />
@@ -1461,6 +1530,12 @@ const nh = StyleSheet.create({
     backgroundColor: C.warningLight,
   },
   deadlineText: { fontFamily: F.sansMedium, fontSize: 11.5, color: C.warning, letterSpacing: 0.15 },
+  webviewBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: C.card, borderWidth: 1, borderColor: C.primary,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
+  },
+  webviewBtnText: { fontFamily: F.sansBold, fontSize: 13, color: C.primary },
   submitBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: C.primary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8,
@@ -1565,6 +1640,12 @@ const styles = StyleSheet.create({
   noAiIcon: { fontSize: 32, marginBottom: 8 },
   noAiTitle: { fontSize: 15, fontWeight: 'bold', color: THEME.danger, marginBottom: 4 },
   noAiDesc: { fontSize: 13, color: THEME.textSecondary, textAlign: 'center' },
+  conditionalAiBox: {
+    alignItems: 'center', paddingVertical: 10, borderLeftWidth: 3, borderLeftColor: THEME.warning,
+  },
+  conditionalAiIcon: { fontSize: 28, marginBottom: 6 },
+  conditionalAiTitle: { fontSize: 15, fontWeight: 'bold', color: THEME.warning, marginBottom: 4 },
+  conditionalAiDesc: { fontSize: 13, color: THEME.textSecondary, textAlign: 'center', lineHeight: 20 },
   advanceBtn: {
     backgroundColor: THEME.dark, borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 4,
   },

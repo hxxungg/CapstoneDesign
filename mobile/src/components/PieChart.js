@@ -14,12 +14,17 @@ const F = FONTS;
  * title: 차트 제목
  */
 export default function PieChart({
-  data = [], size = 130, title, helpKey, countUnit, totalCaption, hideLegendCount = false,
+  data = [], size = 130, title, helpKey, countUnit, totalCaption, totalCount,
+  hideLegendCount = false, percentMode = false,
 }) {
   const total = data.reduce((s, d) => s + (d.value || 0), 0);
   const unit = countUnit ?? (helpKey && CHART_COUNT_UNITS[helpKey]) ?? '개';
+  const displayTotal = totalCount ?? total;
 
-  const pctOf = (value) => (total > 0 ? `${Math.round((value / total) * 100)}%` : '0%');
+  const pctOf = (value) => {
+    if (percentMode) return `${value ?? 0}%`;
+    return total > 0 ? `${Math.round((value / total) * 100)}%` : '0%';
+  };
 
   const renderSlices = () => {
     if (total === 0) return null;
@@ -53,7 +58,7 @@ export default function PieChart({
   const titleWithTotal = title
     ? totalCaption != null
       ? `${title} (${totalCaption})`
-      : `${title} (총 ${total}${unit})`
+      : `${title} (총 ${displayTotal}${unit})`
     : null;
 
   return (
@@ -83,7 +88,9 @@ export default function PieChart({
               </Text>
               <Text style={st.legendPct}>{pctOf(d.value ?? 0)}</Text>
               {!hideLegendCount && (
-                <Text style={st.legendCount}>({d.value ?? 0}{unit})</Text>
+                <Text style={st.legendCount}>
+                  ({percentMode ? (d.count ?? 0) : (d.value ?? 0)}{unit})
+                </Text>
               )}
             </View>
           ))}

@@ -76,7 +76,121 @@ export function buildStepDisplayList(byStep, simByStep, { includeStepOrderInTitl
         : (s.step_title ?? `단계 ${s.step_order}`),
       sentences: getSentences(s.step_id),
       compliance: s.compliance ?? null,
+      contentAtUnlock: s.content_at_unlock ?? null,
+      browserUnlockedAt: s.browser_unlocked_at ?? null,
+      aiPermission: s.ai_permission ?? null,
     }));
+}
+
+/** 조건부 AI — 웹뷰 해제 시점(content_at_unlock) 기준으로 문장 목록 분리 */
+export function partitionSentencesByUnlock(sentences, contentAtUnlock) {
+  if (!contentAtUnlock?.trim() || !sentences?.length) {
+    return { before: sentences ?? [], after: [], showDivider: false };
+  }
+
+  const unlockRaw = contentAtUnlock.trim();
+  const joined = sentences
+    .map((s) => (s.sentence ?? '').trim())
+    .filter(Boolean)
+    .join(' ');
+
+  if (joined.startsWith(unlockRaw)) {
+    let pos = 0;
+    let splitAt = 0;
+    for (let i = 0; i < sentences.length; i += 1) {
+      const chunk = (sentences[i].sentence ?? '').trim();
+      if (!chunk) continue;
+      const sep = pos > 0 ? ' ' : '';
+      pos += sep.length + chunk.length;
+      splitAt = i + 1;
+      if (pos >= unlockRaw.length) break;
+    }
+    const after = sentences.slice(splitAt);
+    return {
+      before: sentences.slice(0, splitAt),
+      after,
+      showDivider: after.length > 0,
+    };
+  }
+
+  const targetLen = unlockRaw.length;
+  let built = '';
+  let splitAt = sentences.length;
+  for (let i = 0; i < sentences.length; i += 1) {
+    const chunk = (sentences[i].sentence ?? '').trim();
+    if (!chunk) continue;
+    const sep = built ? ' ' : '';
+    const nextLen = built.length + sep.length + chunk.length;
+    if (built.length < targetLen && nextLen >= targetLen) {
+      splitAt = i + 1;
+      break;
+    }
+    built += sep + chunk;
+  }
+  const after = sentences.slice(splitAt);
+  return {
+    before: sentences.slice(0, splitAt),
+    after,
+    showDivider: after.length > 0,
+  };
+}
+
+function ConditionalUnlockDivider({ unlockedAt }) {
+  const timeLabel = fmtTimeline(unlockedAt, { withDate: true });
+  return (
+    <View style={styles.unlockDividerWrap}>
+      <View style={styles.unlockDividerLine} />
+      <View style={styles.unlockDividerBadge}>
+        <Ionicons name="globe-outline" size={13} color={C.textSecondary} />
+        <Text style={styles.unlockDividerLabel}>
+          AI·웹 검색 사용 시작{timeLabel ? ` · ${timeLabel}` : ''}
+        </Text>
+      </View>
+      <View style={styles.unlockDividerLine} />
+    </View>
+  );
+}
+
+function renderSentenceSegments({
+  sentences,
+  stepIdKey,
+  onJumpToAiLog,
+  selectedSegmentKey,
+  keyPrefix = '',
+}) {
+  return sentences.flatMap((r, ri) => {
+    const bg = ORIGINALITY_COLOR[r.originality] ?? null;
+    const text = formatSentenceForDisplay(r.sentence);
+    const canOpenLink = r.ai_log_id != null;
+    const segmentKey = `${stepIdKey}-${keyPrefix}${r.segment_order ?? ri}`;
+    const isSelected = selectedSegmentKey === segmentKey;
+
+    if (!text) return [];
+
+    const segment = (
+      <Text
+        key={segmentKey}
+        onPress={
+          canOpenLink
+            ? (e) => {
+                e?.stopPropagation?.();
+                onJumpToAiLog?.({ aiLogId: r.ai_log_id, segmentKey });
+              }
+            : undefined
+        }
+        style={[
+          styles.sentenceText,
+          bg && { backgroundColor: bg, borderRadius: 3 },
+          canOpenLink && styles.sentencePressable,
+          isSelected && styles.sentenceSelected,
+        ]}
+      >
+        {text}
+      </Text>
+    );
+
+    return ri < sentences.length - 1 ? [segment, ' '] : [segment];
+  });
 }
 
 /** 단계별 이행(루브릭) — criteria_met 1: 성공, 0: 실패 */
@@ -433,7 +547,15 @@ function StepSentencesBlock({
   onClearHighlight,
   compliance = null,
   selectedSegmentKey = null,
+  contentAtUnlock = null,
+  browserUnlockedAt = null,
+  aiPermission = null,
 }) {
+  const isConditional = aiPermission === 'conditional';
+  const { before, after, showDivider } = isConditional && contentAtUnlock
+    ? partitionSentencesByUnlock(sentences, contentAtUnlock)
+    : { before: sentences, after: [], showDivider: false };
+
   return (
     <View style={styles.stepBlock}>
       <Pressable onPress={onClearHighlight} style={({ pressed }) => pressed && { opacity: 0.85 }}>
@@ -445,47 +567,39 @@ function StepSentencesBlock({
       {sentences.length === 0 ? (
         <Text style={styles.sentenceEmpty}>제출된 내용이 없습니다.</Text>
       ) : (
-        <Text style={styles.paragraphWrap}>
-          {sentences.flatMap((r, ri) => {
-            const bg = ORIGINALITY_COLOR[r.originality] ?? null;
-            const text = formatSentenceForDisplay(r.sentence);
-            const canOpenLink = r.ai_log_id != null;
-            const segmentKey = `${stepIdKey}-${r.segment_order ?? ri}`;
-            const isSelected = selectedSegmentKey === segmentKey;
-
-            if (!text) return [];
-
-            const segment = (
-              <Text
-                key={segmentKey}
-                onPress={
-                  canOpenLink
-                    ? (e) => {
-                        e?.stopPropagation?.();
-                        onJumpToAiLog?.({
-                          aiLogId: r.ai_log_id,
-                          segmentKey,
-                        });
-                      }
-                    : undefined
-                }
-                style={[
-                  styles.sentenceText,
-                  bg && {
-                    backgroundColor: bg,
-                    borderRadius: 3,
-                  },
-                  canOpenLink && styles.sentencePressable,
-                  isSelected && styles.sentenceSelected,
-                ]}
-              >
-                {text}
-              </Text>
-            );
-
-            return ri < sentences.length - 1 ? [segment, ' '] : [segment];
-          })}
-        </Text>
+        <View>
+          {isConditional && showDivider && (
+            <Text style={styles.unlockSectionLabel}>웹뷰 열기 전 (독립 사고)</Text>
+          )}
+          <Text style={styles.paragraphWrap}>
+            {renderSentenceSegments({
+              sentences: before,
+              stepIdKey,
+              onJumpToAiLog,
+              selectedSegmentKey,
+              keyPrefix: 'pre-',
+            })}
+          </Text>
+          {showDivider ? (
+            <>
+              <ConditionalUnlockDivider unlockedAt={browserUnlockedAt} />
+              {after.length > 0 ? (
+                <>
+                  <Text style={styles.unlockSectionLabel}>웹뷰 열기 후</Text>
+                  <Text style={styles.paragraphWrap}>
+                    {renderSentenceSegments({
+                      sentences: after,
+                      stepIdKey,
+                      onJumpToAiLog,
+                      selectedSegmentKey,
+                      keyPrefix: 'post-',
+                    })}
+                  </Text>
+                </>
+              ) : null}
+            </>
+          ) : null}
+        </View>
       )}
     </View>
   );
@@ -636,7 +750,15 @@ export const SimilarityActivitySplitPanel = forwardRef(function SimilarityActivi
     stepDisplayList.length === 0 ? (
       <Text style={styles.sentenceEmpty}>제출된 내용이 없습니다.</Text>
     ) : (
-      stepDisplayList.map(({ stepIdKey, stepTitle, sentences, compliance }, idx) => (
+      stepDisplayList.map(({
+        stepIdKey,
+        stepTitle,
+        sentences,
+        compliance,
+        contentAtUnlock,
+        browserUnlockedAt,
+        aiPermission,
+      }, idx) => (
         <View key={stepIdKey}>
           {idx > 0 && <View style={styles.stepDivider} />}
           <StepSentencesBlock
@@ -647,6 +769,9 @@ export const SimilarityActivitySplitPanel = forwardRef(function SimilarityActivi
             onClearHighlight={clearHighlight}
             compliance={compliance}
             selectedSegmentKey={selectedSegmentKey}
+            contentAtUnlock={contentAtUnlock}
+            browserUnlockedAt={browserUnlockedAt}
+            aiPermission={aiPermission}
           />
         </View>
       ))
@@ -738,6 +863,39 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: C.border,
     marginVertical: 14,
+  },
+  unlockSectionLabel: {
+    fontFamily: F.sansMedium,
+    fontSize: 10,
+    color: C.textSecondary,
+    marginBottom: 4,
+    letterSpacing: 0.2,
+  },
+  unlockDividerWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginVertical: 12,
+  },
+  unlockDividerLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: C.text,
+    opacity: 0.35,
+  },
+  unlockDividerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: '#f5f5f5',
+  },
+  unlockDividerLabel: {
+    fontFamily: F.sansMedium,
+    fontSize: 10,
+    color: C.textSecondary,
   },
   stepHead: {
     flexDirection: 'row',

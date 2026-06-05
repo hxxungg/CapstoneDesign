@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { THEME, FONTS } from '../config/api';
 
@@ -9,48 +9,117 @@ const F = FONTS;
 const HDR = '#D9EAD3';
 const BORDER = '#9AA89A';
 const ROW_H = 44;
-/** 채점기준표 상단 메타 영역 — 좌측 라벨열 고정 비율 (웹 flex 어긋남 방지) */
+/** 채점기준표 — 좌측 라벨열 : 우측 내용열 (모바일·웹 동일 비율) */
 const LABEL_COL_FLEX = 1.2;
 const CONTENT_COL_FLEX = 4.8;
-const LABEL_COL_BASIS = '20%';
 /** 평가 요소 블록 — 우측 표 열 비율 (simple / subBlocks 공통) */
 const RUBRIC_SUB_ELEMENT_FLEX = 1.1;
 const RUBRIC_LEVEL_FLEX = 3.2;
 const RUBRIC_SCORE_FLEX = 0.9;
 const RUBRIC_REMOVE_COL_W = 28;
 const RUBRIC_METRIC_INNER_TOTAL = RUBRIC_LEVEL_FLEX + RUBRIC_SCORE_FLEX;
+const RUBRIC_SUB_ROW_TOTAL = RUBRIC_SUB_ELEMENT_FLEX + RUBRIC_METRIC_INNER_TOTAL;
 
-function rubricFlexCol(flexUnit) {
-  return { flex: flexUnit, flexBasis: 0, minWidth: 0 };
+function fixedColWidth(px) {
+  return {
+    width: px,
+    minWidth: px,
+    maxWidth: px,
+    flexGrow: 0,
+    flexShrink: 0,
+  };
 }
 
-/** inner(수행 수준·배점) — 웹에서 flex 대신 % 고정 (헤더·본문 동일) */
-function rubricInnerColStyle(flexUnit) {
-  if (Platform.OS === 'web') {
-    const pct = `${(flexUnit / RUBRIC_METRIC_INNER_TOTAL) * 100}%`;
-    return { width: pct, flexGrow: 0, flexShrink: 0, minWidth: 0 };
+/** 수행 수준·배점·삭제 열 — metric 영역 너비 기준 픽셀 고정 */
+function computeMetricCols(metricW, hasRemove) {
+  const metricWidth = Math.round(metricW);
+  const removeW = hasRemove ? RUBRIC_REMOVE_COL_W : 0;
+  const innerW = Math.max(0, metricWidth - removeW);
+  const levelW = Math.round(innerW * (RUBRIC_LEVEL_FLEX / RUBRIC_METRIC_INNER_TOTAL));
+  const scoreW = innerW - levelW;
+  return { metricW: metricWidth, levelW, scoreW, removeW };
+}
+
+/** rubricContentArea 너비 1회 측정 → 헤더·본문 모든 행에 동일 픽셀 너비 적용 */
+function computeRubricCols(contentWidth, { hasSubElement, hasRemove }) {
+  const totalW = Math.round(contentWidth);
+  if (!hasSubElement) {
+    return { subW: 0, ...computeMetricCols(totalW, hasRemove) };
   }
-  return rubricFlexCol(flexUnit);
+  const subW = Math.round(totalW * (RUBRIC_SUB_ELEMENT_FLEX / RUBRIC_SUB_ROW_TOTAL));
+  const metricW = totalW - subW;
+  return { subW, ...computeMetricCols(metricW, hasRemove) };
 }
 
-function RubricRemoveCol({ header, minHeight, onPress }) {
+function rubricSubElementColStyle(colWidths) {
+  if (colWidths?.subW) return fixedColWidth(colWidths.subW);
+  return { flex: RUBRIC_SUB_ELEMENT_FLEX, flexBasis: 0, minWidth: 0 };
+}
+
+function rubricLevelColStyle(colWidths) {
+  if (colWidths?.levelW) return fixedColWidth(colWidths.levelW);
+  return { flex: RUBRIC_LEVEL_FLEX, flexBasis: 0, minWidth: 0 };
+}
+
+function rubricScoreColStyle(colWidths) {
+  if (colWidths?.scoreW) return fixedColWidth(colWidths.scoreW);
+  return { flex: RUBRIC_SCORE_FLEX, flexBasis: 0, minWidth: 0 };
+}
+
+function rubricRemoveColStyle(colWidths) {
+  if (colWidths?.removeW) return fixedColWidth(colWidths.removeW);
+  return styles.rubricRemoveCol;
+}
+
+function rubricMetricAreaStyle(colWidths) {
+  if (colWidths?.metricW) {
+    return [styles.subGroupsCol, fixedColWidth(colWidths.metricW)];
+  }
+  return styles.subGroupsCol;
+}
+
+/** 평가 요소 그리드 셀 — 열마다 동일 border (border-collapse 유사) */
+function RubricGridCell({
+  children,
+  header,
+  col,
+  colWidths,
+  minHeight = 36,
+  center,
+  noPadding,
+  noRightBorder,
+  style,
+}) {
+  const colStyle =
+    col === 'subElement'
+      ? rubricSubElementColStyle(colWidths)
+      : col === 'level'
+        ? rubricLevelColStyle(colWidths)
+        : col === 'score'
+          ? rubricScoreColStyle(colWidths)
+          : col === 'remove'
+            ? rubricRemoveColStyle(colWidths)
+            : null;
+  const isRemove = col === 'remove';
+
   return (
     <View
       style={[
-        styles.rubricRemoveCol,
-        header && styles.rubricRemoveHeaderPad,
+        colStyle,
+        styles.rubricGridCell,
+        header && styles.rubricGridCellHeader,
+        isRemove && styles.rubricGridRemoveCell,
+        header && isRemove && styles.rubricGridRemoveCellHeader,
+        (noRightBorder || isRemove) && styles.rubricGridCellNoRight,
+        center && styles.cellCenter,
+        noPadding && styles.cellNoPadding,
         { minHeight },
+        style,
       ]}
     >
-      {!header && onPress ? (
-        <Pressable
-          style={({ pressed }) => [styles.rubricRemoveBtn, pressed && { opacity: 0.6 }]}
-          onPress={onPress}
-          hitSlop={6}
-        >
-          <Ionicons name="close-circle-outline" size={14} color={C.textSecondary} />
-        </Pressable>
-      ) : null}
+      {typeof children === 'string' || typeof children === 'number'
+        ? <Text style={[styles.cellText, header && styles.cellHeaderText]}>{children}</Text>
+        : children}
     </View>
   );
 }
@@ -341,7 +410,7 @@ function Cell({ children, style, header, flex, minHeight = 36, center, noPadding
         styles.cell,
         header && styles.cellHeader,
         flex != null && styles.cellFlex,
-        flex != null && { flex },
+        flex != null && { flex, flexBasis: 0 },
         { minHeight },
         center && styles.cellCenter,
         noPadding && styles.cellNoPadding,
@@ -500,6 +569,7 @@ function ScoreGroupRows({
   onChangeGroup,
   canRemoveLevel,
   onRemoveLevel,
+  colWidths,
   showSubElement = false,
   subElementForRow,
   subElementMinHeightForRow,
@@ -508,6 +578,7 @@ function ScoreGroupRows({
   return groups.map((group, gi) => (
     <RubricMetricRow
       key={gi}
+      colWidths={colWidths}
       canRemoveLevel={canRemoveLevel}
       showSubElement={showSubElement}
       subElement={subElementForRow?.(gi)}
@@ -540,10 +611,11 @@ function ScoreGroupRows({
   ));
 }
 
-/** 평가 요소 표 — 수행 수준·배점은 inner flex, x는 고정 열 (헤더·본문 세로선 동일) */
+/** 평가 요소 표 — 열을 한 행에 평탄 배치 (헤더·본문 세로선 동일) */
 function RubricMetricRow({
   header,
   canRemoveLevel,
+  colWidths,
   showSubElement = false,
   subElement,
   subElementMinHeight,
@@ -554,74 +626,105 @@ function RubricMetricRow({
   minHeight = header ? 40 : ROW_H,
 }) {
   const body = !header;
+  const hasRemove = !!canRemoveLevel;
 
   return (
-    <View style={[styles.row, styles.rubricMetricRow, rowBorder && styles.rowBorder]}>
+    <View
+      style={[
+        styles.row,
+        styles.rubricMetricRow,
+        rowBorder && styles.rowBorder,
+        header && styles.rubricMetricHeaderRow,
+      ]}
+    >
       {showSubElement ? (
-        <Cell
+        <RubricGridCell
+          col="subElement"
+          colWidths={colWidths}
           header={header}
-          flex={RUBRIC_SUB_ELEMENT_FLEX}
           minHeight={subElementMinHeight ?? minHeight}
           noPadding={body && subElement != null}
         >
           {subElement}
-        </Cell>
+        </RubricGridCell>
       ) : null}
-      <View style={[styles.row, styles.rubricMetricInner, { flex: 1, minWidth: 0, minHeight }]}>
-        <Cell
-          header={header}
-          flex={Platform.OS === 'web' ? undefined : RUBRIC_LEVEL_FLEX}
-          style={rubricInnerColStyle(RUBRIC_LEVEL_FLEX)}
-          minHeight={minHeight}
-          noPadding={body}
-        >
-          {level}
-        </Cell>
-        <Cell
-          header={header}
-          flex={Platform.OS === 'web' ? undefined : RUBRIC_SCORE_FLEX}
-          style={[rubricInnerColStyle(RUBRIC_SCORE_FLEX), body && styles.rubricScoreCellBody]}
-          minHeight={minHeight}
-          center={header}
-          noPadding={body}
-          noRightBorder
-        >
-          {score}
-        </Cell>
-      </View>
-      {canRemoveLevel ? (
-        <RubricRemoveCol header={header} minHeight={minHeight} onPress={onRemove} />
+      <RubricGridCell col="level" colWidths={colWidths} header={header} minHeight={minHeight} noPadding={body}>
+        {level}
+      </RubricGridCell>
+      <RubricGridCell
+        col="score"
+        colWidths={colWidths}
+        header={header}
+        minHeight={minHeight}
+        center={header}
+        noPadding={body}
+        noRightBorder={hasRemove}
+        style={body ? styles.rubricScoreCellBody : null}
+      >
+        {score}
+      </RubricGridCell>
+      {hasRemove ? (
+        <RubricGridCell col="remove" colWidths={colWidths} header={header} minHeight={minHeight} noPadding>
+          {!header && onRemove ? (
+            <Pressable
+              style={({ pressed }) => [styles.rubricRemoveBtn, pressed && { opacity: 0.6 }]}
+              onPress={onRemove}
+              hitSlop={6}
+            >
+              <Ionicons name="close-circle-outline" size={14} color={C.textSecondary} />
+            </Pressable>
+          ) : null}
+        </RubricGridCell>
       ) : null}
     </View>
   );
 }
 
-function RubricAddLevelRow({ showSubElement, canRemoveLevel, onPress, label = '수행 수준 추가' }) {
+function RubricAddLevelRow({
+  showSubElement,
+  canRemoveLevel,
+  colWidths,
+  onPress,
+  label = '수행 수준 추가',
+}) {
+  const hasRemove = !!canRemoveLevel;
   return (
-    <View style={[styles.row, styles.rubricMetricRow]}>
+    <View style={[styles.row, styles.rubricMetricRow, styles.rowBorder]}>
       {showSubElement ? (
         <View
           style={[
-            styles.subElementCol,
+            rubricSubElementColStyle(colWidths),
+            styles.rubricGridCell,
             styles.rubricAddLevelSubSpacer,
-            rubricFlexCol(RUBRIC_SUB_ELEMENT_FLEX),
           ]}
         />
       ) : null}
       <Pressable
         style={({ pressed }) => [
-          styles.addLevelRow,
+          styles.row,
           styles.rubricAddLevelMain,
-          styles.rubricMetricInner,
-          { flex: 1, minWidth: 0 },
+          colWidths?.metricW ? fixedColWidth(colWidths.metricW) : styles.rubricMetricInnerFull,
+          { minHeight: 36 },
           pressed && { opacity: 0.75 },
         ]}
         onPress={onPress}
       >
-        <Ionicons name="add-circle-outline" size={14} color={C.primary} />
-        <Text style={styles.addLevelText}>{label}</Text>
+        <View style={[rubricLevelColStyle(colWidths), styles.rubricGridCell, styles.rubricAddLevelSplit]} />
+        <View
+          style={[
+            rubricScoreColStyle(colWidths),
+            styles.rubricAddLevelSplit,
+            hasRemove && styles.rubricGridCellNoRight,
+          ]}
+        />
+        <View style={styles.rubricAddLevelOverlay} pointerEvents="none">
+          <Ionicons name="add-circle-outline" size={14} color={C.primary} />
+          <Text style={styles.addLevelText}>{label}</Text>
+        </View>
       </Pressable>
-      {canRemoveLevel ? <View style={styles.rubricAddLevelRemoveSpacer} /> : null}
+      {hasRemove ? (
+        <View style={[rubricRemoveColStyle(colWidths), styles.rubricAddLevelRemoveSpacer]} />
+      ) : null}
     </View>
   );
 }
@@ -636,6 +739,30 @@ function RubricBlock({
   const totalRows = countBlockRows(block);
   const totalLevels = countBlockLevels(block);
   const canRemoveLevel = totalLevels > 1;
+  const hasSubElement = !!block.subBlocks;
+  const [colWidths, setColWidths] = React.useState(null);
+
+  const handleRubricContentLayout = React.useCallback(
+    (e) => {
+      const width = e.nativeEvent.layout.width;
+      if (width <= 0) return;
+      const next = computeRubricCols(width, { hasSubElement, hasRemove: canRemoveLevel });
+      setColWidths((prev) => {
+        if (
+          prev
+          && prev.subW === next.subW
+          && prev.metricW === next.metricW
+          && prev.levelW === next.levelW
+          && prev.scoreW === next.scoreW
+          && prev.removeW === next.removeW
+        ) {
+          return prev;
+        }
+        return next;
+      });
+    },
+    [hasSubElement, canRemoveLevel]
+  );
 
   const setElement = (text) => onChangeBlock(blockIndex, { ...block, element: text });
 
@@ -706,116 +833,135 @@ function RubricBlock({
     </View>
   );
 
-  if (block.subBlocks) {
-    return (
-      <View style={styles.rubricBlockWrap}>
-        {blockToolbar}
-        <View style={styles.rubricBlock}>
-          {elementColPanel}
-          <View style={styles.contentArea}>
-            <View style={styles.subBlockWrap}>
-              <Cell header flex={RUBRIC_SUB_ELEMENT_FLEX} minHeight={40}>세부 요소</Cell>
-              <View style={styles.subGroupsCol}>
-                <RubricMetricRow
-                  header
+  const metricHeaderRow = hasSubElement ? (
+    <View style={styles.subBlockWrap}>
+      <RubricGridCell col="subElement" colWidths={colWidths} header minHeight={40}>
+        세부 요소
+      </RubricGridCell>
+      <View style={rubricMetricAreaStyle(colWidths)}>
+        <RubricMetricRow
+          header
+          colWidths={colWidths}
+          canRemoveLevel={canRemoveLevel}
+          level="수행 수준"
+          score="배점"
+        />
+      </View>
+    </View>
+  ) : (
+    <RubricMetricRow
+      header
+      colWidths={colWidths}
+      canRemoveLevel={canRemoveLevel}
+      level="수행 수준"
+      score="배점"
+    />
+  );
+
+  const metricBodyContent = block.subBlocks ? (
+    <>
+      {block.subBlocks.map((sub, si) => {
+        const subRows = sub.scoreGroups.reduce((s, g) => s + g.levels.length, 0);
+        return (
+          <View key={si}>
+            <View style={[styles.subBlockWrap, si > 0 && styles.rowBorder]}>
+              <View
+                style={[
+                  rubricSubElementColStyle(colWidths),
+                  styles.rubricGridCell,
+                  styles.subElementCol,
+                  { minHeight: subRows * ROW_H },
+                ]}
+              >
+                <TextInput
+                  style={[styles.input, styles.inputMultiline, { flex: 1, padding: 8 }]}
+                  value={sub.subElement}
+                  onChangeText={(t) => {
+                    const subBlocks = block.subBlocks.map((sb, idx) =>
+                      idx === si ? { ...sb, subElement: t } : sb
+                    );
+                    patchSubBlocks(subBlocks);
+                  }}
+                  placeholder="세부 요소"
+                  placeholderTextColor={C.textFaint}
+                  multiline
+                  textAlignVertical="top"
+                />
+                {block.subBlocks.length > 1 ? (
+                  <Pressable
+                    style={({ pressed }) => [styles.subBlockRemoveBtn, pressed && { opacity: 0.7 }]}
+                    onPress={() => handleRemoveSubBlock(si)}
+                  >
+                    <Ionicons name="close-circle-outline" size={14} color={C.textSecondary} />
+                    <Text style={styles.subBlockRemoveText}>세부 요소 삭제</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+              <View style={rubricMetricAreaStyle(colWidths)}>
+                <ScoreGroupRows
+                  groups={sub.scoreGroups}
+                  colWidths={colWidths}
                   canRemoveLevel={canRemoveLevel}
-                  level="수행 수준"
-                  score="배점"
+                  rowBorderForIndex={(gi) => gi > 0}
+                  onRemoveLevel={(gi, li) => handleRemoveLevel(gi, li, si)}
+                  onChangeGroup={(gi, group) => {
+                    const subBlocks = block.subBlocks.map((sb, idx) => {
+                      if (idx !== si) return sb;
+                      const scoreGroups = sb.scoreGroups.map((g, gIdx) =>
+                        gIdx === gi ? group : g
+                      );
+                      return { ...sb, scoreGroups };
+                    });
+                    patchSubBlocks(subBlocks);
+                  }}
+                />
+                <RubricAddLevelRow
+                  colWidths={colWidths}
+                  canRemoveLevel={canRemoveLevel}
+                  onPress={() => handleAddScoreGroup(si)}
                 />
               </View>
             </View>
-            {block.subBlocks.map((sub, si) => {
-              const subRows = sub.scoreGroups.reduce((s, g) => s + g.levels.length, 0);
-              return (
-                <View key={si}>
-                  <View style={[styles.subBlockWrap, si > 0 && styles.rowBorder]}>
-                    <View style={[styles.subElementCol, { minHeight: subRows * ROW_H }]}>
-                      <TextInput
-                        style={[styles.input, styles.inputMultiline, { flex: 1, padding: 8 }]}
-                        value={sub.subElement}
-                        onChangeText={(t) => {
-                          const subBlocks = block.subBlocks.map((sb, idx) =>
-                            idx === si ? { ...sb, subElement: t } : sb
-                          );
-                          patchSubBlocks(subBlocks);
-                        }}
-                        placeholder="세부 요소"
-                        placeholderTextColor={C.textFaint}
-                        multiline
-                        textAlignVertical="top"
-                      />
-                      {block.subBlocks.length > 1 ? (
-                        <Pressable
-                          style={({ pressed }) => [styles.subBlockRemoveBtn, pressed && { opacity: 0.7 }]}
-                          onPress={() => handleRemoveSubBlock(si)}
-                        >
-                          <Ionicons name="close-circle-outline" size={14} color={C.textSecondary} />
-                          <Text style={styles.subBlockRemoveText}>세부 요소 삭제</Text>
-                        </Pressable>
-                      ) : null}
-                    </View>
-                    <View style={styles.subGroupsCol}>
-                      <ScoreGroupRows
-                        groups={sub.scoreGroups}
-                        canRemoveLevel={canRemoveLevel}
-                        rowBorderForIndex={(gi) => gi > 0}
-                        onRemoveLevel={(gi, li) => handleRemoveLevel(gi, li, si)}
-                        onChangeGroup={(gi, group) => {
-                          const subBlocks = block.subBlocks.map((sb, idx) => {
-                            if (idx !== si) return sb;
-                            const scoreGroups = sb.scoreGroups.map((g, gIdx) =>
-                              gIdx === gi ? group : g
-                            );
-                            return { ...sb, scoreGroups };
-                          });
-                          patchSubBlocks(subBlocks);
-                        }}
-                      />
-                      <RubricAddLevelRow
-                        canRemoveLevel={canRemoveLevel}
-                        onPress={() => handleAddScoreGroup(si)}
-                      />
-                    </View>
-                  </View>
-                </View>
-              );
-            })}
-            <Pressable
-              style={({ pressed }) => [styles.addLevelRow, styles.subBlockAddRow, pressed && { opacity: 0.75 }]}
-              onPress={handleAddSubBlock}
-            >
-              <Ionicons name="add-circle-outline" size={14} color={C.primary} />
-              <Text style={styles.addLevelText}>세부 요소 추가</Text>
-            </Pressable>
           </View>
-        </View>
-      </View>
-    );
-  }
+        );
+      })}
+      <Pressable
+        style={({ pressed }) => [styles.addLevelRow, styles.subBlockAddRow, pressed && { opacity: 0.75 }]}
+        onPress={handleAddSubBlock}
+      >
+        <Ionicons name="add-circle-outline" size={14} color={C.primary} />
+        <Text style={styles.addLevelText}>세부 요소 추가</Text>
+      </Pressable>
+    </>
+  ) : (
+    <>
+      <ScoreGroupRows
+        groups={block.scoreGroups}
+        colWidths={colWidths}
+        canRemoveLevel={canRemoveLevel}
+        rowBorderForIndex={(gi) => gi > 0}
+        onRemoveLevel={(gi, li) => handleRemoveLevel(gi, li)}
+        onChangeGroup={(gi, group) => {
+          const scoreGroups = block.scoreGroups.map((g, idx) => (idx === gi ? group : g));
+          patchScoreGroups(scoreGroups);
+        }}
+      />
+      <RubricAddLevelRow
+        colWidths={colWidths}
+        canRemoveLevel={canRemoveLevel}
+        onPress={() => handleAddScoreGroup()}
+      />
+    </>
+  );
 
   return (
     <View style={styles.rubricBlockWrap}>
       {blockToolbar}
       <View style={styles.rubricBlock}>
         {elementColPanel}
-        <View style={styles.contentArea}>
-          <RubricMetricRow
-            header
-            canRemoveLevel={canRemoveLevel}
-            level="수행 수준"
-            score="배점"
-          />
-          <ScoreGroupRows
-            groups={block.scoreGroups}
-            canRemoveLevel={canRemoveLevel}
-            rowBorderForIndex={(gi) => gi > 0}
-            onRemoveLevel={(gi, li) => handleRemoveLevel(gi, li)}
-            onChangeGroup={(gi, group) => {
-              const scoreGroups = block.scoreGroups.map((g, idx) => (idx === gi ? group : g));
-              patchScoreGroups(scoreGroups);
-            }}
-          />
-          <RubricAddLevelRow canRemoveLevel={canRemoveLevel} onPress={() => handleAddScoreGroup()} />
+        <View style={styles.rubricContentArea} onLayout={handleRubricContentLayout}>
+          {metricHeaderRow}
+          {metricBodyContent}
         </View>
       </View>
     </View>
@@ -1075,11 +1221,10 @@ const styles = StyleSheet.create({
   rowBorder: { borderTopWidth: 1, borderTopColor: BORDER },
   cellFlex: { flexBasis: 0, minWidth: 0 },
   labelCol: {
-    flexBasis: LABEL_COL_BASIS,
     flexGrow: 0,
     flexShrink: 0,
-    width: LABEL_COL_BASIS,
-    maxWidth: LABEL_COL_BASIS,
+    width: '20%',
+    maxWidth: '20%',
     alignSelf: 'stretch',
     borderRightWidth: 1,
     borderRightColor: BORDER,
@@ -1136,16 +1281,26 @@ const styles = StyleSheet.create({
   cellHeaderText: { fontFamily: F.sansMedium, fontSize: 12, color: C.text },
 
   rubricBlockWrap: { borderTopWidth: 1, borderTopColor: BORDER },
-  rubricBlock: { flexDirection: 'row', alignItems: 'stretch' },
+  rubricBlock: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    width: '100%',
+  },
   rubricElementCol: {
-    flexBasis: LABEL_COL_BASIS,
-    width: LABEL_COL_BASIS,
-    maxWidth: LABEL_COL_BASIS,
+    flex: LABEL_COL_FLEX,
+    flexBasis: 0,
     flexGrow: 0,
     flexShrink: 0,
+    minWidth: 0,
     alignSelf: 'stretch',
     borderRightWidth: 1,
     borderRightColor: BORDER,
+  },
+  rubricContentArea: {
+    flex: CONTENT_COL_FLEX,
+    flexBasis: 0,
+    minWidth: 0,
+    backgroundColor: '#fff',
   },
   rubricElementHeader: {
     backgroundColor: HDR,
@@ -1207,10 +1362,39 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'stretch',
   },
-  rubricMetricInner: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
+  rubricMetricHeaderRow: {
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  rubricMetricInnerFull: {
+    flex: 1,
+    flexBasis: 0,
     minWidth: 0,
+  },
+  rubricGridCell: {
+    borderRightWidth: 1,
+    borderRightColor: BORDER,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    alignSelf: 'stretch',
+  },
+  rubricGridCellHeader: {
+    backgroundColor: HDR,
+  },
+  rubricGridCellNoRight: {
+    borderRightWidth: 0,
+  },
+  rubricGridRemoveCell: {
+    borderLeftWidth: 1,
+    borderLeftColor: BORDER,
+    borderRightWidth: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  rubricGridRemoveCellHeader: {
+    backgroundColor: HDR,
   },
   rubricScoreCellBody: {
     backgroundColor: '#fafafa',
@@ -1220,13 +1404,24 @@ const styles = StyleSheet.create({
     minHeight: ROW_H - 4,
   },
   rubricAddLevelSubSpacer: {
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
+    backgroundColor: '#fafafa',
   },
   rubricAddLevelMain: {
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
+    position: 'relative',
+    borderTopWidth: 0,
     borderRightWidth: 0,
+    backgroundColor: '#fafafa',
+  },
+  rubricAddLevelSplit: {
+    minHeight: 36,
+    backgroundColor: '#fafafa',
+  },
+  rubricAddLevelOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
   },
   rubricAddLevelRemoveSpacer: {
     width: RUBRIC_REMOVE_COL_W,
@@ -1234,8 +1429,8 @@ const styles = StyleSheet.create({
     maxWidth: RUBRIC_REMOVE_COL_W,
     flexGrow: 0,
     flexShrink: 0,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
+    borderLeftWidth: 1,
+    borderLeftColor: BORDER,
     backgroundColor: '#fafafa',
   },
   rubricRemoveCol: {
@@ -1250,16 +1445,7 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',
-    borderLeftWidth: 1,
-    borderLeftColor: BORDER,
     backgroundColor: '#fff',
-  },
-  rubricRemoveHeaderPad: {
-    backgroundColor: HDR,
-    borderLeftWidth: 1,
-    borderLeftColor: BORDER,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
   },
   addBlockRow: {
     flexDirection: 'row',
@@ -1275,17 +1461,12 @@ const styles = StyleSheet.create({
   rightCol: { flex: 5 },
   subBlockWrap: { flexDirection: 'row', alignItems: 'stretch', width: '100%' },
   subGroupsCol: {
-    flex: RUBRIC_LEVEL_FLEX + RUBRIC_SCORE_FLEX,
+    flex: RUBRIC_METRIC_INNER_TOTAL,
     flexBasis: 0,
     minWidth: 0,
     alignSelf: 'stretch',
   },
   subElementCol: {
-    flex: RUBRIC_SUB_ELEMENT_FLEX,
-    flexBasis: 0,
-    minWidth: 0,
-    borderRightWidth: 1,
-    borderRightColor: BORDER,
     backgroundColor: '#fff',
   },
   rubricSubHeaderCell: {
