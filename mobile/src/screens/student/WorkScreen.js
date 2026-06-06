@@ -16,6 +16,7 @@ import {
   stageAllowsAiBrowser,
   stageIsConditionalAi,
   stageIsUnrestrictedAiBrowser,
+  getAiModeLabel,
   getStudentAiBadgeText,
   getStudentAiBadgeColor,
 } from '../../config/defaultPerformanceStages';
@@ -46,8 +47,6 @@ function fmtDeadline(str) {
   if (hours >= 1) return `곧 마감 · ${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
   return `곧 마감 · ${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
 }
-
-const AI_TAB_LABEL = { disallowed: 'AI 비활성', conditional: 'AI 조건부', allowed: 'AI 활성' };
 
 let WebView = null;
 if (Platform.OS !== 'web') {
@@ -1099,7 +1098,6 @@ export default function WorkScreen({ navigation, route }) {
             const order = stage.step_order || stage.order_num || 0;
             const isViewed = order === viewOrder;
             const isDone = (order < currentStageOrder) || (isCompleted && order <= currentStageOrder);
-            const aiMode = stage.ai_mode ?? (stage.ai_permission === 'denied' ? 'disallowed' : stage.ai_permission ?? 'disallowed');
             return (
               <Pressable
                 key={stage.id ?? order}
@@ -1131,7 +1129,7 @@ export default function WorkScreen({ navigation, route }) {
                     {stage.title}
                   </Text>
                   <Text style={[nh.tabAiLabel, isViewed && nh.tabAiLabelActive]}>
-                    {AI_TAB_LABEL[aiMode] ?? aiMode}
+                    {getAiModeLabel(stage)}
                   </Text>
                 </View>
               </Pressable>

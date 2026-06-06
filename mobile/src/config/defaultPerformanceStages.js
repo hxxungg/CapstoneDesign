@@ -12,7 +12,7 @@ export const DEFAULT_CONDITIONAL_GUIDANCE =
 
 export const AI_MODE_LABELS = {
   [AI_MODE.DISALLOWED]: '비허용',
-  [AI_MODE.CONDITIONAL]: '조건부 허용',
+  [AI_MODE.CONDITIONAL]: '조건부',
   [AI_MODE.ALLOWED]: '허용',
 };
 
