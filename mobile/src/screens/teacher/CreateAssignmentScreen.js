@@ -334,12 +334,12 @@ const dpModal = StyleSheet.create({
 
 const AI_OPTIONS = [
   {
-    key: AI_MODE.DISALLOWED,
-    label: 'AI 비활성',
-    sub: 'AI·웹 패널이 학생에게 표시되지 않습니다.',
-    fg: C.textSoft,
-    bg: C.card,
-    bd: C.border,
+    key: AI_MODE.ALLOWED,
+    label: '허용',
+    sub: '학생이 자유롭게 AI와 웹을 탐색할 수 있습니다.',
+    fg: C.primaryDark,
+    bg: C.primaryLight,
+    bd: 'transparent',
   },
   {
     key: AI_MODE.CONDITIONAL,
@@ -350,12 +350,12 @@ const AI_OPTIONS = [
     bd: 'transparent',
   },
   {
-    key: AI_MODE.ALLOWED,
-    label: 'AI 활성',
-    sub: '학생이 자유롭게 AI와 웹을 탐색할 수 있습니다.',
-    fg: C.primaryDark,
-    bg: C.primaryLight,
-    bd: 'transparent',
+    key: AI_MODE.DISALLOWED,
+    label: '비허용',
+    sub: 'AI·웹 패널이 학생에게 표시되지 않습니다.',
+    fg: C.textSoft,
+    bg: C.card,
+    bd: C.border,
   },
 ];
 

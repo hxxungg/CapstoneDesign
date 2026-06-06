@@ -13,9 +13,9 @@ import { appAlert } from '../../utils/appAlert';
 import { VALIDATION } from '../../utils/uiCopy';
 
 const AI_MODE_OPTIONS = [
-  { key: AI_MODE.DISALLOWED, label: '비허용', sub: 'AI·웹 없음' },
-  { key: AI_MODE.CONDITIONAL, label: '조건부', sub: '지침에 따라' },
   { key: AI_MODE.ALLOWED, label: '허용', sub: '탐색 가능' },
+  { key: AI_MODE.CONDITIONAL, label: '조건부', sub: '지침에 따라' },
+  { key: AI_MODE.DISALLOWED, label: '비허용', sub: 'AI·웹 없음' },
 ];
 
 export default function CreateStageScreen({ navigation, route }) {

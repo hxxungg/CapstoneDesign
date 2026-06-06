@@ -10,7 +10,23 @@ const MASTER_EMAIL = 'master@master.com';
 const MASTER_PASSWORD = '123456';
 const MASTER_NAME = 'Master';
 
+async function ensureMasterRoleEnum() {
+  const [cols] = await pool.query(
+    `SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = 'capstonedesign' AND TABLE_NAME = 'users' AND COLUMN_NAME = 'role'`
+  );
+  const columnType = String(cols[0]?.COLUMN_TYPE || '');
+  if (!columnType.includes("'master'")) {
+    await pool.query(
+      `ALTER TABLE capstonedesign.users
+       MODIFY COLUMN role ENUM('teacher', 'student', 'master') NOT NULL`
+    );
+    console.log("role ENUM에 'master' 추가됨");
+  }
+}
+
 async function main() {
+  await ensureMasterRoleEnum();
   const passwordHash = await bcrypt.hash(MASTER_PASSWORD, 10);
 
   const [existing] = await pool.query(
