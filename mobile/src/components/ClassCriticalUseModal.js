@@ -34,10 +34,9 @@ function ChartCell({ def, chart }) {
       <PieChart
         title={def.title}
         data={chart.items}
-        size={88}
+        size={80}
         helpKey={def.helpKey}
         percentMode
-        compact
         hideLegendCount
         hideTitleTotal
       />
@@ -46,7 +45,8 @@ function ChartCell({ def, chart }) {
 }
 
 export default function ClassCriticalUseModal({ visible, onClose, summary }) {
-  const { height: winH } = useWindowDimensions();
+  const { height: winH, width: winW } = useWindowDimensions();
+  const boxWidth = Math.min(540, winW - 24);
   const charts = summary?.class_chart_averages ?? {};
   const hasAny = CHART_DEFS.some((def) => {
     const c = charts[def.key];
@@ -57,7 +57,7 @@ export default function ClassCriticalUseModal({ visible, onClose, summary }) {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={s.overlay}>
         <Pressable style={s.backdrop} onPress={onClose} accessibilityLabel="닫기" />
-        <View style={[s.box, { maxHeight: Math.floor(winH * 0.9) }]}>
+        <View style={[s.box, { maxHeight: Math.floor(winH * 0.9), width: boxWidth }]}>
           <Text style={s.title}>반 AI 분석 통계</Text>
           <Text style={s.sub}>
             {hasAny
@@ -89,10 +89,9 @@ export default function ClassCriticalUseModal({ visible, onClose, summary }) {
 }
 
 const s = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 12 },
+  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 8 },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,27,45,0.4)' },
   box: {
-    width: 380,
     maxWidth: '100%',
     padding: 20,
     borderRadius: 16,
@@ -115,8 +114,8 @@ const s = StyleSheet.create({
   },
   scroll: { flexGrow: 0, flexShrink: 1 },
   scrollContent: { paddingBottom: 4 },
-  pieGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  pieCell: { width: '48%', minWidth: 0, flexGrow: 0, flexShrink: 1 },
+  pieGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  pieCell: { width: '49%', minWidth: 0, flexGrow: 0, flexShrink: 0 },
   emptyChartTitle: {
     fontFamily: F.sansMedium,
     fontSize: 12,
