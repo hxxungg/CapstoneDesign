@@ -126,22 +126,54 @@ function getTextAfterUnlock(fullRaw, unlockRaw) {
   return normalizeUnlockText(full).slice(splitAt).trimStart();
 }
 
-function afterTextsRoughlyEqual(joined, afterNorm) {
-  if (!joined || !afterNorm) return false;
-  if (joined === afterNorm) return true;
-  return stripTrailingPunct(joined) === stripTrailingPunct(afterNorm);
+function textsRoughlyEqual(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return stripTrailingPunct(a) === stripTrailingPunct(b);
 }
 
-/** 유사도 문장 → 웹뷰 후 구간 (content − content_at_unlock 과 일치하도록) */
-function pickAfterSentences(sentences, unlockText, afterText, template) {
-  if (!afterText) return [];
-
+/**
+ * submissions.content 기준 unlock 끝 → submissions_step 몇 번째 행부터가 「후」인지
+ */
+function findUnlockSentenceSplitIndex(sentences, unlockText, fullRaw = null) {
   const unlockNorm = normalizeUnlockText(unlockText);
-  const afterNorm = normalizeUnlockText(afterText);
+  if (!unlockNorm || !sentences?.length) return 0;
 
-  // 1) unlock과 누적이 맞는 문장 다음부터
+  const fullNorm = fullRaw ? normalizeUnlockText(fullRaw) : '';
+
+  const splitAtFromContent = () => {
+    if (!fullNorm || !fullNorm.startsWith(unlockNorm)) return -1;
+    return unlockNorm.length;
+  };
+
+  const splitAtBySentences = (splitAt) => {
+    let pos = 0;
+    let splitIdx = 0;
+    for (let i = 0; i < sentences.length; i += 1) {
+      const chunk = (sentences[i].sentence ?? '').trim();
+      if (!chunk) continue;
+      const sep = pos > 0 ? ' ' : '';
+      const end = pos + sep.length + chunk.length;
+      if (end <= splitAt) {
+        splitIdx = i + 1;
+        pos = end;
+        continue;
+      }
+      break;
+    }
+    return splitIdx;
+  };
+
+  // 1) content가 unlock으로 시작하면 — unlock 길이까지만 「전」문장
+  const contentSplitAt = splitAtFromContent();
+  if (contentSplitAt >= 0) {
+    const idx = splitAtBySentences(contentSplitAt);
+    if (idx > 0) return idx;
+  }
+
+  // 2) 문장 누적 = unlock
   let acc = '';
-  let splitIdx = -1;
+  let splitIdx = 0;
   for (let i = 0; i < sentences.length; i += 1) {
     const chunk = (sentences[i].sentence ?? '').trim();
     if (!chunk) continue;
@@ -149,76 +181,76 @@ function pickAfterSentences(sentences, unlockText, afterText, template) {
     const candidate = acc ? `${acc} ${chunk}` : chunk;
     const candNorm = normalizeUnlockText(candidate);
 
-    if (afterTextsRoughlyEqual(candNorm, unlockNorm)) {
-      splitIdx = i + 1;
-      break;
+    if (textsRoughlyEqual(candNorm, unlockNorm)) {
+      return i + 1;
     }
 
     if (unlockNorm.startsWith(candNorm) && candNorm.length < unlockNorm.length) {
       acc = candidate;
+      splitIdx = i + 1;
       continue;
     }
 
     break;
   }
 
-  let picked = splitIdx >= 0 ? sentences.slice(splitIdx) : [];
-  let pickedJoin = normalizeUnlockText(
-    picked.map((s) => (s.sentence ?? '').trim()).filter(Boolean).join(' ')
-  );
+  if (splitIdx > 0) return splitIdx;
 
-  if (!afterTextsRoughlyEqual(pickedJoin, afterNorm)) {
-    // 2) 유사도 문장 좌표계 — unlock 길이를 넘기는 문장부터 (끝 > unlock 경계)
-    picked = [];
-    let pos = 0;
-    for (const row of sentences) {
-      const chunk = (row.sentence ?? '').trim();
-      if (!chunk) continue;
-      const sep = pos > 0 ? ' ' : '';
-      const end = pos + sep.length + chunk.length;
-      if (end > unlockNorm.length) picked.push(row);
-      pos = end;
-    }
-    pickedJoin = normalizeUnlockText(
-      picked.map((s) => (s.sentence ?? '').trim()).filter(Boolean).join(' ')
-    );
-  }
+  return splitAtBySentences(unlockNorm.length);
+}
 
-  if (afterTextsRoughlyEqual(pickedJoin, afterNorm)) {
-    return picked;
-  }
+/** content − unlock 에 실제로 포함된 submissions_step 행만 (중복 표시 방지) */
+function filterRowsToAfterText(rows, afterText) {
+  if (!afterText?.trim() || !rows?.length) return rows ?? [];
 
-  // 3) 문장 매핑이 어긋나면 content − unlock 전체를 그대로 표시
-  return [{ ...template, sentence: afterText }];
+  const afterNorm = normalizeUnlockText(afterText);
+  const filtered = rows.filter((row) => {
+    const s = normalizeUnlockText(row.sentence);
+    return !!s && afterNorm.includes(s);
+  });
+
+  return filtered.length > 0 ? filtered : rows;
 }
 
 /**
- * 조건부 AI — 웹뷰 전: DB content_at_unlock 그대로, 웹뷰 후: content 나머지
+ * 조건부 AI 표시 규칙
+ * - 웹뷰 전: submissions.content_at_unlock (컬럼 그대로, 추가 문장 없음)
+ * - 웹뷰 후: submissions.content − content_at_unlock (위와 중복 없음)
+ * - 형광펜: submissions_step 해당 구간 행의 originality
  */
 export function partitionSentencesByUnlock(sentences, contentAtUnlock, submissionContent = null) {
   if (!contentAtUnlock?.trim()) {
     return { before: sentences ?? [], after: [], showDivider: false };
   }
 
+  const list = sentences ?? [];
   const unlockText = contentAtUnlock.trim();
   const fullRaw =
     (submissionContent ?? '').trim() ||
-    sentences
-      .map((s) => (s.sentence ?? '').trim())
-      .filter(Boolean)
-      .join(' ');
+    list.map((s) => (s.sentence ?? '').trim()).filter(Boolean).join(' ');
 
   const afterText = getTextAfterUnlock(fullRaw, unlockText);
   const showDivider = !!afterText;
 
-  const template =
-    sentences?.find((s) => (s.sentence ?? '').trim()) ??
-    { sentence: '', segment_order: 0, originality: null };
+  const splitIdx = findUnlockSentenceSplitIndex(list, unlockText, fullRaw);
+  const preRows = list.slice(0, splitIdx);
+  const postRows = filterRowsToAfterText(list.slice(splitIdx), afterText);
+  const preStyle = preRows[0] ?? list[0] ?? { segment_order: 0, originality: null, ai_log_id: null };
+  const postStyle =
+    postRows[0] ??
+    list[splitIdx] ??
+    preRows[preRows.length - 1] ??
+    preStyle;
 
-  const before = [{ ...template, sentence: unlockText }];
-  const after = showDivider
-    ? pickAfterSentences(sentences ?? [], unlockText, afterText, template)
-    : [];
+  const before = [{ ...preStyle, sentence: unlockText }];
+
+  let after = [];
+  if (showDivider) {
+    after =
+      postRows.length > 0
+        ? postRows
+        : [{ ...postStyle, sentence: afterText, segment_order: (postStyle.segment_order ?? 0) + 1 }];
+  }
 
   return { before, after, showDivider };
 }
@@ -323,10 +355,29 @@ function formatSentenceForDisplay(raw) {
   return body ? `${body}.` : '';
 }
 
+/** MySQL DATETIME(타임존 없음) = 앱 기준 로컬 시각 그대로 파싱 */
+function parseAppDateTime(value) {
+  if (!value) return null;
+  const s = String(value).trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (m) {
+    const d = new Date(
+      Number(m[1]),
+      Number(m[2]) - 1,
+      Number(m[3]),
+      Number(m[4]),
+      Number(m[5]),
+      Number(m[6] ?? 0)
+    );
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function fmtTimeline(iso, { withDate = false } = {}) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '';
+  const d = parseAppDateTime(iso);
+  if (!d) return '';
   const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
   if (!withDate) return time;
   return `${d.getMonth() + 1}/${d.getDate()} ${time}`;
@@ -412,9 +463,9 @@ function canOpenAiLogLink(aiLogId, {
   if (!scopedIds.has(String(log.step_id))) return false;
 
   if (browserUnlockedAt && String(log.step_id) === String(stepIdKey)) {
-    const unlockAt = new Date(browserUnlockedAt);
-    const logTime = log.logged_at ? new Date(log.logged_at) : null;
-    if (!isNaN(unlockAt.getTime()) && (!logTime || logTime >= unlockAt)) {
+    const unlockAt = parseAppDateTime(browserUnlockedAt);
+    const logTime = log.logged_at ? parseAppDateTime(log.logged_at) : null;
+    if (unlockAt && (!logTime || logTime >= unlockAt)) {
       return false;
     }
   }

@@ -182,12 +182,23 @@ function toFrontendAiMode(aiPermission) {
   return aiPermission;
 }
 
-/** ISO 8601 등 → MySQL DATETIME ('YYYY-MM-DD HH:MM:SS') */
+/** ISO 8601 등 → MySQL DATETIME (한국 시각, 'YYYY-MM-DD HH:MM:SS') */
 function toMysqlDatetime(value) {
   if (!value) return null;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString().slice(0, 19).replace('T', ' ');
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+    .format(d)
+    .replace('T', ' ');
 }
 
 // 교사 본인의 class invite_code 조회 (학생 회원가입용)

@@ -3,7 +3,6 @@ import {
   Modal, Pressable, Text, View, StyleSheet, ScrollView, useWindowDimensions,
 } from 'react-native';
 import { THEME, FONTS } from '../config/api';
-import { CHART_COUNT_UNITS } from '../config/analyticsChartHelp';
 import PieChart from './PieChart';
 
 const C = THEME;
@@ -18,7 +17,6 @@ const CHART_DEFS = [
 
 function ChartCell({ def, chart }) {
   const hasData = (chart?.student_count ?? 0) > 0 && (chart?.items?.length ?? 0) > 0;
-  const countUnit = CHART_COUNT_UNITS[def.helpKey] ?? '개';
 
   if (!hasData) {
     return (
@@ -36,11 +34,12 @@ function ChartCell({ def, chart }) {
       <PieChart
         title={def.title}
         data={chart.items}
-        size={100}
+        size={88}
         helpKey={def.helpKey}
-        countUnit={countUnit}
-        totalCount={chart.total_count}
         percentMode
+        compact
+        hideLegendCount
+        hideTitleTotal
       />
     </View>
   );
@@ -62,7 +61,7 @@ export default function ClassCriticalUseModal({ visible, onClose, summary }) {
           <Text style={s.title}>반 AI 분석 통계</Text>
           <Text style={s.sub}>
             {hasAny
-              ? '학생별 비율의 평균 · 괄호 안 숫자는 반 전체 합계'
+              ? '학생별 비율의 평균'
               : '아직 분석할 데이터가 없습니다.'}
           </Text>
           <ScrollView
@@ -116,8 +115,8 @@ const s = StyleSheet.create({
   },
   scroll: { flexGrow: 0, flexShrink: 1 },
   scrollContent: { paddingBottom: 4 },
-  pieGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  pieCell: { width: '47%', flexGrow: 0, flexShrink: 0 },
+  pieGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  pieCell: { width: '48%', minWidth: 0, flexGrow: 0, flexShrink: 1 },
   emptyChartTitle: {
     fontFamily: F.sansMedium,
     fontSize: 12,
