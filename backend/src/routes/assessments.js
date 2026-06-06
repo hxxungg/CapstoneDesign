@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const { pool } = require('../database');
-const { authenticateToken, requireTeacher } = require('../middleware/auth');
+const { authenticateToken, requireTeacher, isMaster } = require('../middleware/auth');
 const {
   buildStepScoringPlan,
 } = require('../utils/rubricScoring');
@@ -322,6 +322,15 @@ function toMysqlDatetime(value) {
 // 교사 본인의 class invite_code 조회 (학생 회원가입용)
 router.get('/invite-codes', authenticateToken, requireTeacher, async (req, res) => {
   try {
+    if (isMaster(req.user)) {
+      const [rows] = await pool.query(
+        `SELECT t.invite_code, u.name AS teacher_name, u.email AS teacher_email
+         FROM teacher_db.teachers t
+         JOIN capstonedesign.users u ON t.user_id = u.id
+         ORDER BY u.name`
+      );
+      return res.json({ invite_codes: rows });
+    }
     const [rows] = await pool.query(
       'SELECT invite_code FROM teacher_db.teachers WHERE user_id = ?',
       [req.user.id]
@@ -346,23 +355,47 @@ async function getTeacherId(userId) {
   return rows[0].id;
 }
 
+async function fetchAssessmentForRequest(req, assessmentId) {
+  await autoCloseExpiredAssessments([assessmentId]);
+  if (isMaster(req.user)) {
+    const [rows] = await pool.query(
+      'SELECT * FROM teacher_db.assessments WHERE id = ?',
+      [assessmentId]
+    );
+    return rows[0] || null;
+  }
+  const teacherId = await getTeacherId(req.user.id);
+  const [rows] = await pool.query(
+    'SELECT * FROM teacher_db.assessments WHERE id = ? AND teacher_id = ?',
+    [assessmentId, teacherId]
+  );
+  return rows[0] || null;
+}
+
 // 교사 수행평가 목록 조회
 router.get('/', authenticateToken, requireTeacher, async (req, res) => {
   try {
-    const teacherId = await getTeacherId(req.user.id);
-    const [assessments] = await pool.query(
-      'SELECT * FROM teacher_db.assessments WHERE teacher_id = ? ORDER BY created_at DESC',
-      [teacherId]
-    );
-
-    // deadline 지난 항목 자동 closed 처리
-    await autoCloseExpiredAssessments(assessments.map(a => a.id));
-
-    // closed 처리 후 최신 상태로 다시 조회
-    const [fresh] = await pool.query(
-      'SELECT * FROM teacher_db.assessments WHERE teacher_id = ? ORDER BY created_at DESC',
-      [teacherId]
-    );
+    let fresh;
+    if (isMaster(req.user)) {
+      const [assessments] = await pool.query(
+        'SELECT * FROM teacher_db.assessments ORDER BY created_at DESC'
+      );
+      await autoCloseExpiredAssessments(assessments.map((a) => a.id));
+      [fresh] = await pool.query(
+        'SELECT * FROM teacher_db.assessments ORDER BY created_at DESC'
+      );
+    } else {
+      const teacherId = await getTeacherId(req.user.id);
+      const [assessments] = await pool.query(
+        'SELECT * FROM teacher_db.assessments WHERE teacher_id = ? ORDER BY created_at DESC',
+        [teacherId]
+      );
+      await autoCloseExpiredAssessments(assessments.map((a) => a.id));
+      [fresh] = await pool.query(
+        'SELECT * FROM teacher_db.assessments WHERE teacher_id = ? ORDER BY created_at DESC',
+        [teacherId]
+      );
+    }
 
     const result = await Promise.all(fresh.map(async (a) => {
       const [[{ stepCount }]] = await pool.query(
@@ -381,11 +414,26 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
 
 // 학생: 내 참여 목록 조회 — /:id 보다 반드시 먼저 등록
 router.get('/my-participations', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'student') {
+  if (req.user.role !== 'student' && !isMaster(req.user)) {
     return res.status(403).json({ error: '학생 전용 API입니다.' });
   }
 
   try {
+    if (isMaster(req.user)) {
+      const [rows] = await pool.query(
+        `SELECT p.*, a.title AS assessment_title, a.description AS assessment_description,
+                a.invite_code, a.status AS assessment_status,
+                u.name AS student_name, u.email AS student_email,
+                (SELECT COUNT(*) FROM teacher_db.assessment_steps WHERE assessment_id = a.id) AS total_steps
+         FROM student_db.participations p
+         JOIN teacher_db.assessments a ON p.assessment_id = a.id
+         JOIN student_db.students s ON p.student_id = s.id
+         JOIN capstonedesign.users u ON s.user_id = u.id
+         ORDER BY p.created_at DESC`
+      );
+      return res.json(rows);
+    }
+
     const [sRows] = await pool.query(
       'SELECT id FROM student_db.students WHERE user_id = ?',
       [req.user.id]
@@ -412,7 +460,7 @@ router.get('/my-participations', authenticateToken, async (req, res) => {
 
 // 학생: 참여 상세 조회 (단계 목록 포함) — /:id 보다 반드시 먼저 등록
 router.get('/participation/:participationId', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'student') {
+  if (req.user.role !== 'student' && !isMaster(req.user)) {
     return res.status(403).json({ error: '학생 전용 API입니다.' });
   }
 
@@ -420,21 +468,32 @@ router.get('/participation/:participationId', authenticateToken, async (req, res
   if (isNaN(participationId)) return res.status(400).json({ error: '잘못된 ID입니다.' });
 
   try {
-    // 본인 참여인지 확인
-    const [sRows] = await pool.query(
-      'SELECT id FROM student_db.students WHERE user_id = ?',
-      [req.user.id]
-    );
-    if (sRows.length === 0) return res.status(404).json({ error: '학생 정보를 찾을 수 없습니다.' });
+    let pRows;
+    if (isMaster(req.user)) {
+      [pRows] = await pool.query(
+        `SELECT p.*, a.title AS assessment_title, a.description AS assessment_description,
+                a.invite_code, a.subject, a.target_class, a.deadline
+         FROM student_db.participations p
+         JOIN teacher_db.assessments a ON p.assessment_id = a.id
+         WHERE p.id = ?`,
+        [participationId]
+      );
+    } else {
+      const [sRows] = await pool.query(
+        'SELECT id FROM student_db.students WHERE user_id = ?',
+        [req.user.id]
+      );
+      if (sRows.length === 0) return res.status(404).json({ error: '학생 정보를 찾을 수 없습니다.' });
 
-    const [pRows] = await pool.query(
-      `SELECT p.*, a.title AS assessment_title, a.description AS assessment_description,
-              a.invite_code, a.subject, a.target_class, a.deadline
-       FROM student_db.participations p
-       JOIN teacher_db.assessments a ON p.assessment_id = a.id
-       WHERE p.id = ? AND p.student_id = ?`,
-      [participationId, sRows[0].id]
-    );
+      [pRows] = await pool.query(
+        `SELECT p.*, a.title AS assessment_title, a.description AS assessment_description,
+                a.invite_code, a.subject, a.target_class, a.deadline
+         FROM student_db.participations p
+         JOIN teacher_db.assessments a ON p.assessment_id = a.id
+         WHERE p.id = ? AND p.student_id = ?`,
+        [participationId, sRows[0].id]
+      );
+    }
     if (pRows.length === 0) return res.status(404).json({ error: '참여 정보를 찾을 수 없습니다.' });
 
     const participation = pRows[0];
@@ -536,16 +595,8 @@ router.get('/:id', authenticateToken, requireTeacher, async (req, res) => {
   if (isNaN(assessmentId)) return res.status(400).json({ error: '잘못된 ID입니다.' });
 
   try {
-    const teacherId = await getTeacherId(req.user.id);
-
-    // deadline 지났으면 자동 closed 처리 후 재조회
-    await autoCloseExpiredAssessments([assessmentId]);
-
-    const [rows] = await pool.query(
-      'SELECT * FROM teacher_db.assessments WHERE id = ? AND teacher_id = ?',
-      [assessmentId, teacherId]
-    );
-    if (rows.length === 0) return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
+    const assessment = await fetchAssessmentForRequest(req, assessmentId);
+    if (!assessment) return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
 
     const [steps] = await pool.query(
       'SELECT * FROM teacher_db.assessment_steps WHERE assessment_id = ? ORDER BY step_order',
@@ -553,7 +604,7 @@ router.get('/:id', authenticateToken, requireTeacher, async (req, res) => {
     );
 
     res.json({
-      ...formatAssessmentResponse(rows[0]),
+      ...formatAssessmentResponse(assessment),
       steps: steps.map(s => ({ ...s, ai_mode: toFrontendAiMode(s.ai_permission) })),
     });
   } catch (err) {
@@ -564,6 +615,9 @@ router.get('/:id', authenticateToken, requireTeacher, async (req, res) => {
 
 // 수행평가 생성 (assessment + assessment_steps)
 router.post('/', authenticateToken, requireTeacher, async (req, res) => {
+  if (isMaster(req.user)) {
+    return res.status(403).json({ error: '마스터 계정은 조회 전용입니다.' });
+  }
   const { title, description, subject, target_class, deadline, steps, rubric } = req.body;
 
   if (!title || !title.trim()) {
@@ -661,17 +715,16 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
 
 // 단계(step) 삭제
 router.delete('/:id/steps/:stepId', authenticateToken, requireTeacher, async (req, res) => {
+  if (isMaster(req.user)) {
+    return res.status(403).json({ error: '마스터 계정은 조회 전용입니다.' });
+  }
   const assessmentId = parseInt(req.params.id, 10);
   const stepId = parseInt(req.params.stepId, 10);
   if (isNaN(assessmentId) || isNaN(stepId)) return res.status(400).json({ error: '잘못된 ID입니다.' });
 
   try {
-    const teacherId = await getTeacherId(req.user.id);
-    const [aRows] = await pool.query(
-      'SELECT id FROM teacher_db.assessments WHERE id = ? AND teacher_id = ?',
-      [assessmentId, teacherId]
-    );
-    if (aRows.length === 0) return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
+    const assessment = await fetchAssessmentForRequest(req, assessmentId);
+    if (!assessment) return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
 
     await pool.query(
       'DELETE FROM teacher_db.assessment_steps WHERE id = ? AND assessment_id = ?',
@@ -687,6 +740,9 @@ router.delete('/:id/steps/:stepId', authenticateToken, requireTeacher, async (re
 
 // 수행평가 수정 (기본 정보 + 단계 일괄 교체)
 router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
+  if (isMaster(req.user)) {
+    return res.status(403).json({ error: '마스터 계정은 조회 전용입니다.' });
+  }
   const assessmentId = parseInt(req.params.id, 10);
   if (isNaN(assessmentId)) return res.status(400).json({ error: '잘못된 ID입니다.' });
 
@@ -696,12 +752,8 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const teacherId = await getTeacherId(req.user.id);
-    const [[existing]] = await conn.query(
-      'SELECT id FROM teacher_db.assessments WHERE id = ? AND teacher_id = ?',
-      [assessmentId, teacherId]
-    );
-    if (!existing) { await conn.rollback(); return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' }); }
+    const assessment = await fetchAssessmentForRequest(req, assessmentId);
+    if (!assessment) { await conn.rollback(); return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' }); }
 
     let deadlineVal = null;
     if (deadline && deadline.trim()) {
@@ -752,17 +804,16 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
 
 // 수행평가 삭제 (참여·제출·로그·단계 포함 전체 삭제)
 router.delete('/:id', authenticateToken, requireTeacher, async (req, res) => {
+  if (isMaster(req.user)) {
+    return res.status(403).json({ error: '마스터 계정은 조회 전용입니다.' });
+  }
   const assessmentId = parseInt(req.params.id, 10);
   if (isNaN(assessmentId)) return res.status(400).json({ error: '잘못된 ID입니다.' });
 
   const conn = await pool.getConnection();
   try {
-    const teacherId = await getTeacherId(req.user.id);
-    const [rows] = await conn.query(
-      'SELECT id FROM teacher_db.assessments WHERE id = ? AND teacher_id = ?',
-      [assessmentId, teacherId]
-    );
-    if (rows.length === 0) return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
+    const assessment = await fetchAssessmentForRequest(req, assessmentId);
+    if (!assessment) return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
 
     await conn.beginTransaction();
     await deleteAssessmentCascade(conn, assessmentId);
@@ -780,7 +831,7 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req, res) => {
 
 // 학생: 이전 단계 제출 내용 조회
 router.get('/participation/:participationId/submissions', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'student') {
+  if (req.user.role !== 'student' && !isMaster(req.user)) {
     return res.status(403).json({ error: '학생 전용 API입니다.' });
   }
 
@@ -788,17 +839,19 @@ router.get('/participation/:participationId/submissions', authenticateToken, asy
   if (isNaN(participationId)) return res.status(400).json({ error: '잘못된 ID입니다.' });
 
   try {
-    const [sRows] = await pool.query(
-      'SELECT id FROM student_db.students WHERE user_id = ?',
-      [req.user.id]
-    );
-    if (sRows.length === 0) return res.status(404).json({ error: '학생 정보를 찾을 수 없습니다.' });
+    if (!isMaster(req.user)) {
+      const [sRows] = await pool.query(
+        'SELECT id FROM student_db.students WHERE user_id = ?',
+        [req.user.id]
+      );
+      if (sRows.length === 0) return res.status(404).json({ error: '학생 정보를 찾을 수 없습니다.' });
 
-    const [pRows] = await pool.query(
-      'SELECT id FROM student_db.participations WHERE id = ? AND student_id = ?',
-      [participationId, sRows[0].id]
-    );
-    if (pRows.length === 0) return res.status(403).json({ error: '권한이 없습니다.' });
+      const [pRows] = await pool.query(
+        'SELECT id FROM student_db.participations WHERE id = ? AND student_id = ?',
+        [participationId, sRows[0].id]
+      );
+      if (pRows.length === 0) return res.status(403).json({ error: '권한이 없습니다.' });
+    }
 
     // 단계별 최신 제출 1건씩만 반환 (중복 제출 시 최신 우선)
     const [rows] = await pool.query(
@@ -835,7 +888,7 @@ router.post('/participation/:participationId/submit', authenticateToken, async (
   const participationId = parseInt(req.params.participationId, 10);
   if (isNaN(participationId)) return res.status(400).json({ error: '잘못된 ID입니다.' });
 
-  const { step_id, content, consent_given, content_at_unlock, browser_unlocked_at } = req.body;
+  const { step_id, content, consent_given, step_unlock_snapshots } = req.body;
 
   try {
     // 본인 참여인지 확인
@@ -862,36 +915,17 @@ router.post('/participation/:participationId/submit', authenticateToken, async (
       [participation.assessment_id]
     );
 
-    // 제출 내용 저장 (content 있을 때만)
-    if (content && content.trim()) {
-      const unlockContent =
-        typeof content_at_unlock === 'string' && content_at_unlock.trim()
-          ? content_at_unlock.trim()
-          : null;
-      const unlockedAt =
-        unlockContent && browser_unlocked_at
-          ? toMysqlDatetime(browser_unlocked_at)
-          : null;
+    const currentStep = participation.current_step || 1;
+    const nextStep = currentStep + 1;
+    const isLastStep = currentStep >= totalSteps;
 
-      let subResult;
-      try {
-        [subResult] = await pool.query(
-          `INSERT INTO log_db.submissions
-             (participation_id, step_id, content, content_at_unlock, browser_unlocked_at, submitted_at)
-           VALUES (?, ?, ?, ?, ?, NOW())`,
-          [participationId, step_id || null, content.trim(), unlockContent, unlockedAt]
-        );
-      } catch (insertErr) {
-        if (insertErr.code !== 'ER_BAD_FIELD_ERROR') throw insertErr;
-        console.warn(
-          '[submit] content_at_unlock 컬럼 없음 — 마이그레이션 후 재시작 필요. 스냅샷 미저장.'
-        );
-        [subResult] = await pool.query(
-          `INSERT INTO log_db.submissions (participation_id, step_id, content, submitted_at)
-           VALUES (?, ?, ?, NOW())`,
-          [participationId, step_id || null, content.trim()]
-        );
-      }
+    // 제출 내용 저장 (content 있을 때만) — unlock 스냅샷은 최종 제출 시에만 별도 반영
+    if (content && content.trim()) {
+      const [subResult] = await pool.query(
+        `INSERT INTO log_db.submissions (participation_id, step_id, content, submitted_at)
+         VALUES (?, ?, ?, NOW())`,
+        [participationId, step_id || null, content.trim()]
+      );
       const submissionId = subResult.insertId;
 
       // submissions_step: 전체 내용을 1개 행으로 임시 저장
@@ -904,9 +938,34 @@ router.post('/participation/:participationId/submit', authenticateToken, async (
       // 유사도 분석은 최종 제출 + 동의 시에만 실행
     }
 
-    const currentStep = participation.current_step || 1;
-    const nextStep = currentStep + 1;
-    const isLastStep = currentStep >= totalSteps;
+    if (isLastStep && Array.isArray(step_unlock_snapshots)) {
+      for (const snap of step_unlock_snapshots) {
+        const snapStepId = parseInt(snap?.step_id, 10);
+        const unlockContent =
+          typeof snap?.content_at_unlock === 'string' && snap.content_at_unlock.trim()
+            ? snap.content_at_unlock.trim()
+            : null;
+        if (!Number.isFinite(snapStepId) || !unlockContent) continue;
+
+        const unlockedAt = snap.browser_unlocked_at
+          ? toMysqlDatetime(snap.browser_unlocked_at)
+          : null;
+
+        try {
+          await pool.query(
+            `UPDATE log_db.submissions
+             SET content_at_unlock = ?, browser_unlocked_at = ?
+             WHERE participation_id = ? AND step_id = ?`,
+            [unlockContent, unlockedAt, participationId, snapStepId]
+          );
+        } catch (updateErr) {
+          if (updateErr.code !== 'ER_BAD_FIELD_ERROR') throw updateErr;
+          console.warn(
+            '[submit] content_at_unlock 컬럼 없음 — 마이그레이션 후 재시작 필요. 스냅샷 미저장.'
+          );
+        }
+      }
+    }
 
     if (isLastStep) {
       // 마지막 단계 → 전체 제출 완료 (동의 여부 함께 저장)

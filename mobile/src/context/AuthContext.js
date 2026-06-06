@@ -13,6 +13,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [masterViewMode, setMasterViewMode] = useState('teacher');
 
   useEffect(() => {
     loadStoredAuth();
@@ -98,10 +99,22 @@ export function AuthProvider({ children }) {
     await AsyncStorage.removeItem('auth_user');
     setToken(null);
     setUser(null);
+    setMasterViewMode('teacher');
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, socialLogin, socialRegister, logout }}>
+    <AuthContext.Provider value={{
+      user,
+      token,
+      loading,
+      masterViewMode,
+      setMasterViewMode,
+      login,
+      register,
+      socialLogin,
+      socialRegister,
+      logout,
+    }}>
       {children}
     </AuthContext.Provider>
   );

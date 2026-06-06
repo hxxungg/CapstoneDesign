@@ -99,7 +99,9 @@ function AssessmentCard({ item, onPress }) {
 
       {/* 하단 */}
       <View style={ac.footer}>
-        {item.teacher_name ? (
+        {item.student_name ? (
+          <Text style={ac.teacher}>{item.student_name}</Text>
+        ) : item.teacher_name ? (
           <Text style={ac.teacher}>{item.teacher_name} 선생님</Text>
         ) : (
           <Text style={ac.teacher}>{currentStep} of {totalSteps} 단계</Text>
@@ -163,6 +165,7 @@ export default function AssignmentListScreen({ navigation }) {
         title: p.assessment_title, description: p.assessment_description,
         status: p.status, current_step: p.current_step, total_steps: p.total_steps,
         invite_code: p.invite_code, created_at: p.created_at,
+        student_name: p.student_name, student_email: p.student_email,
       }));
       const merged = [...newItems, ...oldItems].sort(
         (a, b) => new Date(b.created_at) - new Date(a.created_at)

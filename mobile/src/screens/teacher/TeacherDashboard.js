@@ -72,7 +72,7 @@ export default function TeacherDashboard({ navigation, route }) {
     setCodesLoading(true);
     try {
       const data = await assessmentAPI.getMyInviteCode();
-      setMyInviteCode(data.invite_code);
+      setMyInviteCode(data.invite_code ?? (Array.isArray(data.invite_codes) ? '전체 교사' : ''));
     } catch (err) {
       appAlert('오류', err.message);
     } finally {

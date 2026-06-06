@@ -28,6 +28,7 @@ import AnalyticsScreen from '../screens/teacher/AnalyticsScreen';
 import StudentListScreen from '../screens/teacher/StudentListScreen';
 import StudentReportScreen from '../screens/teacher/StudentReportScreen';
 import StudentGradingScreen from '../screens/teacher/StudentGradingScreen';
+import MasterHubScreen from '../screens/MasterHubScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -140,6 +141,30 @@ function TeacherStack() {
   );
 }
 
+function MasterStack() {
+  return (
+    <Stack.Navigator screenOptions={COMMON_HEADER_OPTIONS}>
+      <Stack.Screen name="MasterHub" component={MasterHubScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="TeacherDashboard" component={TeacherDashboard} options={{ headerShown: false }} />
+      <Stack.Screen name="CreateAssignment" component={CreateAssignmentScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="GradingRubric" component={GradingRubricScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="AssignmentDetail" component={AssignmentDetailScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="CreateStage" component={CreateStageScreen} options={{ title: '단계 설정' }} />
+      <Stack.Screen name="StudentLogs" component={StudentLogsScreen} options={{ title: '종합 분석 리포트' }} />
+      <Stack.Screen name="Analytics" component={AnalyticsScreen} options={{ title: '종합 분석' }} />
+      <Stack.Screen name="StudentList" component={StudentListScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="StudentReport" component={StudentReportScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="StudentGrading" component={StudentGradingScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="AssignmentList" component={AssignmentListScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Enroll" component={EnrollScreen} options={{ title: '수행평가 참여' }} />
+      <Stack.Screen name="StageList" component={StageListScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Browser" component={BrowserScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Work" component={WorkScreen} options={{ headerShown: false, gestureEnabled: false }} />
+      <Stack.Screen name="StudentSelfReport" component={StudentSelfReportScreen} options={{ headerShown: false }} />
+    </Stack.Navigator>
+  );
+}
+
 export default function AppNavigator() {
   const { user, loading } = useAuth();
 
@@ -155,6 +180,8 @@ export default function AppNavigator() {
             <Stack.Screen name="Register" component={RegisterScreen} />
             <Stack.Screen name="SocialRegister" component={SocialRegisterScreen} />
           </>
+        ) : user.role === 'master' ? (
+          <Stack.Screen name="MasterRoot" component={MasterStack} />
         ) : user.role === 'student' ? (
           <Stack.Screen name="StudentRoot" component={StudentStack} />
         ) : (

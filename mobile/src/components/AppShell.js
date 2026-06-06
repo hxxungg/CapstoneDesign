@@ -308,12 +308,28 @@ export default function AppShell({
   guardAssessmentExit = false,
   onAssessmentExitAttempt,
 }) {
-  const { user, logout } = useAuth();
+  const { user, logout, masterViewMode, setMasterViewMode } = useAuth();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isWide = width >= 700;
-  const isTeacher = user?.role === 'teacher';
-  const navItems = isTeacher ? NAV_TEACHER : NAV_STUDENT;
+  const isMaster = user?.role === 'master';
+  const isTeacher = user?.role === 'teacher' || (isMaster && masterViewMode === 'teacher');
+  const studentNav = isMaster
+    ? NAV_STUDENT.filter((item) => item.id !== 'enroll')
+    : NAV_STUDENT;
+  const teacherNav = isMaster
+    ? NAV_TEACHER.filter((item) => item.id !== 'create')
+    : NAV_TEACHER;
+  const navItems = isMaster
+    ? [
+        { id: 'hub', label: '화면 선택' },
+        ...(isTeacher ? teacherNav : studentNav),
+        {
+          id: 'switch',
+          label: isTeacher ? '학생 화면으로' : '교사 화면으로',
+        },
+      ]
+    : (isTeacher ? NAV_TEACHER : NAV_STUDENT);
 
   const [logoutOpen, setLogoutOpen]   = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -338,6 +354,16 @@ export default function AppShell({
   };
 
   const handleNav = (id) => {
+    if (id === 'hub') {
+      navigation.navigate('MasterHub');
+      return;
+    }
+    if (id === 'switch') {
+      const next = isTeacher ? 'student' : 'teacher';
+      setMasterViewMode(next);
+      navigation.navigate(next === 'teacher' ? 'TeacherDashboard' : 'AssignmentList');
+      return;
+    }
     if (id === 'home') {
       // 이미 홈이면 아무것도 안 함, 아니면 홈으로 이동
       if (currentScreen !== 'home') {
@@ -454,7 +480,10 @@ export default function AppShell({
           </View>
           <View style={{ flex: 1 }}>
             <Text numberOfLines={1} style={s.userName}>{userName}</Text>
-            <Text numberOfLines={1} style={s.userSub}>{isTeacher ? '교사' : '학생'}{schoolInfo ? ` · ${schoolInfo}` : ''}</Text>
+            <Text numberOfLines={1} style={s.userSub}>
+              {isMaster ? '마스터' : isTeacher ? '교사' : '학생'}
+              {schoolInfo ? ` · ${schoolInfo}` : ''}
+            </Text>
           </View>
         </View>
 

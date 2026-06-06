@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { pool } = require('../database');
-const { authenticateToken, requireTeacher } = require('../middleware/auth');
+const { authenticateToken, requireTeacher, isMaster } = require('../middleware/auth');
 const { normalizeStage } = require('../stageNormalize');
 const { buildComprehensiveReport } = require('../studentReportBuilder');
 const { enrichAiLogsWithCriticalUseFromDb } = require('../services/criticalUseAnalysis');
@@ -300,13 +300,20 @@ router.get('/assessment/:id', authenticateToken, requireTeacher, async (req, res
   const assessmentId = parseInt(req.params.id);
 
   try {
-    // 소유자 확인
-    const [aRows] = await pool.query(
-      `SELECT a.* FROM teacher_db.assessments a
-       JOIN teacher_db.teachers t ON a.teacher_id = t.id
-       WHERE a.id = ? AND t.user_id = ?`,
-      [assessmentId, req.user.id]
-    );
+    let aRows;
+    if (isMaster(req.user)) {
+      [aRows] = await pool.query(
+        'SELECT * FROM teacher_db.assessments WHERE id = ?',
+        [assessmentId]
+      );
+    } else {
+      [aRows] = await pool.query(
+        `SELECT a.* FROM teacher_db.assessments a
+         JOIN teacher_db.teachers t ON a.teacher_id = t.id
+         WHERE a.id = ? AND t.user_id = ?`,
+        [assessmentId, req.user.id]
+      );
+    }
     if (aRows.length === 0) {
       return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
     }
@@ -489,8 +496,10 @@ router.get('/participation/:id', authenticateToken, async (req, res) => {
 
     const participation = pRows[0];
 
-    // 권한 확인: 교사(수행평가 소유자) 또는 학생(본인 참여)
-    if (req.user.role === 'teacher') {
+    // 권한 확인: 교사(수행평가 소유자) · 학생(본인 참여) · 마스터(전체)
+    if (isMaster(req.user)) {
+      // 전체 조회 허용
+    } else if (req.user.role === 'teacher') {
       const [teacherRows] = await pool.query(
         'SELECT id FROM teacher_db.teachers WHERE user_id = ?',
         [req.user.id]
@@ -739,26 +748,28 @@ router.patch('/participation/:id/grade', authenticateToken, requireTeacher, asyn
   }
 
   try {
-    const [teacherRows] = await pool.query(
-      'SELECT id FROM teacher_db.teachers WHERE user_id = ?',
-      [req.user.id]
-    );
-    if (teacherRows.length === 0) {
-      return res.status(403).json({ error: '권한이 없습니다.' });
-    }
+    if (!isMaster(req.user)) {
+      const [teacherRows] = await pool.query(
+        'SELECT id FROM teacher_db.teachers WHERE user_id = ?',
+        [req.user.id]
+      );
+      if (teacherRows.length === 0) {
+        return res.status(403).json({ error: '권한이 없습니다.' });
+      }
 
-    const [pRows] = await pool.query(
-      `SELECT p.id, a.teacher_id
-       FROM student_db.participations p
-       JOIN teacher_db.assessments a ON p.assessment_id = a.id
-       WHERE p.id = ?`,
-      [participationId]
-    );
-    if (pRows.length === 0) {
-      return res.status(404).json({ error: '참여 기록을 찾을 수 없습니다.' });
-    }
-    if (Number(pRows[0].teacher_id) !== Number(teacherRows[0].id)) {
-      return res.status(403).json({ error: '권한이 없습니다.' });
+      const [pRows] = await pool.query(
+        `SELECT p.id, a.teacher_id
+         FROM student_db.participations p
+         JOIN teacher_db.assessments a ON p.assessment_id = a.id
+         WHERE p.id = ?`,
+        [participationId]
+      );
+      if (pRows.length === 0) {
+        return res.status(404).json({ error: '참여 기록을 찾을 수 없습니다.' });
+      }
+      if (Number(pRows[0].teacher_id) !== Number(teacherRows[0].id)) {
+        return res.status(403).json({ error: '권한이 없습니다.' });
+      }
     }
 
     const scoreNum = Number(String(final_score).trim());
@@ -837,13 +848,20 @@ router.get('/assessment/:id/ai-analysis', authenticateToken, requireTeacher, asy
   const assessmentId = parseInt(req.params.id);
 
   try {
-    // 소유자 확인
-    const [aRows] = await pool.query(
-      `SELECT a.id FROM teacher_db.assessments a
-       JOIN teacher_db.teachers t ON a.teacher_id = t.id
-       WHERE a.id = ? AND t.user_id = ?`,
-      [assessmentId, req.user.id]
-    );
+    let aRows;
+    if (isMaster(req.user)) {
+      [aRows] = await pool.query(
+        'SELECT id FROM teacher_db.assessments WHERE id = ?',
+        [assessmentId]
+      );
+    } else {
+      [aRows] = await pool.query(
+        `SELECT a.id FROM teacher_db.assessments a
+         JOIN teacher_db.teachers t ON a.teacher_id = t.id
+         WHERE a.id = ? AND t.user_id = ?`,
+        [assessmentId, req.user.id]
+      );
+    }
     if (aRows.length === 0) {
       return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
     }

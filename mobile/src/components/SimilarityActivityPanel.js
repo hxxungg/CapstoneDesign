@@ -172,7 +172,7 @@ export function partitionSentencesByUnlock(sentences, contentAtUnlock, submissio
   };
 }
 
-function ConditionalUnlockDivider({ unlockedAt }) {
+export function ConditionalUnlockDivider({ unlockedAt }) {
   const timeLabel = fmtTimeline(unlockedAt, { withDate: true });
   return (
     <View style={styles.unlockDividerWrap}>

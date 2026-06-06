@@ -21,6 +21,7 @@ import {
 } from '../../config/defaultPerformanceStages';
 import ExitWarningModal from '../../components/ExitWarningModal';
 import AppShell from '../../components/AppShell';
+import { ConditionalUnlockDivider } from '../../components/SimilarityActivityPanel';
 import { WEBVIEW_LOG_SCRIPT } from '../../utils/webviewInjection';
 import { normalizeAiText } from '../../utils/normalizeAiText';
 import useVisualKeyboardHeight from '../../hooks/useVisualKeyboardHeight';
@@ -573,19 +574,28 @@ export default function WorkScreen({ navigation, route }) {
           await uploadLocalUrlLogs();
         }
 
-        const unlockSnap = currentStepId
-          ? unlockSnapshotByStepRef.current[currentStepId]
-          : null;
+        const currentOrder = assignment?.studentProgress?.current_stage_order || 1;
+        const totalStageCount = allStages.length || assignment?.stages?.length || 0;
+        const isFinalStepSubmit = currentOrder >= totalStageCount;
+        const stepUnlockSnapshots = isFinalStepSubmit
+          ? Object.entries(unlockSnapshotByStepRef.current)
+              .map(([snapStepId, snap]) => ({
+                step_id: Number(snapStepId),
+                content_at_unlock: snap.content_at_unlock,
+                browser_unlocked_at: snap.browser_unlocked_at,
+              }))
+              .filter(
+                (snap) =>
+                  Number.isFinite(snap.step_id) &&
+                  typeof snap.content_at_unlock === 'string' &&
+                  snap.content_at_unlock.trim()
+              )
+          : [];
         const result = await assessmentAPI.submitStep(participation_id, {
           step_id: currentStepId || null,
           content: writingTextRef.current,
           consent_given: consentGiven,
-          ...(unlockSnap
-            ? {
-                content_at_unlock: unlockSnap.content_at_unlock,
-                browser_unlocked_at: unlockSnap.browser_unlocked_at,
-              }
-            : {}),
+          ...(stepUnlockSnapshots.length ? { step_unlock_snapshots: stepUnlockSnapshots } : {}),
         });
 
         if (result.status === 'submitted') {
@@ -781,6 +791,22 @@ export default function WorkScreen({ navigation, route }) {
     || (stageIsConditionalAi(viewedStage) && stepBrowserUnlocked)
   );
   const isConditionalLocked = isCurrentStageView && stageIsConditionalAi(viewedStage) && !stepBrowserUnlocked;
+  const conditionalUnlockSnap = currentStepId
+    ? unlockSnapshotByStepRef.current[currentStepId]
+    : null;
+  const showConditionalWritingSplit =
+    isCurrentStageView &&
+    stageIsConditionalAi(viewedStage) &&
+    stepBrowserUnlocked &&
+    !!conditionalUnlockSnap?.content_at_unlock?.trim();
+  const lockedWritingPrefix = showConditionalWritingSplit
+    ? conditionalUnlockSnap.content_at_unlock
+    : '';
+  const unlockedWritingSuffix = showConditionalWritingSplit
+    ? (writingText.startsWith(lockedWritingPrefix)
+        ? writingText.slice(lockedWritingPrefix.length)
+        : '')
+    : writingText;
   const isViewingPast = viewOrder < currentStageOrder;
   const isViewingFuture = viewOrder > currentStageOrder && !isCompleted;
   const previousStageWritings = isNewSystem
@@ -831,10 +857,19 @@ export default function WorkScreen({ navigation, route }) {
             lastLoggedUrlRef.current = null;
             pageStartTimeRef.current = Date.now();
             visitedAtRef.current = unlockedAt;
+            Keyboard.dismiss();
+            setTimeout(() => writingInputRef.current?.focus(), 120);
           },
         },
       ]
     );
+  };
+
+  const handleWritingChange = (text) => {
+    setWritingText(text);
+    if (assignment && currentStage) {
+      scheduleSaveWriting(assignment.id, currentStage.id);
+    }
   };
 
   const navigateFromAddressBar = () => {
@@ -1195,39 +1230,69 @@ export default function WorkScreen({ navigation, route }) {
                 <Text style={styles.infoBoxLabel}>✏️ 작성 공간</Text>
               </View>
               <Text style={styles.writingHint}>
-                단계마다 내용이 따로 저장됩니다. 다음 단계로 넘어가기 전에 자동으로 한 번 더 저장됩니다.
+                {showConditionalWritingSplit
+                  ? '웹뷰 열기 이전 내용은 수정할 수 없습니다. 구분선 아래에서 이어서 작성하세요.'
+                  : '단계마다 내용이 따로 저장됩니다. 다음 단계로 넘어가기 전에 자동으로 한 번 더 저장됩니다.'}
               </Text>
-              <TextInput
-                ref={writingInputRef}
-                style={styles.writingInput}
-                multiline
-                textAlignVertical="top"
-                placeholder="조사·정리·성찰 등 작성할 내용"
-                placeholderTextColor={THEME.textSecondary}
-                value={writingText}
-                editable={!isCompleted}
-                showSoftInputOnFocus
-                {...(Platform.OS === 'web' ? { inputMode: 'text' } : {})}
-                onFocus={() => {
-                  writingActiveRef.current = true;
-                  scrollWritingIntoView();
-                }}
-                onChangeText={(t) => {
-                  setWritingText(t);
-                  if (assignment && currentStage) {
-                    scheduleSaveWriting(assignment.id, currentStage.id);
-                  }
-                }}
-                onBlur={() => {
-                  writingActiveRef.current = false;
-                  if (!assignment || !currentStage) return;
-                  if (saveWritingTimerRef.current) {
-                    clearTimeout(saveWritingTimerRef.current);
-                    saveWritingTimerRef.current = null;
-                  }
-                  persistStageWriting(assignment.id, currentStage.id, writingTextRef.current);
-                }}
-              />
+              {showConditionalWritingSplit ? (
+                <>
+                  <Text style={styles.lockedWritingText}>{lockedWritingPrefix}</Text>
+                  <ConditionalUnlockDivider unlockedAt={conditionalUnlockSnap.browser_unlocked_at} />
+                  <TextInput
+                    ref={writingInputRef}
+                    style={styles.writingInput}
+                    multiline
+                    textAlignVertical="top"
+                    placeholder="AI·웹 검색 후 이어서 작성할 내용"
+                    placeholderTextColor={THEME.textSecondary}
+                    value={unlockedWritingSuffix}
+                    editable={!isCompleted}
+                    showSoftInputOnFocus
+                    {...(Platform.OS === 'web' ? { inputMode: 'text' } : {})}
+                    onFocus={() => {
+                      writingActiveRef.current = true;
+                      scrollWritingIntoView();
+                    }}
+                    onChangeText={(t) => handleWritingChange(lockedWritingPrefix + t)}
+                    onBlur={() => {
+                      writingActiveRef.current = false;
+                      if (!assignment || !currentStage) return;
+                      if (saveWritingTimerRef.current) {
+                        clearTimeout(saveWritingTimerRef.current);
+                        saveWritingTimerRef.current = null;
+                      }
+                      persistStageWriting(assignment.id, currentStage.id, writingTextRef.current);
+                    }}
+                  />
+                </>
+              ) : (
+                <TextInput
+                  ref={writingInputRef}
+                  style={styles.writingInput}
+                  multiline
+                  textAlignVertical="top"
+                  placeholder="조사·정리·성찰 등 작성할 내용"
+                  placeholderTextColor={THEME.textSecondary}
+                  value={writingText}
+                  editable={!isCompleted}
+                  showSoftInputOnFocus
+                  {...(Platform.OS === 'web' ? { inputMode: 'text' } : {})}
+                  onFocus={() => {
+                    writingActiveRef.current = true;
+                    scrollWritingIntoView();
+                  }}
+                  onChangeText={handleWritingChange}
+                  onBlur={() => {
+                    writingActiveRef.current = false;
+                    if (!assignment || !currentStage) return;
+                    if (saveWritingTimerRef.current) {
+                      clearTimeout(saveWritingTimerRef.current);
+                      saveWritingTimerRef.current = null;
+                    }
+                    persistStageWriting(assignment.id, currentStage.id, writingTextRef.current);
+                  }}
+                />
+              )}
             </View>
             </View>
 
@@ -1623,6 +1688,18 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   writingHint: { fontSize: 12, color: THEME.textSecondary, marginBottom: 10, lineHeight: 17 },
+  lockedWritingText: {
+    fontSize: 15,
+    color: THEME.text,
+    lineHeight: 22,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: THEME.border,
+    marginBottom: 4,
+  },
   writingInput: {
     minHeight: 160,
     maxHeight: 320,

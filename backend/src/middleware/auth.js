@@ -20,18 +20,38 @@ function authenticateToken(req, res, next) {
   });
 }
 
+function isMaster(user) {
+  return user?.role === 'master';
+}
+
+function isTeacherOrMaster(user) {
+  return user?.role === 'teacher' || isMaster(user);
+}
+
+function isStudentOrMaster(user) {
+  return user?.role === 'student' || isMaster(user);
+}
+
 function requireTeacher(req, res, next) {
-  if (req.user.role !== 'teacher') {
+  if (!isTeacherOrMaster(req.user)) {
     return res.status(403).json({ error: '교사 권한이 필요합니다.' });
   }
   next();
 }
 
 function requireStudent(req, res, next) {
-  if (req.user.role !== 'student') {
+  if (!isStudentOrMaster(req.user)) {
     return res.status(403).json({ error: '학생 권한이 필요합니다.' });
   }
   next();
 }
 
-module.exports = { authenticateToken, requireTeacher, requireStudent, JWT_SECRET };
+module.exports = {
+  authenticateToken,
+  requireTeacher,
+  requireStudent,
+  isMaster,
+  isTeacherOrMaster,
+  isStudentOrMaster,
+  JWT_SECRET,
+};
