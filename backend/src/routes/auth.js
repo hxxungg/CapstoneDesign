@@ -8,6 +8,32 @@ const { verifySocialToken } = require('../services/socialProviders');
 const { createUserWithRole, linkSocialAccount } = require('../services/userRegistration');
 const { deleteAssessmentCascade, deleteParticipationLogs } = require('../services/assessmentCleanup');
 
+async function safeQuery(conn, sql, params = []) {
+  try {
+    return await conn.query(sql, params);
+  } catch (err) {
+    if (err.code === 'ER_NO_SUCH_TABLE') return [[]];
+    throw err;
+  }
+}
+
+/** 구 assignments API 잔여 데이터 (테이블 없으면 무시) */
+async function deleteLegacyTeacherData(conn, userId) {
+  const [assignments] = await safeQuery(
+    conn,
+    'SELECT id FROM teacher_db.assignments WHERE teacher_id = ?',
+    [userId]
+  );
+  for (const { id } of assignments) {
+    await safeQuery(conn, 'DELETE FROM teacher_db.stages WHERE assignment_id = ?', [id]);
+    await safeQuery(conn, 'DELETE FROM student_db.student_assignments WHERE assignment_id = ?', [id]);
+    await safeQuery(conn, 'DELETE FROM student_db.student_stage_writings WHERE assignment_id = ?', [id]);
+    await safeQuery(conn, 'DELETE FROM log_db.activity_logs WHERE assignment_id = ?', [id]);
+    await safeQuery(conn, 'DELETE FROM log_db.exit_attempts WHERE assignment_id = ?', [id]);
+  }
+  await safeQuery(conn, 'DELETE FROM teacher_db.assignments WHERE teacher_id = ?', [userId]);
+}
+
 function signUserToken(user) {
   return jwt.sign(
     { id: user.id, name: user.name, email: user.email, role: user.role },
@@ -368,10 +394,10 @@ router.delete('/account', authenticateToken, async (req, res) => {
           await deleteAssessmentCascade(conn, assessmentId);
         }
       }
-      // 5. 교사 레코드 삭제
+      await deleteLegacyTeacherData(conn, userId);
       await conn.query('DELETE FROM teacher_db.teachers WHERE user_id = ?', [userId]);
 
-    } else {
+    } else if (role === 'student') {
       // 학생: 본인 참여/제출 데이터 삭제
       const [studentRows] = await conn.query('SELECT id FROM student_db.students WHERE user_id = ?', [userId]);
       if (studentRows.length > 0) {
@@ -387,9 +413,9 @@ router.delete('/account', authenticateToken, async (req, res) => {
     }
 
     // 인증 정보 삭제 (FK 제약 때문에 users 삭제 전에)
-    await conn.query('DELETE FROM capstonedesign.user_consents WHERE user_id = ?', [userId]);
-    await conn.query('DELETE FROM capstonedesign.user_credentials WHERE user_id = ?', [userId]);
-    await conn.query('DELETE FROM capstonedesign.user_oauth_connections WHERE user_id = ?', [userId]);
+    await safeQuery(conn, 'DELETE FROM capstonedesign.user_consents WHERE user_id = ?', [userId]);
+    await safeQuery(conn, 'DELETE FROM capstonedesign.user_credentials WHERE user_id = ?', [userId]);
+    await safeQuery(conn, 'DELETE FROM capstonedesign.user_oauth_connections WHERE user_id = ?', [userId]);
     // 최종 계정 삭제
     await conn.query('DELETE FROM capstonedesign.users WHERE id = ?', [userId]);
 
