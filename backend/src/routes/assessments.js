@@ -11,8 +11,7 @@ const {
   saveStepComplianceScore,
 } = require('../services/stepComplianceScoring');
 const { deleteAssessmentCascade } = require('../services/assessmentCleanup');
-
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://101.79.18.104:8001';
+const { runSimilarityAnalysis } = require('../services/similarityAnalysis');
 
 function parseRubricJson(raw) {
   if (raw == null || raw === '') return null;
@@ -42,13 +41,6 @@ function stripRubricJsonColumn(row) {
   return rest;
 }
 
-// similarity_percent → originality enum 변환
-function toOriginality(pct) {
-  if (pct >= 70) return 'red';
-  if (pct >= 40) return 'yellow';
-  return 'green';
-}
-
 // deadline이 지난 assessments를 자동으로 closed 처리
 async function autoCloseExpiredAssessments(assessmentIds) {
   if (!assessmentIds?.length) return;
@@ -74,132 +66,11 @@ function _drainSimQueue() {
   if (_simRunning || _simQueue.length === 0) return;
   _simRunning = true;
   const job = _simQueue.shift();
-  runSimilarityAnalysis(job.content, job.submissionId, job.participationId, job.stepId)
+  runSimilarityAnalysis(pool, job.content, job.submissionId, job.participationId, job.stepId)
     .finally(() => {
       _simRunning = false;
       _drainSimQueue();
     });
-}
-
-// 유사도 분석 — 비동기 fire-and-forget (실패해도 제출에는 영향 없음)
-async function runSimilarityAnalysis(content, submissionId, participationId, stepId) {
-  const t0 = Date.now();
-  console.log(`[유사도] 시작 — submission=${submissionId} participation=${participationId} step=${stepId}`);
-  try {
-    // 현재 단계 + 이전 모든 단계의 AI 응답 로그 조회
-    // step_id의 step_order를 구한 뒤 그 이하의 모든 step AI 로그를 가져옴
-    let aiLogs;
-    if (stepId) {
-      // 현재 step의 step_order 조회
-      const [[currentStep]] = await pool.query(
-        `SELECT step_order FROM teacher_db.assessment_steps WHERE id = ?`,
-        [stepId]
-      );
-      if (currentStep) {
-        // 현재 단계 이하의 모든 단계 id 목록
-        const [prevStepIds] = await pool.query(
-          `SELECT s.id FROM teacher_db.assessment_steps s
-           JOIN teacher_db.assessment_steps cur ON cur.id = ?
-           WHERE s.assessment_id = cur.assessment_id
-             AND s.step_order <= cur.step_order`,
-          [stepId]
-        );
-        const ids = prevStepIds.map(r => r.id);
-        [aiLogs] = await pool.query(
-          `SELECT id, response, step_id FROM log_db.ai_logs
-           WHERE participation_id = ?
-             AND step_id IN (?)
-             AND response IS NOT NULL AND response != ''
-           ORDER BY logged_at ASC`,
-          [participationId, ids]
-        );
-      } else {
-        // step_order 조회 실패 시 현재 단계만
-        [aiLogs] = await pool.query(
-          `SELECT id, response, step_id FROM log_db.ai_logs
-           WHERE participation_id = ? AND step_id = ?
-             AND response IS NOT NULL AND response != ''`,
-          [participationId, stepId]
-        );
-      }
-    } else {
-      // stepId 없으면 해당 participation 전체
-      [aiLogs] = await pool.query(
-        `SELECT id, response, step_id FROM log_db.ai_logs
-         WHERE participation_id = ? AND response IS NOT NULL AND response != ''
-         ORDER BY logged_at ASC`,
-        [participationId]
-      );
-    }
-    if (aiLogs.length === 0) {
-      // AI 로그 없음 (비허용 단계 등) → 줄 단위로 분리해 초록/0% 로 저장
-      console.log(`[유사도] AI 로그 없음 → 초록/0% 저장 (submission=${submissionId})`);
-      const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
-      const rows = (lines.length > 0 ? lines : [content])
-        .map((line, idx) => [submissionId, idx, line, null, 0, 'green']);
-      await pool.query(`DELETE FROM log_db.submissions_step WHERE submission_id = ?`, [submissionId]);
-      await pool.query(
-        `INSERT INTO log_db.submissions_step
-         (submission_id, segment_order, content, ai_log_id, similarity_score, originality)
-         VALUES ?`,
-        [rows]
-      );
-      console.log(`[유사도] 완료 (${((Date.now()-t0)/1000).toFixed(1)}s) — ${rows.length}개 문장 저장`);
-      return;
-    }
-
-    console.log(`[유사도] AI 로그 ${aiLogs.length}개 → 모델 요청 중...`);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 240000); // 4분 (모델 초기 로딩 대비)
-    const res = await fetch(`${AI_SERVICE_URL}/analyze`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        content,
-        ai_logs: aiLogs,
-        submission_id: submissionId,
-        participation_id: participationId,
-        step_id: stepId || 0,
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) return;
-
-    const results = await res.json();
-    console.log(`[유사도] 모델 응답 (${((Date.now()-t0)/1000).toFixed(1)}s) — ${results.length}개 문장`);
-    if (!Array.isArray(results) || results.length === 0) return;
-
-    // 기존 임시 행 삭제 후 모델이 분리한 문장으로 교체
-    await pool.query(
-      `DELETE FROM log_db.submissions_step WHERE submission_id = ?`,
-      [submissionId]
-    );
-
-    if (results.length > 0) {
-      const rows = results.map(r => [
-        submissionId,
-        r.sentence_index,          // 0-based
-        r.sentence,                // 모델이 분리한 문장
-        r.best_ai_log_id ?? null,
-        r.similarity_percent,
-        toOriginality(r.similarity_percent),
-      ]);
-      await pool.query(
-        `INSERT INTO log_db.submissions_step
-         (submission_id, segment_order, content, ai_log_id, similarity_score, originality)
-         VALUES ?`,
-        [rows]
-      );
-      console.log(`[유사도] 저장 완료 (${((Date.now()-t0)/1000).toFixed(1)}s) — submission=${submissionId} ${rows.length}개 문장`);
-    }
-  } catch (err) {
-    if (err.name === 'AbortError' || err.message?.includes('aborted')) {
-      console.error(`[유사도 타임아웃] submission=${submissionId} — AI 서비스 응답 없음 (4분 초과)`);
-    } else {
-      console.error(`[유사도 오류] submission=${submissionId}`, err.message);
-    }
-  }
 }
 
 // 루브릭 이행 채점 큐 — 최종 제출 + 동의 시에만 실행

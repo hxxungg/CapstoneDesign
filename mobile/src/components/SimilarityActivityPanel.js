@@ -91,7 +91,7 @@ function stripTrailingPunct(text) {
   return (text ?? '').replace(/[.!?…]+$/u, '').trimEnd();
 }
 
-/** content_at_unlock이 제출 본문·유사도 문장 어디에 해당하는지 (문장 부호 차이 허용) */
+/** content_at_unlock이 제출 본문에서 끝나는 위치 */
 function findUnlockSplitIndex(joined, unlockRaw) {
   const j = normalizeUnlockText(joined);
   const u = normalizeUnlockText(unlockRaw);
@@ -107,69 +107,120 @@ function findUnlockSplitIndex(joined, unlockRaw) {
   const uCore = stripTrailingPunct(u);
   if (!uCore || !jLow.startsWith(uCore.toLowerCase())) return -1;
 
-  let splitAt = uCore.length;
-  const tail = j.slice(uCore.length);
-  const punctGap = tail.match(/^[.!?…]*\s*/u);
-  if (punctGap) splitAt += punctGap[0].length;
-
-  return splitAt < j.length ? splitAt : -1;
+  return uCore.length;
 }
 
-/** 조건부 AI — 웹뷰 해제 시점(content_at_unlock) 기준으로 문장 목록 분리 */
-export function partitionSentencesByUnlock(sentences, contentAtUnlock, submissionContent = null) {
-  if (!contentAtUnlock?.trim() || !sentences?.length) {
-    return { before: sentences ?? [], after: [], showDivider: false };
+/** 제출 본문에서 content_at_unlock 직후 텍스트 */
+function getTextAfterUnlock(fullRaw, unlockRaw) {
+  const full = (fullRaw ?? '').trim();
+  const unlock = (unlockRaw ?? '').trim();
+  if (!full || !unlock) return '';
+
+  if (full.startsWith(unlock)) {
+    return full.slice(unlock.length).trimStart();
   }
 
-  const unlockRaw = normalizeUnlockText(contentAtUnlock);
-  const joinedFromSentences = normalizeUnlockText(
-    sentences
-      .map((s) => (s.sentence ?? '').trim())
-      .filter(Boolean)
-      .join(' ')
-  );
-  const joinedFromSubmission = normalizeUnlockText(submissionContent);
-  const joined = joinedFromSubmission || joinedFromSentences;
+  const splitAt = findUnlockSplitIndex(full, unlock);
+  if (splitAt < 0) return '';
 
-  const splitAt = findUnlockSplitIndex(joined, unlockRaw);
-  if (splitAt < 0) {
-    return { before: sentences, after: [], showDivider: false };
-  }
+  return normalizeUnlockText(full).slice(splitAt).trimStart();
+}
 
-  const beforeText = joined.slice(0, splitAt).trimEnd();
-  const afterText = joined.slice(splitAt).trimStart();
-  if (!afterText) {
-    return { before: sentences, after: [], showDivider: false };
-  }
+function afterTextsRoughlyEqual(joined, afterNorm) {
+  if (!joined || !afterNorm) return false;
+  if (joined === afterNorm) return true;
+  return stripTrailingPunct(joined) === stripTrailingPunct(afterNorm);
+}
 
-  // 문장 단위로 나뉜 경우 — 형광펜(유사도) 메타 유지
-  let pos = 0;
-  let boundarySplit = 0;
+/** 유사도 문장 → 웹뷰 후 구간 (content − content_at_unlock 과 일치하도록) */
+function pickAfterSentences(sentences, unlockText, afterText, template) {
+  if (!afterText) return [];
+
+  const unlockNorm = normalizeUnlockText(unlockText);
+  const afterNorm = normalizeUnlockText(afterText);
+
+  // 1) unlock과 누적이 맞는 문장 다음부터
+  let acc = '';
+  let splitIdx = -1;
   for (let i = 0; i < sentences.length; i += 1) {
     const chunk = (sentences[i].sentence ?? '').trim();
     if (!chunk) continue;
-    const sep = pos > 0 ? ' ' : '';
-    pos += sep.length + chunk.length;
-    boundarySplit = i + 1;
-    if (pos >= splitAt) break;
+
+    const candidate = acc ? `${acc} ${chunk}` : chunk;
+    const candNorm = normalizeUnlockText(candidate);
+
+    if (afterTextsRoughlyEqual(candNorm, unlockNorm)) {
+      splitIdx = i + 1;
+      break;
+    }
+
+    if (unlockNorm.startsWith(candNorm) && candNorm.length < unlockNorm.length) {
+      acc = candidate;
+      continue;
+    }
+
+    break;
   }
 
-  const boundaryAfter = sentences.slice(boundarySplit);
-  if (boundaryAfter.length > 0) {
-    return {
-      before: sentences.slice(0, boundarySplit),
-      after: boundaryAfter,
-      showDivider: true,
-    };
+  let picked = splitIdx >= 0 ? sentences.slice(splitIdx) : [];
+  let pickedJoin = normalizeUnlockText(
+    picked.map((s) => (s.sentence ?? '').trim()).filter(Boolean).join(' ')
+  );
+
+  if (!afterTextsRoughlyEqual(pickedJoin, afterNorm)) {
+    // 2) 유사도 문장 좌표계 — unlock 길이를 넘기는 문장부터 (끝 > unlock 경계)
+    picked = [];
+    let pos = 0;
+    for (const row of sentences) {
+      const chunk = (row.sentence ?? '').trim();
+      if (!chunk) continue;
+      const sep = pos > 0 ? ' ' : '';
+      const end = pos + sep.length + chunk.length;
+      if (end > unlockNorm.length) picked.push(row);
+      pos = end;
+    }
+    pickedJoin = normalizeUnlockText(
+      picked.map((s) => (s.sentence ?? '').trim()).filter(Boolean).join(' ')
+    );
   }
 
-  // 한 문장으로 합쳐진 경우(예: "Test. Test.") — 텍스트 중간에서 분리
-  const template = sentences.find((s) => (s.sentence ?? '').trim()) ?? sentences[0];
-  return {
-    before: [{ ...template, sentence: beforeText }],
-    after: [{ ...template, sentence: afterText }],
-    showDivider: true,
-  };
+  if (afterTextsRoughlyEqual(pickedJoin, afterNorm)) {
+    return picked;
+  }
+
+  // 3) 문장 매핑이 어긋나면 content − unlock 전체를 그대로 표시
+  return [{ ...template, sentence: afterText }];
+}
+
+/**
+ * 조건부 AI — 웹뷰 전: DB content_at_unlock 그대로, 웹뷰 후: content 나머지
+ */
+export function partitionSentencesByUnlock(sentences, contentAtUnlock, submissionContent = null) {
+  if (!contentAtUnlock?.trim()) {
+    return { before: sentences ?? [], after: [], showDivider: false };
+  }
+
+  const unlockText = contentAtUnlock.trim();
+  const fullRaw =
+    (submissionContent ?? '').trim() ||
+    sentences
+      .map((s) => (s.sentence ?? '').trim())
+      .filter(Boolean)
+      .join(' ');
+
+  const afterText = getTextAfterUnlock(fullRaw, unlockText);
+  const showDivider = !!afterText;
+
+  const template =
+    sentences?.find((s) => (s.sentence ?? '').trim()) ??
+    { sentence: '', segment_order: 0, originality: null };
+
+  const before = [{ ...template, sentence: unlockText }];
+  const after = showDivider
+    ? pickAfterSentences(sentences ?? [], unlockText, afterText, template)
+    : [];
+
+  return { before, after, showDivider };
 }
 
 export function ConditionalUnlockDivider({ unlockedAt }) {

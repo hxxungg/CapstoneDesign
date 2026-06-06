@@ -12,6 +12,7 @@ const ROW_H = 44;
 /** 채점기준표 — 좌측 라벨열 : 우측 내용열 (모바일·웹 동일 비율) */
 const LABEL_COL_FLEX = 1.2;
 const CONTENT_COL_FLEX = 4.8;
+const RUBRIC_ELEMENT_COL_PCT = `${(LABEL_COL_FLEX / (LABEL_COL_FLEX + CONTENT_COL_FLEX)) * 100}%`;
 /** 평가 요소 블록 — 우측 표 열 비율 (simple / subBlocks 공통) */
 const RUBRIC_SUB_ELEMENT_FLEX = 1.1;
 const RUBRIC_LEVEL_FLEX = 3.2;
@@ -814,11 +815,8 @@ function RubricBlock({
     </View>
   );
 
-  const elementColPanel = (
+  const elementBodyCol = (
     <View style={styles.rubricElementCol}>
-      <View style={styles.rubricElementHeader}>
-        <Text style={[styles.cellText, styles.cellHeaderText]}>평가 요소</Text>
-      </View>
       <View style={[styles.rubricElementBody, { minHeight: totalRows * ROW_H }]}>
         <TextInput
           style={[styles.input, styles.inputMultiline, styles.elementInput]}
@@ -833,7 +831,7 @@ function RubricBlock({
     </View>
   );
 
-  const metricHeaderRow = hasSubElement ? (
+  const metricHeaderCells = hasSubElement ? (
     <View style={styles.subBlockWrap}>
       <RubricGridCell col="subElement" colWidths={colWidths} header minHeight={40}>
         세부 요소
@@ -856,6 +854,17 @@ function RubricBlock({
       level="수행 수준"
       score="배점"
     />
+  );
+
+  const unifiedHeaderRow = (
+    <View style={styles.rubricUnifiedHeader}>
+      <View style={styles.rubricElementHeaderCol}>
+        <Text style={[styles.cellText, styles.cellHeaderText]}>평가 요소</Text>
+      </View>
+      <View style={styles.rubricMetricHeaderArea}>
+        {metricHeaderCells}
+      </View>
+    </View>
   );
 
   const metricBodyContent = block.subBlocks ? (
@@ -957,11 +966,13 @@ function RubricBlock({
   return (
     <View style={styles.rubricBlockWrap}>
       {blockToolbar}
-      <View style={styles.rubricBlock}>
-        {elementColPanel}
-        <View style={styles.rubricContentArea} onLayout={handleRubricContentLayout}>
-          {metricHeaderRow}
-          {metricBodyContent}
+      <View style={styles.rubricBlockVertical}>
+        {unifiedHeaderRow}
+        <View style={styles.rubricBlockBody}>
+          {elementBodyCol}
+          <View style={styles.rubricContentArea} onLayout={handleRubricContentLayout}>
+            {metricBodyContent}
+          </View>
         </View>
       </View>
     </View>
@@ -1145,7 +1156,7 @@ export default function GradingRubricTable({ value, onChange }) {
       </View>
 
       <View style={[styles.row, styles.rowBorder]}>
-        <LabelCol header style={styles.labelColStretch}>{'평가\n방법'}</LabelCol>
+        <LabelCol header style={styles.labelColStretch}>평가 방법</LabelCol>
         <ContentArea>
           <View style={styles.methodRow}>
             {methodKeys.map((label) => (
@@ -1281,35 +1292,53 @@ const styles = StyleSheet.create({
   cellHeaderText: { fontFamily: F.sansMedium, fontSize: 12, color: C.text },
 
   rubricBlockWrap: { borderTopWidth: 1, borderTopColor: BORDER },
-  rubricBlock: {
+  rubricBlockVertical: {
+    width: '100%',
+  },
+  rubricUnifiedHeader: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: HDR,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  rubricElementHeaderCol: {
+    width: RUBRIC_ELEMENT_COL_PCT,
+    maxWidth: RUBRIC_ELEMENT_COL_PCT,
+    flexGrow: 0,
+    flexShrink: 0,
+    minHeight: 40,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    justifyContent: 'center',
+    borderRightWidth: 1,
+    borderRightColor: BORDER,
+  },
+  rubricMetricHeaderArea: {
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    backgroundColor: HDR,
+  },
+  rubricBlockBody: {
     flexDirection: 'row',
     alignItems: 'stretch',
     width: '100%',
   },
   rubricElementCol: {
-    flex: LABEL_COL_FLEX,
-    flexBasis: 0,
+    width: RUBRIC_ELEMENT_COL_PCT,
+    maxWidth: RUBRIC_ELEMENT_COL_PCT,
     flexGrow: 0,
     flexShrink: 0,
-    minWidth: 0,
     alignSelf: 'stretch',
     borderRightWidth: 1,
     borderRightColor: BORDER,
   },
   rubricContentArea: {
-    flex: CONTENT_COL_FLEX,
+    flex: 1,
     flexBasis: 0,
     minWidth: 0,
     backgroundColor: '#fff',
-  },
-  rubricElementHeader: {
-    backgroundColor: HDR,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-    minHeight: 40,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    justifyContent: 'center',
   },
   rubricElementBody: {
     flex: 1,

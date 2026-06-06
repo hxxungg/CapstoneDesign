@@ -50,51 +50,51 @@ function BlockReadOnly({ block }) {
 
   if (block.subBlocks) {
     return (
-      <View style={styles.rubricBlock}>
-        <View style={[styles.elementCol, { borderRightWidth: 1, borderRightColor: BORDER }]}>
-          <Cell header minHeight={40}>평가 요소</Cell>
-          <View style={{ flex: 1, minHeight: totalRows * ROW_H, borderTopWidth: 1, borderTopColor: BORDER, padding: 8 }}>
+      <View style={styles.rubricBlockVertical}>
+        <View style={styles.row}>
+          <Cell header flex={2.2} minHeight={40}>평가 요소</Cell>
+          <Cell header flex={1.1} minHeight={40}>세부 요소</Cell>
+          <Cell header flex={3.2} minHeight={40}>수행 수준</Cell>
+          <Cell header flex={0.9} minHeight={40} center noRightBorder>배점</Cell>
+        </View>
+        <View style={styles.rubricBlockBody}>
+          <View style={[styles.elementCol, styles.elementBodyCol, { minHeight: totalRows * ROW_H }]}>
             <Text style={styles.bodyText}>{block.element || '—'}</Text>
           </View>
-        </View>
-        <View style={styles.rightCol}>
-          <View style={styles.row}>
-            <Cell header flex={1.1} minHeight={40}>세부 요소</Cell>
-            <Cell header flex={3.2} minHeight={40}>수행 수준</Cell>
-            <Cell header flex={0.9} minHeight={40} center noRightBorder>배점</Cell>
+          <View style={styles.rightCol}>
+            {block.subBlocks.map((sub, si) => {
+              const subRows = sub.scoreGroups.reduce((s, g) => s + g.levels.length, 0);
+              return (
+                <View key={si} style={[styles.subBlockWrap, si > 0 && styles.rowBorder]}>
+                  <View style={[styles.subElementCol, { minHeight: subRows * ROW_H, padding: 8 }]}>
+                    <Text style={styles.bodyText}>{sub.subElement || '—'}</Text>
+                  </View>
+                  <View style={styles.subGroupsCol}>
+                    <ScoreGroupReadOnly groups={sub.scoreGroups} levelFlex={3.2} scoreFlex={0.9} />
+                  </View>
+                </View>
+              );
+            })}
           </View>
-          {block.subBlocks.map((sub, si) => {
-            const subRows = sub.scoreGroups.reduce((s, g) => s + g.levels.length, 0);
-            return (
-              <View key={si} style={[styles.subBlockWrap, si > 0 && styles.rowBorder]}>
-                <View style={[styles.subElementCol, { minHeight: subRows * ROW_H, padding: 8 }]}>
-                  <Text style={styles.bodyText}>{sub.subElement || '—'}</Text>
-                </View>
-                <View style={styles.subGroupsCol}>
-                  <ScoreGroupReadOnly groups={sub.scoreGroups} levelFlex={3.2} scoreFlex={0.9} />
-                </View>
-              </View>
-            );
-          })}
         </View>
       </View>
     );
   }
 
   return (
-    <View style={styles.rubricBlock}>
-      <View style={[styles.elementCol, { borderRightWidth: 1, borderRightColor: BORDER }]}>
-        <Cell header minHeight={40}>평가 요소</Cell>
-        <View style={{ flex: 1, minHeight: totalRows * ROW_H, borderTopWidth: 1, borderTopColor: BORDER, padding: 8 }}>
+    <View style={styles.rubricBlockVertical}>
+      <View style={styles.row}>
+        <Cell header flex={2.2} minHeight={40}>평가 요소</Cell>
+        <Cell header flex={4} minHeight={40}>수행 수준</Cell>
+        <Cell header flex={1} minHeight={40} center noRightBorder>배점</Cell>
+      </View>
+      <View style={styles.rubricBlockBody}>
+        <View style={[styles.elementCol, styles.elementBodyCol, { minHeight: totalRows * ROW_H }]}>
           <Text style={styles.bodyText}>{block.element || '—'}</Text>
         </View>
-      </View>
-      <View style={styles.rightCol}>
-        <View style={styles.row}>
-          <Cell header flex={4} minHeight={40}>수행 수준</Cell>
-          <Cell header flex={1} minHeight={40} center noRightBorder>배점</Cell>
+        <View style={styles.rightCol}>
+          <ScoreGroupReadOnly groups={block.scoreGroups || []} />
         </View>
-        <ScoreGroupReadOnly groups={block.scoreGroups || []} />
       </View>
     </View>
   );
@@ -164,8 +164,10 @@ const styles = StyleSheet.create({
   cellHeaderText: { fontFamily: F.sansMedium, fontSize: 12, color: C.text },
   bodyText: { fontFamily: F.sans, fontSize: 12, color: C.text, lineHeight: 20 },
   scoreText: { fontFamily: F.sansMedium, fontSize: 12, color: C.text, textAlign: 'center' },
-  rubricBlock: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: BORDER },
-  elementCol: { flex: 2.2 },
+  rubricBlockVertical: { borderTopWidth: 1, borderTopColor: BORDER },
+  rubricBlockBody: { flexDirection: 'row', alignItems: 'stretch' },
+  elementCol: { flex: 2.2, borderRightWidth: 1, borderRightColor: BORDER },
+  elementBodyCol: { padding: 8, justifyContent: 'flex-start' },
   rightCol: { flex: 5 },
   scoreGroupRow: { flexDirection: 'row', alignItems: 'stretch' },
   subBlockWrap: { flexDirection: 'row', alignItems: 'stretch' },
