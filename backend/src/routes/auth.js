@@ -348,11 +348,19 @@ router.delete('/account', authenticateToken, async (req, res) => {
     await conn.beginTransaction();
 
     if (role === 'teacher') {
-      // 1. 이 교사의 수행평가 ID 목록
-      const [assessments] = await conn.query(
-        'SELECT id FROM teacher_db.assessments WHERE teacher_id = ?',
+      const [teacherRows] = await conn.query(
+        'SELECT id FROM teacher_db.teachers WHERE user_id = ?',
         [userId]
       );
+      const teacherId = teacherRows[0]?.id;
+
+      // 1. 이 교사의 수행평가 ID 목록 (assessments.teacher_id = teachers.id)
+      const [assessments] = teacherId
+        ? await conn.query(
+            'SELECT id FROM teacher_db.assessments WHERE teacher_id = ?',
+            [teacherId]
+          )
+        : [[]];
       const assessmentIds = assessments.map(a => a.id);
 
       if (assessmentIds.length > 0) {
