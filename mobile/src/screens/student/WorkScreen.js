@@ -124,6 +124,7 @@ export default function WorkScreen({ navigation, route }) {
   const webViewRef          = useRef(null);
   const loadingTimerRef     = useRef(null);
   const splitRatioRef       = useRef(DEFAULT_RATIO);
+  const splitRowWidthRef    = useRef(0);
   const panStartRatioRef    = useRef(DEFAULT_RATIO);
   const pageStartTimeRef    = useRef(Date.now());
   const visitedAtRef        = useRef(new Date().toISOString());
@@ -681,16 +682,29 @@ export default function WorkScreen({ navigation, route }) {
     }
   };
 
+  const handleSplitRowLayout = useCallback((event) => {
+    const width = event.nativeEvent.layout.width;
+    if (width > 0) splitRowWidthRef.current = width;
+  }, []);
+
   // 드래그 핸들 (분할선 이동)
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => (
+        Math.abs(gestureState.dx) > Math.abs(gestureState.dy)
+      ),
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => (
+        Math.abs(gestureState.dx) > Math.abs(gestureState.dy)
+      ),
+      onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
         panStartRatioRef.current = splitRatioRef.current;
       },
       onPanResponderMove: (_, gestureState) => {
-        const availableWidth = SCREEN_WIDTH - DIVIDER_WIDTH;
+        const rowWidth = splitRowWidthRef.current || SCREEN_WIDTH;
+        const availableWidth = Math.max(rowWidth - DIVIDER_WIDTH, 1);
         const delta = gestureState.dx / availableWidth;
         const newRatio = Math.max(MIN_RATIO, Math.min(MAX_RATIO, panStartRatioRef.current + delta));
         splitRatioRef.current = newRatio;
@@ -1024,14 +1038,21 @@ export default function WorkScreen({ navigation, route }) {
       )}
 
       {/* ── 왼쪽 작업열 + 오른쪽 브라우저 — 작성창만 visualViewport/키보드 높이만큼 위로 ── */}
-      <View style={[styles.bodyRow, showWebViewPanel && styles.splitContainer]}>
-        <KeyboardAvoidingView
+      <View
+        style={[styles.bodyRow, showWebViewPanel && styles.splitContainer]}
+        onLayout={showWebViewPanel ? handleSplitRowLayout : undefined}
+      >
+        <View
           ref={leftColumnRef}
           nativeID="work-left-column"
           style={[
             styles.leftWorkColumn,
+            styles.splitPane,
             { flex: showWebViewPanel ? splitRatio : 1 },
           ]}
+        >
+        <KeyboardAvoidingView
+          style={styles.leftWorkColumnFill}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           enabled={Platform.OS !== 'web'}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
@@ -1325,11 +1346,12 @@ export default function WorkScreen({ navigation, route }) {
 
         </View>
         </KeyboardAvoidingView>
+        </View>
 
         {/* ── 분할선 + AI 브라우저 패널 (허용·조건부 해제 후 표시) ── */}
         {showWebViewPanel && (
           <>
-            <View style={styles.divider} {...panResponder.panHandlers}>
+            <View style={styles.divider} collapsable={false} {...panResponder.panHandlers}>
               <View style={styles.dividerHandle} />
               <Text style={styles.dividerHint}>좌우 드래그</Text>
             </View>
@@ -1649,14 +1671,16 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: THEME.background },
   loadingText: { marginTop: 12, color: THEME.textSecondary, fontSize: 14 },
 
-  bodyRow: { flex: 1, minHeight: 0 },
+  bodyRow: { flex: 1, minHeight: 0, width: '100%' },
   leftWorkColumn: {
     minHeight: 0,
     backgroundColor: THEME.background,
   },
+  splitPane: { minWidth: 0, flexShrink: 1 },
+  leftWorkColumnFill: { flex: 1, minHeight: 0, minWidth: 0, width: '100%' },
   leftWorkInner: { flex: 1, minHeight: 0 },
   headerNoShrink: { flexShrink: 0 },
-  splitContainer: { flex: 1, flexDirection: 'row' },
+  splitContainer: { flex: 1, flexDirection: 'row', width: '100%' },
   fullContent: { flex: 1 },
   taskBody: { flex: 1, minHeight: 0, flexShrink: 1 },
   taskScrollView: { flex: 1, minHeight: 0 },
@@ -1732,7 +1756,7 @@ const styles = StyleSheet.create({
 
   // 분할선
   divider: {
-    width: DIVIDER_WIDTH, backgroundColor: THEME.dark,
+    width: DIVIDER_WIDTH, flexShrink: 0, backgroundColor: THEME.dark,
     justifyContent: 'center', alignItems: 'center',
   },
   dividerHandle: {
@@ -1742,7 +1766,7 @@ const styles = StyleSheet.create({
   dividerHint: { fontSize: 9, color: 'rgba(255,255,255,0.5)' },
 
   // AI 브라우저 패널
-  browserPanel: { position: 'relative', backgroundColor: '#000' },
+  browserPanel: { position: 'relative', backgroundColor: '#000', minWidth: 0, flexShrink: 1 },
   browserUrlBar: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: THEME.dark, paddingHorizontal: 6, paddingVertical: 6,
@@ -1763,7 +1787,7 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.primary, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8,
   },
   browserUrlGoText: { color: '#fff', fontWeight: '700', fontSize: 12 },
-  webView: { flex: 1 },
+  webView: { flex: 1, minWidth: 0, width: '100%' },
   aiLoadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: THEME.background,
