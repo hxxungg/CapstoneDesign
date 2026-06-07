@@ -13,7 +13,7 @@ import { THEME, FONTS } from '../config/api';
 import { NATIVE_SOCIAL_ENABLED, WEB_SOCIAL_ENABLED } from '../config/features';
 import { appAlert } from '../utils/appAlert';
 import { VALIDATION } from '../utils/uiCopy';
-import BrandMark from '../components/BrandMark';
+import SidebarBrand from '../components/SidebarBrand';
 
 const C = THEME;
 const F = FONTS;
@@ -31,10 +31,7 @@ function AuthShell({ title, subtitle, children, footer }) {
       <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.dark }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         {/* 네이비 브랜드 헤더 */}
         <View style={sh.phoneHeader}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <BrandMark size={36} />
-            <Text style={sh.phoneHeaderName}>AI 나침반</Text>
-          </View>
+          <SidebarBrand markSize={36} nameStyle={sh.phoneHeaderName} emailStyle={sh.brandEmail} />
         </View>
         {/* 크림 폼 영역 */}
         <ScrollView
@@ -67,10 +64,7 @@ function AuthShell({ title, subtitle, children, footer }) {
     <View style={{ flex: 1, flexDirection: 'row', backgroundColor: C.background }}>
       {/* Left — brand panel */}
       <View style={sh.leftPanel}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <BrandMark size={36} />
-          <Text style={sh.leftBrandName}>AI 나침반</Text>
-        </View>
+        <SidebarBrand markSize={36} nameStyle={sh.leftBrandName} emailStyle={sh.brandEmail} />
 
         <View style={{ flex: 1, justifyContent: 'center', maxWidth: 360 }}>
           <Text style={sh.tagline}>AI 활용, 과정이 중요합니다.</Text>
@@ -116,6 +110,7 @@ const sh = StyleSheet.create({
     backgroundColor: C.dark,
   },
   phoneHeaderName: { fontFamily: F.sansBold, fontSize: 20, color: '#fff', letterSpacing: -0.3 },
+  brandEmail: { fontSize: 11, color: 'rgba(255,255,255,0.55)' },
   phoneFormContent: { flexGrow: 1, padding: 28, paddingBottom: 48 },
   formBox: { maxWidth: 400, width: '100%', alignSelf: 'center', gap: 0 },
 

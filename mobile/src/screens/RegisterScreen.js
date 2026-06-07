@@ -9,7 +9,7 @@ import { THEME, FONTS } from '../config/api';
 import { appAlert } from '../utils/appAlert';
 import { VALIDATION } from '../utils/uiCopy';
 import PolicyModal from '../components/PolicyModal';
-import BrandMark from '../components/BrandMark';
+import SidebarBrand from '../components/SidebarBrand';
 
 const C = THEME;
 const F = FONTS;
@@ -60,10 +60,7 @@ function AuthShell({ title, subtitle, children, footer }) {
     return (
       <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.dark }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={sh.phoneHeader}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <BrandMark size={36} />
-            <Text style={sh.phoneHeaderName}>AI 나침반</Text>
-          </View>
+          <SidebarBrand markSize={36} nameStyle={sh.phoneHeaderName} emailStyle={sh.brandEmail} />
         </View>
         <ScrollView
           style={{ flex: 1, backgroundColor: C.background }}
@@ -91,10 +88,7 @@ function AuthShell({ title, subtitle, children, footer }) {
   return (
     <View style={{ flex: 1, flexDirection: 'row', backgroundColor: C.background }}>
       <View style={sh.leftPanel}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <BrandMark size={36} />
-          <Text style={sh.leftBrandName}>AI 나침반</Text>
-        </View>
+        <SidebarBrand markSize={36} nameStyle={sh.leftBrandName} emailStyle={sh.brandEmail} />
         <View style={{ flex: 1, justifyContent: 'center' }}>
           <Text style={sh.tagline}>올바른 AI 사용을 위하여</Text>
           <Text style={sh.taglineSub}>
@@ -136,6 +130,7 @@ const sh = StyleSheet.create({
     backgroundColor: C.dark,
   },
   phoneHeaderName: { fontFamily: F.sansBold, fontSize: 20, color: '#fff', letterSpacing: -0.3 },
+  brandEmail: { fontSize: 11, color: 'rgba(255,255,255,0.55)' },
   phoneFormContent: { flexGrow: 1, padding: 28, paddingBottom: 48 },
   formBox: { maxWidth: 400, width: '100%', alignSelf: 'center' },
   formTitle: {
