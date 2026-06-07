@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   PanResponder, Dimensions, Platform, ActivityIndicator,
   BackHandler, AppState, Linking, TextInput, Keyboard, Pressable, Modal,
-  KeyboardAvoidingView,
+  KeyboardAvoidingView, InteractionManager,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { appAlert } from '../../utils/appAlert';
@@ -125,6 +125,8 @@ export default function WorkScreen({ navigation, route }) {
   const loadingTimerRef     = useRef(null);
   const splitRatioRef       = useRef(DEFAULT_RATIO);
   const splitRowWidthRef    = useRef(0);
+  const bodyRowRef          = useRef(null);
+  const prevShowWebViewPanelRef = useRef(false);
   const panStartRatioRef    = useRef(DEFAULT_RATIO);
   const pageStartTimeRef    = useRef(Date.now());
   const visitedAtRef        = useRef(new Date().toISOString());
@@ -687,6 +689,12 @@ export default function WorkScreen({ navigation, route }) {
     if (width > 0) splitRowWidthRef.current = width;
   }, []);
 
+  const remeasureSplitRow = useCallback(() => {
+    bodyRowRef.current?.measureInWindow?.((_x, _y, width) => {
+      if (width > 0) splitRowWidthRef.current = width;
+    });
+  }, []);
+
   // 드래그 핸들 (분할선 이동)
   const panResponder = useRef(
     PanResponder.create({
@@ -782,6 +790,41 @@ export default function WorkScreen({ navigation, route }) {
   }, [assignment?.deadline]);
   // ─────────────────────────────────────────────────────────────────────────────
 
+  useEffect(() => {
+    if (loading || !assignment) return undefined;
+
+    const currentStageOrder = assignment?.studentProgress?.current_stage_order || 1;
+    const viewOrder = viewedStageOrder ?? currentStageOrder;
+    const isCompleted = assignment?.studentProgress?.status === 'completed'
+      || assignment?.studentProgress?.status === 'submitted';
+    const isCurrentStageView = viewOrder === currentStageOrder && !isCompleted;
+    const viewedStage = assignment?.stages?.find((s) => s.order_num === viewOrder)
+      || assignment?.stages?.find((s) => s.order_num === currentStageOrder);
+    const stepBrowserUnlocked = !!(currentStepId && browserUnlockedByStep[currentStepId]);
+    const showPanel = isCurrentStageView && (
+      stageIsUnrestrictedAiBrowser(viewedStage)
+      || (stageIsConditionalAi(viewedStage) && stepBrowserUnlocked)
+    );
+
+    const enteringSplit = showPanel && !prevShowWebViewPanelRef.current;
+    prevShowWebViewPanelRef.current = showPanel;
+    if (!enteringSplit) return undefined;
+
+    splitRatioRef.current = DEFAULT_RATIO;
+    setSplitRatio(DEFAULT_RATIO);
+    const task = InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(remeasureSplitRow);
+    });
+    return () => task.cancel();
+  }, [
+    loading,
+    assignment,
+    viewedStageOrder,
+    currentStepId,
+    browserUnlockedByStep,
+    remeasureSplitRow,
+  ]);
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -871,7 +914,14 @@ export default function WorkScreen({ navigation, route }) {
             pageStartTimeRef.current = Date.now();
             visitedAtRef.current = unlockedAt;
             Keyboard.dismiss();
-            setTimeout(() => writingInputRef.current?.focus(), 120);
+            const focusWriting = () => writingInputRef.current?.focus();
+            if (Platform.OS === 'android') {
+              InteractionManager.runAfterInteractions(() => {
+                setTimeout(focusWriting, 280);
+              });
+            } else {
+              setTimeout(focusWriting, 120);
+            }
           },
         },
       ]
@@ -1039,10 +1089,12 @@ export default function WorkScreen({ navigation, route }) {
 
       {/* ── 왼쪽 작업열 + 오른쪽 브라우저 — 작성창만 visualViewport/키보드 높이만큼 위로 ── */}
       <View
+        ref={bodyRowRef}
         style={[styles.bodyRow, showWebViewPanel && styles.splitContainer]}
-        onLayout={showWebViewPanel ? handleSplitRowLayout : undefined}
+        onLayout={handleSplitRowLayout}
       >
         <View
+          key={showWebViewPanel ? `left-split-${currentStepId ?? 'step'}` : 'left-full'}
           ref={leftColumnRef}
           nativeID="work-left-column"
           style={[
@@ -1356,7 +1408,10 @@ export default function WorkScreen({ navigation, route }) {
               <Text style={styles.dividerHint}>좌우 드래그</Text>
             </View>
 
-            <View style={[styles.browserPanel, { flex: 1 - splitRatio }]}>
+            <View
+              key={`browser-split-${currentStepId ?? 'step'}`}
+              style={[styles.browserPanel, { flex: 1 - splitRatio }]}
+            >
               {Platform.OS === 'web' ? (
                 <View style={styles.webFallback}>
                   <Text style={styles.webFallbackTitle}>📱 인앱 브라우저</Text>
