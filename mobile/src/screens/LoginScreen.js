@@ -13,7 +13,7 @@ import { THEME, FONTS } from '../config/api';
 import { NATIVE_SOCIAL_ENABLED, WEB_SOCIAL_ENABLED } from '../config/features';
 import { appAlert } from '../utils/appAlert';
 import { VALIDATION } from '../utils/uiCopy';
-import SidebarBrand from '../components/SidebarBrand';
+import SidebarBrand, { SIDEBAR_BRAND_EMAIL } from '../components/SidebarBrand';
 
 const C = THEME;
 const F = FONTS;
@@ -31,7 +31,7 @@ function AuthShell({ title, subtitle, children, footer }) {
       <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.dark }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         {/* 네이비 브랜드 헤더 */}
         <View style={sh.phoneHeader}>
-          <SidebarBrand markSize={36} nameStyle={sh.phoneHeaderName} emailStyle={sh.brandEmail} />
+          <SidebarBrand markSize={36} nameStyle={sh.phoneHeaderName} />
         </View>
         {/* 크림 폼 영역 */}
         <ScrollView
@@ -64,7 +64,7 @@ function AuthShell({ title, subtitle, children, footer }) {
     <View style={{ flex: 1, flexDirection: 'row', backgroundColor: C.background }}>
       {/* Left — brand panel */}
       <View style={sh.leftPanel}>
-        <SidebarBrand markSize={36} nameStyle={sh.leftBrandName} emailStyle={sh.brandEmail} />
+        <SidebarBrand markSize={36} nameStyle={sh.leftBrandName} />
 
         <View style={{ flex: 1, justifyContent: 'center', maxWidth: 360 }}>
           <Text style={sh.tagline}>AI 활용, 과정이 중요합니다.</Text>
@@ -76,6 +76,7 @@ function AuthShell({ title, subtitle, children, footer }) {
         </View>
 
         <Text style={sh.leftFooter}>© 2026 AI 나침반</Text>
+        <Text style={sh.leftFooterEmail}>{SIDEBAR_BRAND_EMAIL}</Text>
       </View>
 
       {/* Right — form */}
@@ -110,7 +111,6 @@ const sh = StyleSheet.create({
     backgroundColor: C.dark,
   },
   phoneHeaderName: { fontFamily: F.sansBold, fontSize: 20, color: '#fff', letterSpacing: -0.3 },
-  brandEmail: { fontSize: 11, color: 'rgba(255,255,255,0.55)' },
   phoneFormContent: { flexGrow: 1, padding: 28, paddingBottom: 48 },
   formBox: { maxWidth: 400, width: '100%', alignSelf: 'center', gap: 0 },
 
@@ -167,6 +167,15 @@ const sh = StyleSheet.create({
     fontSize: 10.5,
     color: 'rgba(255,255,255,0.35)',
     letterSpacing: 1,
+  },
+  leftFooterEmail: {
+    marginTop: 4,
+    marginLeft: -28,
+    paddingHorizontal: 12,
+    fontFamily: F.sans,
+    fontSize: 10.5,
+    color: 'rgba(255,255,255,0.45)',
+    letterSpacing: 0.1,
   },
 });
 

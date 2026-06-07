@@ -15,7 +15,7 @@ import EnrollCodeModal from './EnrollCodeModal';
 import PolicyModal from './PolicyModal';
 import { LEGAL_POLICIES, getVisiblePolicyKeys } from '../config/legalPolicies';
 import BrandMark from './BrandMark';
-import SidebarBrand from './SidebarBrand';
+import SidebarBrand, { SIDEBAR_BRAND_EMAIL } from './SidebarBrand';
 
 const C = THEME;
 const F = FONTS;
@@ -445,7 +445,7 @@ export default function AppShell({
       <View style={s.sidebar}>
         {/* 브랜드 */}
         <View style={s.brand}>
-          <SidebarBrand markSize={36} nameStyle={s.brandName} emailStyle={s.brandEmail} />
+          <SidebarBrand markSize={36} nameStyle={s.brandName} />
         </View>
 
         {/* 네비게이션 */}
@@ -504,6 +504,7 @@ export default function AppShell({
         </Pressable>
 
         <Text style={s.sidebarFooter}>© 2026 AI 나침반</Text>
+        <Text style={s.sidebarEmail}>{SIDEBAR_BRAND_EMAIL}</Text>
       </View>
 
       {/* 콘텐츠 */}
@@ -566,7 +567,6 @@ const s = StyleSheet.create({
   },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 8, paddingBottom: 22 },
   brandName: { fontFamily: F.sansBold, fontSize: 16, color: '#fff', letterSpacing: -0.2 },
-  brandEmail: { fontSize: 10, color: 'rgba(255,255,255,0.5)' },
   brandSub:  { fontFamily: F.mono, fontSize: 9.5, color: 'rgba(255,255,255,0.5)', letterSpacing: 1.2, marginTop: 2 },
 
   navList:   { gap: 2 },
@@ -601,5 +601,13 @@ const s = StyleSheet.create({
     fontSize: 10.5,
     color: 'rgba(255,255,255,0.35)',
     letterSpacing: 1,
+  },
+  sidebarEmail: {
+    marginTop: 4,
+    paddingHorizontal: 12,
+    fontFamily: F.sans,
+    fontSize: 10.5,
+    color: 'rgba(255,255,255,0.45)',
+    letterSpacing: 0.1,
   },
 });

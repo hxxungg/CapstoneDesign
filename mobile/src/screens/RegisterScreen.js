@@ -9,7 +9,7 @@ import { THEME, FONTS } from '../config/api';
 import { appAlert } from '../utils/appAlert';
 import { VALIDATION } from '../utils/uiCopy';
 import PolicyModal from '../components/PolicyModal';
-import SidebarBrand from '../components/SidebarBrand';
+import SidebarBrand, { SIDEBAR_BRAND_EMAIL } from '../components/SidebarBrand';
 
 const C = THEME;
 const F = FONTS;
@@ -60,7 +60,7 @@ function AuthShell({ title, subtitle, children, footer }) {
     return (
       <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.dark }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={sh.phoneHeader}>
-          <SidebarBrand markSize={36} nameStyle={sh.phoneHeaderName} emailStyle={sh.brandEmail} />
+          <SidebarBrand markSize={36} nameStyle={sh.phoneHeaderName} />
         </View>
         <ScrollView
           style={{ flex: 1, backgroundColor: C.background }}
@@ -88,7 +88,7 @@ function AuthShell({ title, subtitle, children, footer }) {
   return (
     <View style={{ flex: 1, flexDirection: 'row', backgroundColor: C.background }}>
       <View style={sh.leftPanel}>
-        <SidebarBrand markSize={36} nameStyle={sh.leftBrandName} emailStyle={sh.brandEmail} />
+        <SidebarBrand markSize={36} nameStyle={sh.leftBrandName} />
         <View style={{ flex: 1, justifyContent: 'center' }}>
           <Text style={sh.tagline}>올바른 AI 사용을 위하여</Text>
           <Text style={sh.taglineSub}>
@@ -99,6 +99,7 @@ function AuthShell({ title, subtitle, children, footer }) {
         </View>
         
         <Text style={sh.leftFooter}>© 2026 AI 나침반</Text>
+        <Text style={sh.leftFooterEmail}>{SIDEBAR_BRAND_EMAIL}</Text>
       </View>
 
       <ScrollView
@@ -130,7 +131,6 @@ const sh = StyleSheet.create({
     backgroundColor: C.dark,
   },
   phoneHeaderName: { fontFamily: F.sansBold, fontSize: 20, color: '#fff', letterSpacing: -0.3 },
-  brandEmail: { fontSize: 11, color: 'rgba(255,255,255,0.55)' },
   phoneFormContent: { flexGrow: 1, padding: 28, paddingBottom: 48 },
   formBox: { maxWidth: 400, width: '100%', alignSelf: 'center' },
   formTitle: {
@@ -149,6 +149,14 @@ const sh = StyleSheet.create({
     color: 'rgba(255,255,255,0.7)', lineHeight: 22,
   },
   leftFooter: { fontFamily: F.mono, fontSize: 10.5, color: 'rgba(255,255,255,0.35)', letterSpacing: 1 },
+  leftFooterEmail: {
+    marginTop: 4,
+    paddingHorizontal: 12,
+    fontFamily: F.sans,
+    fontSize: 10.5,
+    color: 'rgba(255,255,255,0.45)',
+    letterSpacing: 0.1,
+  },
   featureNum: {
     width: 22, height: 22, borderRadius: 6,
     backgroundColor: 'rgba(255,255,255,0.06)',
