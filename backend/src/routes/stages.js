@@ -3,6 +3,7 @@ const router = express.Router();
 const { pool } = require('../database');
 const { authenticateToken, requireTeacher } = require('../middleware/auth');
 const { normalizeAiModeFromBody, resolveAiMode, normalizeStage } = require('../stageNormalize');
+const { getActingUserId } = require('../services/masterScope');
 
 router.post('/', authenticateToken, requireTeacher, async (req, res) => {
   const { assignment_id, title, description, ai_guidance } = req.body;
@@ -17,7 +18,7 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
       [parseInt(assignment_id)]
     );
     const assignment = aRows[0];
-    if (!assignment || Number(assignment.teacher_id) !== Number(req.user.id)) {
+    if (!assignment || Number(assignment.teacher_id) !== Number(getActingUserId(req))) {
       return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
     }
 
@@ -73,7 +74,7 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
       [stage.assignment_id]
     );
     const assignment = aRows[0];
-    if (!assignment || Number(assignment.teacher_id) !== Number(req.user.id)) {
+    if (!assignment || Number(assignment.teacher_id) !== Number(getActingUserId(req))) {
       return res.status(403).json({ error: '권한이 없습니다.' });
     }
 
@@ -131,7 +132,7 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req, res) => {
       [stage.assignment_id]
     );
     const assignment = aRows[0];
-    if (!assignment || Number(assignment.teacher_id) !== Number(req.user.id)) {
+    if (!assignment || Number(assignment.teacher_id) !== Number(getActingUserId(req))) {
       return res.status(403).json({ error: '권한이 없습니다.' });
     }
 
@@ -168,7 +169,7 @@ router.put('/:id/reorder', authenticateToken, requireTeacher, async (req, res) =
       [stage.assignment_id]
     );
     const assignment = aRows[0];
-    if (!assignment || Number(assignment.teacher_id) !== Number(req.user.id)) {
+    if (!assignment || Number(assignment.teacher_id) !== Number(getActingUserId(req))) {
       return res.status(403).json({ error: '권한이 없습니다.' });
     }
 

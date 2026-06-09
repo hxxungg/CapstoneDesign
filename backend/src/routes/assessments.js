@@ -2,8 +2,14 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const { pool } = require('../database');
-const { authenticateToken, requireTeacher, isMaster } = require('../middleware/auth');
-const { isGlobalMaster, getActingUserId, getMasterViewMode } = require('../services/masterScope');
+const { authenticateToken, requireTeacher } = require('../middleware/auth');
+const {
+  isGlobalMaster,
+  isScopedMaster,
+  getActingUserId,
+  getMasterViewMode,
+  isActingAsStudent,
+} = require('../services/masterScope');
 const {
   buildStepScoringPlan,
 } = require('../utils/rubricScoring');
@@ -297,7 +303,7 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
 
 // 학생: 내 참여 목록 조회 — /:id 보다 반드시 먼저 등록
 router.get('/my-participations', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'student' && !isMaster(req.user)) {
+  if (!isActingAsStudent(req) && !isGlobalMaster(req.user)) {
     return res.status(403).json({ error: '학생 전용 API입니다.' });
   }
 
@@ -317,7 +323,7 @@ router.get('/my-participations', authenticateToken, async (req, res) => {
       return res.json(rows);
     }
 
-    if (isMaster(req.user) && getMasterViewMode(req) !== 'student') {
+    if (isScopedMaster(req.user) && getMasterViewMode(req) !== 'student') {
       return res.json([]);
     }
 
@@ -347,7 +353,7 @@ router.get('/my-participations', authenticateToken, async (req, res) => {
 
 // 학생: 참여 상세 조회 (단계 목록 포함) — /:id 보다 반드시 먼저 등록
 router.get('/participation/:participationId', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'student' && !isMaster(req.user)) {
+  if (!isActingAsStudent(req) && !isGlobalMaster(req.user)) {
     return res.status(403).json({ error: '학생 전용 API입니다.' });
   }
 
@@ -411,7 +417,7 @@ router.get('/participation/:participationId', authenticateToken, async (req, res
 
 // 학생: invite_code로 수행평가 참여 — /:id 보다 반드시 먼저 등록
 router.post('/join', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'student') {
+  if (!isActingAsStudent(req)) {
     return res.status(403).json({ error: '학생만 수행평가에 참여할 수 있습니다.' });
   }
 
@@ -432,7 +438,7 @@ router.post('/join', authenticateToken, async (req, res) => {
 
     const [sRows] = await pool.query(
       'SELECT id FROM student_db.students WHERE user_id = ?',
-      [req.user.id]
+      [getActingUserId(req)]
     );
     if (sRows.length === 0) {
       return res.status(404).json({ error: '학생 정보를 찾을 수 없습니다.' });
@@ -502,7 +508,7 @@ router.get('/:id', authenticateToken, requireTeacher, async (req, res) => {
 
 // 수행평가 생성 (assessment + assessment_steps)
 router.post('/', authenticateToken, requireTeacher, async (req, res) => {
-  if (isMaster(req.user)) {
+  if (isGlobalMaster(req.user)) {
     return res.status(403).json({ error: '마스터 계정은 조회 전용입니다.' });
   }
   const { title, description, subject, target_class, deadline, steps, rubric } = req.body;
@@ -518,7 +524,7 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
     // users.id → teachers.id 변환
     const [teacherRows] = await conn.query(
       'SELECT id FROM teacher_db.teachers WHERE user_id = ?',
-      [req.user.id]
+      [getActingUserId(req)]
     );
     if (teacherRows.length === 0) {
       await conn.rollback();
@@ -602,7 +608,7 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
 
 // 단계(step) 삭제
 router.delete('/:id/steps/:stepId', authenticateToken, requireTeacher, async (req, res) => {
-  if (isMaster(req.user)) {
+  if (isGlobalMaster(req.user)) {
     return res.status(403).json({ error: '마스터 계정은 조회 전용입니다.' });
   }
   const assessmentId = parseInt(req.params.id, 10);
@@ -627,7 +633,7 @@ router.delete('/:id/steps/:stepId', authenticateToken, requireTeacher, async (re
 
 // 수행평가 수정 (기본 정보 + 단계 일괄 교체)
 router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
-  if (isMaster(req.user)) {
+  if (isGlobalMaster(req.user)) {
     return res.status(403).json({ error: '마스터 계정은 조회 전용입니다.' });
   }
   const assessmentId = parseInt(req.params.id, 10);
@@ -691,7 +697,7 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
 
 // 수행평가 삭제 (참여·제출·로그·단계 포함 전체 삭제)
 router.delete('/:id', authenticateToken, requireTeacher, async (req, res) => {
-  if (isMaster(req.user)) {
+  if (isGlobalMaster(req.user)) {
     return res.status(403).json({ error: '마스터 계정은 조회 전용입니다.' });
   }
   const assessmentId = parseInt(req.params.id, 10);
@@ -718,7 +724,7 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req, res) => {
 
 // 학생: 이전 단계 제출 내용 조회
 router.get('/participation/:participationId/submissions', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'student' && !isMaster(req.user)) {
+  if (!isActingAsStudent(req) && !isGlobalMaster(req.user)) {
     return res.status(403).json({ error: '학생 전용 API입니다.' });
   }
 
@@ -768,7 +774,7 @@ router.get('/participation/:participationId/submissions', authenticateToken, asy
 // 학생: 단계 제출 + 다음 단계로 진행
 // POST /assessments/participation/:participationId/submit
 router.post('/participation/:participationId/submit', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'student') {
+  if (!isActingAsStudent(req)) {
     return res.status(403).json({ error: '학생 전용 API입니다.' });
   }
 
@@ -781,7 +787,7 @@ router.post('/participation/:participationId/submit', authenticateToken, async (
     // 본인 참여인지 확인
     const [sRows] = await pool.query(
       'SELECT id FROM student_db.students WHERE user_id = ?',
-      [req.user.id]
+      [getActingUserId(req)]
     );
     if (sRows.length === 0) return res.status(404).json({ error: '학생 정보를 찾을 수 없습니다.' });
 

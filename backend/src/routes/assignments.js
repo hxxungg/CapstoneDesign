@@ -4,13 +4,19 @@ const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../database');
 const { authenticateToken, requireTeacher } = require('../middleware/auth');
 const { normalizeStage } = require('../stageNormalize');
+const {
+  getActingUserId,
+  isActingAsStudent,
+  isActingAsTeacher,
+} = require('../services/masterScope');
 
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    if (req.user.role === 'teacher') {
+    if (isActingAsTeacher(req)) {
+      const actingUserId = getActingUserId(req);
       const [assignments] = await pool.query(
         'SELECT * FROM teacher_db.assignments WHERE teacher_id = ? ORDER BY created_at DESC',
-        [req.user.id]
+        [actingUserId]
       );
 
       const result = await Promise.all(assignments.map(async (a) => {
@@ -28,12 +34,16 @@ router.get('/', authenticateToken, async (req, res) => {
       return res.json(result);
     }
 
-    // 학생 (student_assignments 테이블이 없을 수 있으므로 오류 시 빈 배열 반환)
+    if (!isActingAsStudent(req)) {
+      return res.json([]);
+    }
+
+    const actingUserId = getActingUserId(req);
     let studentAssignments = [];
     try {
       [studentAssignments] = await pool.query(
         'SELECT * FROM student_db.student_assignments WHERE student_id = ?',
-        [req.user.id]
+        [actingUserId]
       );
     } catch (tableErr) {
       return res.json([]);
@@ -99,16 +109,17 @@ router.get('/:id', authenticateToken, async (req, res) => {
     let studentProgress = null;
     let stageWritings = {};
 
-    if (req.user.role === 'student') {
+    if (isActingAsStudent(req)) {
+      const actingUserId = getActingUserId(req);
       const [progressRows] = await pool.query(
         'SELECT * FROM student_db.student_assignments WHERE student_id = ? AND assignment_id = ?',
-        [req.user.id, assignmentId]
+        [actingUserId, assignmentId]
       );
       studentProgress = progressRows[0] || null;
 
       const [writings] = await pool.query(
         'SELECT stage_id, content, updated_at FROM student_db.student_stage_writings WHERE student_id = ? AND assignment_id = ?',
-        [req.user.id, assignmentId]
+        [actingUserId, assignmentId]
       );
       writings.forEach((w) => {
         stageWritings[w.stage_id] = { content: w.content || '', updated_at: w.updated_at };
@@ -123,7 +134,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
       teacher_email: teacher.email || '',
       stages: stages.map(normalizeStage),
       studentProgress,
-      ...(req.user.role === 'student' ? { stageWritings } : {}),
+      ...(isActingAsStudent(req) ? { stageWritings } : {}),
     });
   } catch (err) {
     console.error(err);
@@ -143,7 +154,7 @@ router.post('/', authenticateToken, requireTeacher, async (req, res) => {
 
     const [result] = await pool.query(
       'INSERT INTO teacher_db.assignments (title, description, subject, teacher_id, is_active, assignment_code) VALUES (?, ?, ?, ?, 1, ?)',
-      [title, description || null, subject || null, Number(req.user.id), assignmentCode]
+      [title, description || null, subject || null, Number(getActingUserId(req)), assignmentCode]
     );
 
     const [newRows] = await pool.query(
@@ -168,7 +179,7 @@ router.put('/:id', authenticateToken, requireTeacher, async (req, res) => {
       [assignmentId]
     );
     const assignment = aRows[0];
-    if (!assignment || Number(assignment.teacher_id) !== Number(req.user.id)) {
+    if (!assignment || Number(assignment.teacher_id) !== Number(getActingUserId(req))) {
       return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
     }
 
@@ -210,7 +221,7 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req, res) => {
       [assignmentId]
     );
     const assignment = aRows[0];
-    if (!assignment || Number(assignment.teacher_id) !== Number(req.user.id)) {
+    if (!assignment || Number(assignment.teacher_id) !== Number(getActingUserId(req))) {
       return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
     }
 
@@ -231,7 +242,7 @@ router.delete('/:id', authenticateToken, requireTeacher, async (req, res) => {
 });
 
 router.post('/enroll', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'student') {
+  if (!isActingAsStudent(req)) {
     return res.status(403).json({ error: '학생만 수행평가에 참여할 수 있습니다.' });
   }
 
@@ -250,9 +261,10 @@ router.post('/enroll', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: '유효하지 않은 수행평가 코드입니다.' });
     }
 
+    const actingUserId = getActingUserId(req);
     const [existing] = await pool.query(
       'SELECT id FROM student_db.student_assignments WHERE student_id = ? AND assignment_id = ?',
-      [req.user.id, assignment.id]
+      [actingUserId, assignment.id]
     );
     if (existing.length > 0) {
       return res.status(409).json({ error: '이미 참여 중인 수행평가입니다.' });
@@ -260,7 +272,7 @@ router.post('/enroll', authenticateToken, async (req, res) => {
 
     await pool.query(
       'INSERT INTO student_db.student_assignments (student_id, assignment_id, current_stage_order, status) VALUES (?, ?, 1, ?)',
-      [req.user.id, assignment.id, 'in_progress']
+      [actingUserId, assignment.id, 'in_progress']
     );
 
     res.status(201).json({ message: '수행평가에 참여했습니다.', assignment: { ...assignment, is_active: !!assignment.is_active } });
@@ -272,7 +284,7 @@ router.post('/enroll', authenticateToken, async (req, res) => {
 
 const MAX_STAGE_WRITING_LEN = 50000;
 router.put('/:id/stage-writing', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'student') {
+  if (!isActingAsStudent(req)) {
     return res.status(403).json({ error: '학생만 작성 내용을 저장할 수 있습니다.' });
   }
 
@@ -289,9 +301,10 @@ router.put('/:id/stage-writing', authenticateToken, async (req, res) => {
   }
 
   try {
+    const actingUserId = getActingUserId(req);
     const [enrolled] = await pool.query(
       'SELECT id FROM student_db.student_assignments WHERE student_id = ? AND assignment_id = ?',
-      [req.user.id, assignmentId]
+      [actingUserId, assignmentId]
     );
     if (enrolled.length === 0) {
       return res.status(404).json({ error: '참여 정보를 찾을 수 없습니다.' });
@@ -309,12 +322,12 @@ router.put('/:id/stage-writing', authenticateToken, async (req, res) => {
       `INSERT INTO student_db.student_stage_writings (student_id, assignment_id, stage_id, content)
        VALUES (?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE content = VALUES(content), updated_at = CURRENT_TIMESTAMP`,
-      [req.user.id, assignmentId, stageId, text]
+      [actingUserId, assignmentId, stageId, text]
     );
 
     const [[{ updated_at }]] = await pool.query(
       'SELECT updated_at FROM student_db.student_stage_writings WHERE student_id = ? AND assignment_id = ? AND stage_id = ?',
-      [req.user.id, assignmentId, stageId]
+      [actingUserId, assignmentId, stageId]
     );
 
     res.json({ message: '저장되었습니다.', stage_id: stageId, updated_at });
@@ -327,7 +340,7 @@ router.put('/:id/stage-writing', authenticateToken, async (req, res) => {
 router.put('/:id/progress', authenticateToken, async (req, res) => {
   const { next_stage_order, student_id } = req.body;
   const assignmentId = parseInt(req.params.id);
-  const targetStudentId = req.user.role === 'teacher' ? student_id : req.user.id;
+  const targetStudentId = isActingAsTeacher(req) ? student_id : getActingUserId(req);
 
   try {
     const [progressRows] = await pool.query(
@@ -372,7 +385,7 @@ router.get('/:id/students', authenticateToken, requireTeacher, async (req, res) 
       [assignmentId]
     );
     const assignment = aRows[0];
-    if (!assignment || Number(assignment.teacher_id) !== Number(req.user.id)) {
+    if (!assignment || Number(assignment.teacher_id) !== Number(getActingUserId(req))) {
       return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
     }
 

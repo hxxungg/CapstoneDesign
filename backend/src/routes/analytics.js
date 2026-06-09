@@ -121,7 +121,7 @@ router.get('/assignment/:id', authenticateToken, requireTeacher, async (req, res
       [assignmentId]
     );
     const assignment = aRows[0];
-    if (!assignment || Number(assignment.teacher_id) !== Number(req.user.id)) {
+    if (!assignment || Number(assignment.teacher_id) !== Number(getActingUserId(req))) {
       return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
     }
 
@@ -209,7 +209,7 @@ router.get('/assignment/:assignmentId/student/:studentId', authenticateToken, re
       [assignmentId]
     );
     const assignment = aRows[0];
-    if (!assignment || Number(assignment.teacher_id) !== Number(req.user.id)) {
+    if (!assignment || Number(assignment.teacher_id) !== Number(getActingUserId(req))) {
       return res.status(404).json({ error: '수행평가를 찾을 수 없습니다.' });
     }
 

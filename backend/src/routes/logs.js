@@ -3,6 +3,12 @@ const router = express.Router();
 const { pool } = require('../database');
 const { authenticateToken } = require('../middleware/auth');
 const { scheduleRelevanceMatching } = require('../services/relevanceMatchingService');
+const {
+  getActingUserId,
+  isActingAsStudent,
+  isActingAsTeacher,
+  isGlobalMaster,
+} = require('../services/masterScope');
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://101.79.18.104:8001';
 
@@ -155,7 +161,7 @@ async function verifyParticipation(participationId, userId) {
 
 // POST /logs/url — URL 방문 기록
 router.post('/url', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'student') {
+  if (!isActingAsStudent(req)) {
     return res.status(403).json({ error: '학생만 로그를 기록할 수 있습니다.' });
   }
 
@@ -179,7 +185,7 @@ router.post('/url', authenticateToken, async (req, res) => {
   }
 
   try {
-    const ok = await verifyParticipation(participation_id, req.user.id);
+    const ok = await verifyParticipation(participation_id, getActingUserId(req));
     if (!ok) return res.status(403).json({ error: '본인의 참여 기록이 아닙니다.' });
 
     const safeUrl         = String(url).slice(0, 2083);
@@ -224,7 +230,7 @@ router.post('/url', authenticateToken, async (req, res) => {
 
 // POST /logs/url/bulk — 동의 후 로컬 버퍼 → DB 일괄 저장
 router.post('/url/bulk', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'student') {
+  if (!isActingAsStudent(req)) {
     return res.status(403).json({ error: '학생만 로그를 기록할 수 있습니다.' });
   }
 
@@ -247,7 +253,7 @@ router.post('/url/bulk', authenticateToken, async (req, res) => {
   }
 
   try {
-    const ok = await verifyParticipation(participation_id, req.user.id);
+    const ok = await verifyParticipation(participation_id, getActingUserId(req));
     if (!ok) return res.status(403).json({ error: '본인의 참여 기록이 아닙니다.' });
 
     const rows = logs.map((log) => {
@@ -285,7 +291,7 @@ router.post('/url/bulk', authenticateToken, async (req, res) => {
 
 // POST /logs/ai — AI 프롬프트 & 응답 기록
 router.post('/ai', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'student') {
+  if (!isActingAsStudent(req)) {
     return res.status(403).json({ error: '학생만 로그를 기록할 수 있습니다.' });
   }
 
@@ -295,7 +301,7 @@ router.post('/ai', authenticateToken, async (req, res) => {
   }
 
   try {
-    const ok = await verifyParticipation(participation_id, req.user.id);
+    const ok = await verifyParticipation(participation_id, getActingUserId(req));
     if (!ok) return res.status(403).json({ error: '본인의 참여 기록이 아닙니다.' });
 
     // 먼저 저장 후 AI 분류를 비동기로 업데이트 (클라이언트 대기 최소화)
@@ -329,7 +335,7 @@ router.post('/ai', authenticateToken, async (req, res) => {
 
 // PATCH /logs/ai/:id/response — AI 응답 추가 (프롬프트 후 응답이 생성되면 호출)
 router.patch('/ai/:id/response', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'student') {
+  if (!isActingAsStudent(req)) {
     return res.status(403).json({ error: '학생만 로그를 수정할 수 있습니다.' });
   }
 
@@ -342,7 +348,7 @@ router.patch('/ai/:id/response', authenticateToken, async (req, res) => {
        JOIN student_db.participations p ON al.participation_id = p.id
        JOIN student_db.students s ON p.student_id = s.id
        WHERE al.id = ? AND s.user_id = ?`,
-      [logId, req.user.id]
+      [logId, getActingUserId(req)]
     );
     if (rows.length === 0) return res.status(403).json({ error: '수정 권한이 없습니다.' });
 
@@ -361,7 +367,7 @@ router.patch('/ai/:id/response', authenticateToken, async (req, res) => {
 
 // POST /logs/ai/bulk — 동의 후 로컬 버퍼 → DB 일괄 저장
 router.post('/ai/bulk', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'student') {
+  if (!isActingAsStudent(req)) {
     return res.status(403).json({ error: '학생만 로그를 기록할 수 있습니다.' });
   }
 
@@ -371,7 +377,7 @@ router.post('/ai/bulk', authenticateToken, async (req, res) => {
   }
 
   try {
-    const ok = await verifyParticipation(participation_id, req.user.id);
+    const ok = await verifyParticipation(participation_id, getActingUserId(req));
     if (!ok) return res.status(403).json({ error: '본인의 참여 기록이 아닙니다.' });
 
     const rows = logs.map(log => [
@@ -412,14 +418,14 @@ router.post('/ai/bulk', authenticateToken, async (req, res) => {
 
 // POST /logs/exit — 이탈 시도: participations.exit_attempts + 1
 router.post('/exit', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'student') {
+  if (!isActingAsStudent(req)) {
     return res.status(403).json({ error: '학생만 이탈 시도를 기록할 수 있습니다.' });
   }
   const { participation_id } = req.body;
   if (!participation_id) return res.status(400).json({ error: 'participation_id는 필수입니다.' });
 
   try {
-    const ok = await verifyParticipation(participation_id, req.user.id);
+    const ok = await verifyParticipation(participation_id, getActingUserId(req));
     if (!ok) return res.status(403).json({ error: '본인의 참여 기록이 아닙니다.' });
 
     await pool.query(
@@ -435,14 +441,14 @@ router.post('/exit', authenticateToken, async (req, res) => {
 
 // POST /logs/exit-attempt — 하위 호환 유지
 router.post('/exit-attempt', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'student') {
+  if (!isActingAsStudent(req)) {
     return res.status(403).json({ error: '학생만 이탈 시도를 기록할 수 있습니다.' });
   }
   const { participation_id } = req.body;
   if (!participation_id) return res.status(200).json({ message: '이탈 시도 기록 생략 (participation_id 없음)' });
 
   try {
-    const ok = await verifyParticipation(participation_id, req.user.id);
+    const ok = await verifyParticipation(participation_id, getActingUserId(req));
     if (!ok) return res.status(403).json({ error: '본인의 참여 기록이 아닙니다.' });
 
     await pool.query(
@@ -458,7 +464,7 @@ router.post('/exit-attempt', authenticateToken, async (req, res) => {
 
 // GET /logs/participation/:id — 교사용: 참여별 로그 전체 조회
 router.get('/participation/:id', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'teacher') {
+  if (!isActingAsTeacher(req) && !isGlobalMaster(req.user)) {
     return res.status(403).json({ error: '교사 권한이 필요합니다.' });
   }
 
@@ -476,7 +482,7 @@ router.get('/participation/:id', authenticateToken, async (req, res) => {
 
     const [teacherRows] = await pool.query(
       'SELECT id FROM teacher_db.teachers WHERE user_id = ?',
-      [req.user.id]
+      [getActingUserId(req)]
     );
     if (
       teacherRows.length === 0 ||

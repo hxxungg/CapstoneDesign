@@ -1,5 +1,11 @@
 const jwt = require('jsonwebtoken');
-const { isMaster, applyMasterScope } = require('../services/masterScope');
+const {
+  isMaster,
+  applyMasterScope,
+  isGlobalMaster,
+  isActingAsStudent,
+  isActingAsTeacher,
+} = require('../services/masterScope');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'performance_eval_secret_key_2024';
 
@@ -30,17 +36,25 @@ function isStudentOrMaster(user) {
 }
 
 function requireTeacher(req, res, next) {
-  if (!isTeacherOrMaster(req.user)) {
-    return res.status(403).json({ error: '교사 권한이 필요합니다.' });
+  if (
+    req.user?.role === 'teacher' ||
+    isGlobalMaster(req.user) ||
+    isActingAsTeacher(req)
+  ) {
+    return next();
   }
-  next();
+  return res.status(403).json({ error: '교사 권한이 필요합니다.' });
 }
 
 function requireStudent(req, res, next) {
-  if (!isStudentOrMaster(req.user)) {
-    return res.status(403).json({ error: '학생 권한이 필요합니다.' });
+  if (
+    req.user?.role === 'student' ||
+    isGlobalMaster(req.user) ||
+    isActingAsStudent(req)
+  ) {
+    return next();
   }
-  next();
+  return res.status(403).json({ error: '학생 권한이 필요합니다.' });
 }
 
 module.exports = {
