@@ -34,9 +34,67 @@ async function deleteLegacyTeacherData(conn, userId) {
   await safeQuery(conn, 'DELETE FROM teacher_db.assignments WHERE teacher_id = ?', [userId]);
 }
 
-function signUserToken(user) {
+async function loadMasterViewLinks(userId, role) {
+  if (role !== 'master') return null;
+  try {
+    const [rows] = await pool.query(
+      `SELECT view_student_user_id, view_teacher_user_id
+       FROM capstonedesign.master_view_links
+       WHERE user_id = ?`,
+      [userId]
+    );
+    if (!rows.length) return null;
+    const link = rows[0];
+    if (!link.view_student_user_id && !link.view_teacher_user_id) return null;
+    return link;
+  } catch (err) {
+    if (err.code === 'ER_NO_SUCH_TABLE') return null;
+    throw err;
+  }
+}
+
+async function buildMasterViewPayload(userId, role) {
+  const link = await loadMasterViewLinks(userId, role);
+  if (!link) return {};
+
+  const ids = [link.view_student_user_id, link.view_teacher_user_id].filter(Boolean);
+  let profiles = {};
+  if (ids.length > 0) {
+    const [profileRows] = await pool.query(
+      `SELECT u.id, u.name, u.email, u.role,
+              COALESCE(tc.school, st.school) AS school,
+              tc.subject,
+              st.grade,
+              COALESCE(tc.class_num, st.class_num) AS class_num
+       FROM capstonedesign.users u
+       LEFT JOIN teacher_db.teachers tc ON tc.user_id = u.id
+       LEFT JOIN student_db.students st ON st.user_id = u.id
+       WHERE u.id IN (?)`,
+      [ids]
+    );
+    profiles = Object.fromEntries(profileRows.map((row) => [Number(row.id), formatUser(row)]));
+  }
+
+  return {
+    master_student_user_id: link.view_student_user_id || null,
+    master_teacher_user_id: link.view_teacher_user_id || null,
+    master_view: {
+      student: link.view_student_user_id ? profiles[link.view_student_user_id] || null : null,
+      teacher: link.view_teacher_user_id ? profiles[link.view_teacher_user_id] || null : null,
+    },
+  };
+}
+
+function signUserToken(user, masterPayload = {}) {
   return jwt.sign(
-    { id: user.id, name: user.name, email: user.email, role: user.role },
+    {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      master_student_user_id: masterPayload.master_student_user_id || null,
+      master_teacher_user_id: masterPayload.master_teacher_user_id || null,
+    },
     JWT_SECRET,
     { expiresIn: '7d' }
   );
@@ -49,7 +107,7 @@ function extractNum(val) {
   return n || null;
 }
 
-function formatUser(row) {
+function formatUser(row, masterPayload = {}) {
   return {
     id: row.id, name: row.name, email: row.email, role: row.role,
     school: row.school || null,
@@ -57,6 +115,7 @@ function formatUser(row) {
     grade: extractNum(row.grade),
     class_num: extractNum(row.class_num),
     marketing_agreed: !!row.marketing_agreed,
+    ...(masterPayload.master_view ? { master_view: masterPayload.master_view } : {}),
   };
 }
 
@@ -315,9 +374,10 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' });
     }
 
+    const masterPayload = await buildMasterViewPayload(user.id, user.role);
     res.json({
-      token: signUserToken(user),
-      user: formatUser(user),
+      token: signUserToken(user, masterPayload),
+      user: formatUser(user, masterPayload),
     });
   } catch (err) {
     console.error(err);
@@ -448,7 +508,8 @@ router.get('/me', authenticateToken, async (req, res) => {
       [req.user.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: '사용자를 찾을 수 없습니다.' });
-    res.json(formatUser(rows[0]));
+    const masterPayload = await buildMasterViewPayload(rows[0].id, rows[0].role);
+    res.json(formatUser(rows[0], masterPayload));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: '서버 오류가 발생했습니다.' });

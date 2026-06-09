@@ -12,6 +12,10 @@ apiClient.interceptors.request.use(async (config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  const masterViewMode = await AsyncStorage.getItem('master_view_mode');
+  if (masterViewMode) {
+    config.headers['X-Master-View-Mode'] = masterViewMode;
+  }
   return config;
 });
 

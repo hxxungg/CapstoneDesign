@@ -23,10 +23,14 @@ export function AuthProvider({ children }) {
     try {
       const storedToken = await AsyncStorage.getItem('auth_token');
       const storedUser = await AsyncStorage.getItem('auth_user');
+      const storedViewMode = await AsyncStorage.getItem('master_view_mode');
 
       if (storedToken && storedUser) {
         setToken(storedToken);
         setUser(JSON.parse(storedUser));
+      }
+      if (storedViewMode === 'student' || storedViewMode === 'teacher') {
+        setMasterViewMode(storedViewMode);
       }
     } catch (err) {
       console.error('인증 정보 로드 실패:', err);
@@ -35,10 +39,18 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const persistMasterViewMode = async (mode) => {
+    setMasterViewMode(mode);
+    await AsyncStorage.setItem('master_view_mode', mode);
+  };
+
   const login = async (email, password) => {
     const data = await authAPI.login(email, password);
     await AsyncStorage.setItem('auth_token', data.token);
     await AsyncStorage.setItem('auth_user', JSON.stringify(data.user));
+    const initialMode = data.user?.role === 'master' ? 'teacher' : 'teacher';
+    await AsyncStorage.setItem('master_view_mode', initialMode);
+    setMasterViewMode(initialMode);
     setToken(data.token);
     setUser(data.user);
     return data;
@@ -97,6 +109,7 @@ export function AuthProvider({ children }) {
     }
     await AsyncStorage.removeItem('auth_token');
     await AsyncStorage.removeItem('auth_user');
+    await AsyncStorage.removeItem('master_view_mode');
     setToken(null);
     setUser(null);
     setMasterViewMode('teacher');
@@ -108,7 +121,7 @@ export function AuthProvider({ children }) {
       token,
       loading,
       masterViewMode,
-      setMasterViewMode,
+      setMasterViewMode: persistMasterViewMode,
       login,
       register,
       socialLogin,

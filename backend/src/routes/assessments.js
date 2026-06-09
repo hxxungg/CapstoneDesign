@@ -3,6 +3,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const { pool } = require('../database');
 const { authenticateToken, requireTeacher, isMaster } = require('../middleware/auth');
+const { isGlobalMaster, getActingUserId, getMasterViewMode } = require('../services/masterScope');
 const {
   buildStepScoringPlan,
 } = require('../utils/rubricScoring');
@@ -204,7 +205,7 @@ function toMysqlDatetime(value) {
 // 교사 본인의 class invite_code 조회 (학생 회원가입용)
 router.get('/invite-codes', authenticateToken, requireTeacher, async (req, res) => {
   try {
-    if (isMaster(req.user)) {
+    if (isGlobalMaster(req.user)) {
       const [rows] = await pool.query(
         `SELECT t.invite_code, u.name AS teacher_name, u.email AS teacher_email
          FROM teacher_db.teachers t
@@ -215,7 +216,7 @@ router.get('/invite-codes', authenticateToken, requireTeacher, async (req, res) 
     }
     const [rows] = await pool.query(
       'SELECT invite_code FROM teacher_db.teachers WHERE user_id = ?',
-      [req.user.id]
+      [getActingUserId(req)]
     );
     if (rows.length === 0) {
       return res.status(404).json({ error: '교사 정보를 찾을 수 없습니다.' });
@@ -239,14 +240,14 @@ async function getTeacherId(userId) {
 
 async function fetchAssessmentForRequest(req, assessmentId) {
   await autoCloseExpiredAssessments([assessmentId]);
-  if (isMaster(req.user)) {
+  if (isGlobalMaster(req.user)) {
     const [rows] = await pool.query(
       'SELECT * FROM teacher_db.assessments WHERE id = ?',
       [assessmentId]
     );
     return rows[0] || null;
   }
-  const teacherId = await getTeacherId(req.user.id);
+  const teacherId = await getTeacherId(getActingUserId(req));
   const [rows] = await pool.query(
     'SELECT * FROM teacher_db.assessments WHERE id = ? AND teacher_id = ?',
     [assessmentId, teacherId]
@@ -258,7 +259,7 @@ async function fetchAssessmentForRequest(req, assessmentId) {
 router.get('/', authenticateToken, requireTeacher, async (req, res) => {
   try {
     let fresh;
-    if (isMaster(req.user)) {
+    if (isGlobalMaster(req.user)) {
       const [assessments] = await pool.query(
         'SELECT * FROM teacher_db.assessments ORDER BY created_at DESC'
       );
@@ -267,7 +268,7 @@ router.get('/', authenticateToken, requireTeacher, async (req, res) => {
         'SELECT * FROM teacher_db.assessments ORDER BY created_at DESC'
       );
     } else {
-      const teacherId = await getTeacherId(req.user.id);
+      const teacherId = await getTeacherId(getActingUserId(req));
       const [assessments] = await pool.query(
         'SELECT * FROM teacher_db.assessments WHERE teacher_id = ? ORDER BY created_at DESC',
         [teacherId]
@@ -301,7 +302,7 @@ router.get('/my-participations', authenticateToken, async (req, res) => {
   }
 
   try {
-    if (isMaster(req.user)) {
+    if (isGlobalMaster(req.user)) {
       const [rows] = await pool.query(
         `SELECT p.*, a.title AS assessment_title, a.description AS assessment_description,
                 a.invite_code, a.status AS assessment_status,
@@ -316,9 +317,13 @@ router.get('/my-participations', authenticateToken, async (req, res) => {
       return res.json(rows);
     }
 
+    if (isMaster(req.user) && getMasterViewMode(req) !== 'student') {
+      return res.json([]);
+    }
+
     const [sRows] = await pool.query(
       'SELECT id FROM student_db.students WHERE user_id = ?',
-      [req.user.id]
+      [getActingUserId(req)]
     );
     if (sRows.length === 0) return res.json([]);
 
@@ -351,7 +356,7 @@ router.get('/participation/:participationId', authenticateToken, async (req, res
 
   try {
     let pRows;
-    if (isMaster(req.user)) {
+    if (isGlobalMaster(req.user)) {
       [pRows] = await pool.query(
         `SELECT p.*, a.title AS assessment_title, a.description AS assessment_description,
                 a.invite_code, a.subject, a.target_class, a.deadline
@@ -363,7 +368,7 @@ router.get('/participation/:participationId', authenticateToken, async (req, res
     } else {
       const [sRows] = await pool.query(
         'SELECT id FROM student_db.students WHERE user_id = ?',
-        [req.user.id]
+        [getActingUserId(req)]
       );
       if (sRows.length === 0) return res.status(404).json({ error: '학생 정보를 찾을 수 없습니다.' });
 
@@ -721,10 +726,10 @@ router.get('/participation/:participationId/submissions', authenticateToken, asy
   if (isNaN(participationId)) return res.status(400).json({ error: '잘못된 ID입니다.' });
 
   try {
-    if (!isMaster(req.user)) {
+    if (!isGlobalMaster(req.user)) {
       const [sRows] = await pool.query(
         'SELECT id FROM student_db.students WHERE user_id = ?',
-        [req.user.id]
+        [getActingUserId(req)]
       );
       if (sRows.length === 0) return res.status(404).json({ error: '학생 정보를 찾을 수 없습니다.' });
 

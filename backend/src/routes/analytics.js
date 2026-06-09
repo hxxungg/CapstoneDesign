@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../database');
 const { authenticateToken, requireTeacher, isMaster } = require('../middleware/auth');
+const { isGlobalMaster, getActingUserId, getMasterViewMode } = require('../services/masterScope');
 const { normalizeStage } = require('../stageNormalize');
 const { buildComprehensiveReport } = require('../studentReportBuilder');
 const { enrichAiLogsWithCriticalUseFromDb } = require('../services/criticalUseAnalysis');
@@ -301,7 +302,7 @@ router.get('/assessment/:id', authenticateToken, requireTeacher, async (req, res
 
   try {
     let aRows;
-    if (isMaster(req.user)) {
+    if (isGlobalMaster(req.user)) {
       [aRows] = await pool.query(
         'SELECT * FROM teacher_db.assessments WHERE id = ?',
         [assessmentId]
@@ -311,7 +312,7 @@ router.get('/assessment/:id', authenticateToken, requireTeacher, async (req, res
         `SELECT a.* FROM teacher_db.assessments a
          JOIN teacher_db.teachers t ON a.teacher_id = t.id
          WHERE a.id = ? AND t.user_id = ?`,
-        [assessmentId, req.user.id]
+        [assessmentId, getActingUserId(req)]
       );
     }
     if (aRows.length === 0) {
@@ -496,13 +497,13 @@ router.get('/participation/:id', authenticateToken, async (req, res) => {
 
     const participation = pRows[0];
 
-    // 권한 확인: 교사(수행평가 소유자) · 학생(본인 참여) · 마스터(전체)
-    if (isMaster(req.user)) {
+    // 권한 확인: 교사(수행평가 소유자) · 학생(본인 참여) · 전역 마스터
+    if (isGlobalMaster(req.user)) {
       // 전체 조회 허용
-    } else if (req.user.role === 'teacher') {
+    } else if (req.user.role === 'teacher' || (isMaster(req.user) && getMasterViewMode(req) === 'teacher')) {
       const [teacherRows] = await pool.query(
         'SELECT id FROM teacher_db.teachers WHERE user_id = ?',
-        [req.user.id]
+        [getActingUserId(req)]
       );
       if (
         teacherRows.length === 0 ||
@@ -514,7 +515,7 @@ router.get('/participation/:id', authenticateToken, async (req, res) => {
       // 학생: 본인 참여인지 확인
       const [sRows] = await pool.query(
         'SELECT id FROM student_db.students WHERE user_id = ?',
-        [req.user.id]
+        [getActingUserId(req)]
       );
       if (sRows.length === 0 || Number(participation.student_id) !== Number(sRows[0].id)) {
         return res.status(403).json({ error: '권한이 없습니다.' });
@@ -748,10 +749,10 @@ router.patch('/participation/:id/grade', authenticateToken, requireTeacher, asyn
   }
 
   try {
-    if (!isMaster(req.user)) {
+    if (!isGlobalMaster(req.user)) {
       const [teacherRows] = await pool.query(
         'SELECT id FROM teacher_db.teachers WHERE user_id = ?',
-        [req.user.id]
+        [getActingUserId(req)]
       );
       if (teacherRows.length === 0) {
         return res.status(403).json({ error: '권한이 없습니다.' });
@@ -849,7 +850,7 @@ router.get('/assessment/:id/ai-analysis', authenticateToken, requireTeacher, asy
 
   try {
     let aRows;
-    if (isMaster(req.user)) {
+    if (isGlobalMaster(req.user)) {
       [aRows] = await pool.query(
         'SELECT id FROM teacher_db.assessments WHERE id = ?',
         [assessmentId]
@@ -859,7 +860,7 @@ router.get('/assessment/:id/ai-analysis', authenticateToken, requireTeacher, asy
         `SELECT a.id FROM teacher_db.assessments a
          JOIN teacher_db.teachers t ON a.teacher_id = t.id
          WHERE a.id = ? AND t.user_id = ?`,
-        [assessmentId, req.user.id]
+        [assessmentId, getActingUserId(req)]
       );
     }
     if (aRows.length === 0) {

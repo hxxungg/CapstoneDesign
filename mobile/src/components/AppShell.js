@@ -383,11 +383,26 @@ export default function AppShell({
     }
   };
 
-  const userName = user?.name || '';
+  const userName = (() => {
+    if (isMaster && user?.master_view) {
+      const profile = isTeacher ? user.master_view.teacher : user.master_view.student;
+      return profile?.name || user?.name || '';
+    }
+    return user?.name || '';
+  })();
   // 학생: "○○고 2-4" / 교사: "○○고 · 국어"
-  const schoolInfo = isTeacher
-    ? [user?.school, user?.subject].filter(Boolean).join(' · ')
-    : [user?.school, [user?.grade, user?.class_num].filter(Boolean).join('-')].filter(Boolean).join(' ');
+  const schoolInfo = (() => {
+    if (isMaster && user?.master_view) {
+      const profile = isTeacher ? user.master_view.teacher : user.master_view.student;
+      if (!profile) return '';
+      return isTeacher
+        ? [profile.school, profile.subject].filter(Boolean).join(' · ')
+        : [profile.school, [profile.grade, profile.class_num].filter(Boolean).join('-')].filter(Boolean).join(' ');
+    }
+    return isTeacher
+      ? [user?.school, user?.subject].filter(Boolean).join(' · ')
+      : [user?.school, [user?.grade, user?.class_num].filter(Boolean).join('-')].filter(Boolean).join(' ');
+  })();
 
   if (!isWide) {
     return (
