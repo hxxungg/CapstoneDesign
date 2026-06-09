@@ -4,6 +4,7 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authAPI } from '../services/api';
 import { NATIVE_SOCIAL_ENABLED } from '../config/features';
+import { isDemoAccount } from '../utils/demoAccount';
 
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
@@ -48,9 +49,10 @@ export function AuthProvider({ children }) {
     const data = await authAPI.login(email, password);
     await AsyncStorage.setItem('auth_token', data.token);
     await AsyncStorage.setItem('auth_user', JSON.stringify(data.user));
-    const initialMode = data.user?.role === 'master' ? 'teacher' : 'teacher';
-    await AsyncStorage.setItem('master_view_mode', initialMode);
-    setMasterViewMode(initialMode);
+    if (isDemoAccount(data.user)) {
+      await AsyncStorage.setItem('master_view_mode', 'teacher');
+      setMasterViewMode('teacher');
+    }
     setToken(data.token);
     setUser(data.user);
     return data;
@@ -68,6 +70,10 @@ export function AuthProvider({ children }) {
   const persistSession = async (data) => {
     await AsyncStorage.setItem('auth_token', data.token);
     await AsyncStorage.setItem('auth_user', JSON.stringify(data.user));
+    if (isDemoAccount(data.user)) {
+      await AsyncStorage.setItem('master_view_mode', 'teacher');
+      setMasterViewMode('teacher');
+    }
     setToken(data.token);
     setUser(data.user);
     return data;

@@ -16,6 +16,7 @@ import PolicyModal from './PolicyModal';
 import { LEGAL_POLICIES, getVisiblePolicyKeys } from '../config/legalPolicies';
 import BrandMark from './BrandMark';
 import SidebarBrand, { SIDEBAR_BRAND_EMAIL } from './SidebarBrand';
+import { isDemoAccount, isGlobalMaster } from '../utils/demoAccount';
 
 const C = THEME;
 const F = FONTS;
@@ -314,16 +315,26 @@ export default function AppShell({
   const insets = useSafeAreaInsets();
   const isWide = width >= 700;
   const isMaster = user?.role === 'master';
+  const isDemo = isDemoAccount(user);
+  const isGlobalMasterAccount = isGlobalMaster(user);
   const isTeacher = user?.role === 'teacher' || (isMaster && masterViewMode === 'teacher');
-  const studentNav = isMaster
+  const studentNav = isGlobalMasterAccount
     ? NAV_STUDENT.filter((item) => item.id !== 'enroll')
     : NAV_STUDENT;
-  const teacherNav = isMaster
+  const teacherNav = isGlobalMasterAccount
     ? NAV_TEACHER.filter((item) => item.id !== 'create')
     : NAV_TEACHER;
-  const navItems = isMaster
+  const navItems = isGlobalMasterAccount
     ? [
         { id: 'hub', label: '화면 선택' },
+        ...(isTeacher ? teacherNav : studentNav),
+        {
+          id: 'switch',
+          label: isTeacher ? '학생 화면으로' : '교사 화면으로',
+        },
+      ]
+    : isDemo
+    ? [
         ...(isTeacher ? teacherNav : studentNav),
         {
           id: 'switch',
@@ -384,7 +395,7 @@ export default function AppShell({
   };
 
   const userName = (() => {
-    if (isMaster && user?.master_view) {
+    if (isDemo && user?.master_view) {
       const profile = isTeacher ? user.master_view.teacher : user.master_view.student;
       return profile?.name || user?.name || '';
     }
@@ -392,7 +403,7 @@ export default function AppShell({
   })();
   // 학생: "○○고 2-4" / 교사: "○○고 · 국어"
   const schoolInfo = (() => {
-    if (isMaster && user?.master_view) {
+    if (isDemo && user?.master_view) {
       const profile = isTeacher ? user.master_view.teacher : user.master_view.student;
       if (!profile) return '';
       return isTeacher
@@ -496,7 +507,7 @@ export default function AppShell({
           <View style={{ flex: 1 }}>
             <Text numberOfLines={1} style={s.userName}>{userName}</Text>
             <Text numberOfLines={1} style={s.userSub}>
-              {isMaster ? '마스터' : isTeacher ? '교사' : '학생'}
+              {isGlobalMasterAccount ? '마스터' : isTeacher ? '교사' : '학생'}
               {schoolInfo ? ` · ${schoolInfo}` : ''}
             </Text>
           </View>
