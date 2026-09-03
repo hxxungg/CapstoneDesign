@@ -1,4 +1,4 @@
-const dotenv = require('dotenv'); //아무거나
+const dotenv = require('dotenv');
 dotenv.config();
 
 const express = require('express');
